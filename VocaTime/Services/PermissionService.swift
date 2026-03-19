@@ -148,7 +148,7 @@ final class PermissionService {
         }
     }
 
-    private func mapSpeech(_ status: SFSpeechRecognizer.AuthorizationStatus) -> PermissionStatus {
+    private func mapSpeech(_ status: SFSpeechRecognizerAuthorizationStatus) -> PermissionStatus {
         switch status {
         case .notDetermined: return .notDetermined
         case .denied: return .denied
