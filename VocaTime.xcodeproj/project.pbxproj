@@ -15,6 +15,7 @@
 		A10000000000000000000006 /* PermissionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000006 /* PermissionService.swift */; };
 		A10000000000000000000007 /* AppError.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000007 /* AppError.swift */; };
 		A10000000000000000000008 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000008 /* Assets.xcassets */; };
+		A10000000000000000000009 /* SpeechRecognizerService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000009 /* SpeechRecognizerService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -26,6 +27,7 @@
 		A20000000000000000000006 /* PermissionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionService.swift; sourceTree = "<group>"; };
 		A20000000000000000000007 /* AppError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppError.swift; sourceTree = "<group>"; };
 		A20000000000000000000008 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		A20000000000000000000009 /* SpeechRecognizerService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechRecognizerService.swift; sourceTree = "<group>"; };
 		A30000000000000000000001 /* VocaTime.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VocaTime.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -91,6 +93,7 @@
 			isa = PBXGroup;
 			children = (
 				A20000000000000000000006 /* PermissionService.swift */,
+				A20000000000000000000009 /* SpeechRecognizerService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -179,6 +182,7 @@
 				A10000000000000000000005 /* VoiceCommandViewModel.swift in Sources */,
 				A10000000000000000000006 /* PermissionService.swift in Sources */,
 				A10000000000000000000007 /* AppError.swift in Sources */,
+				A10000000000000000000009 /* SpeechRecognizerService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

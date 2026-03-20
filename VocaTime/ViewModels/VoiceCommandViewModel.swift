@@ -8,27 +8,24 @@ enum VoiceFlowState: Equatable {
     case error
 }
 
+@MainActor
 @Observable
 final class VoiceCommandViewModel {
     var flowState: VoiceFlowState = .idle
     var displayedText: String = ""
     var errorMessage: String?
 
-    /// Phase 1: simulates listen → process → sample transcript (real speech comes in Phase 3).
+    private let speechService = SpeechRecognizerService()
+
     func microphoneTapped() {
         errorMessage = nil
         switch flowState {
-        case .idle:
-            flowState = .listening
-            displayedText = ""
+        case .idle, .success, .error:
+            Task { await beginListening() }
         case .listening:
-            flowState = .processing
-            Task { await simulateTranscription() }
+            Task { await finalizeListening() }
         case .processing:
             break
-        case .success, .error:
-            flowState = .listening
-            displayedText = ""
         }
     }
 
@@ -53,13 +50,62 @@ final class VoiceCommandViewModel {
         flowState = .idle
         displayedText = ""
         errorMessage = nil
+        Task { await speechService.cancelForReset() }
     }
 
-    private func simulateTranscription() async {
-        try? await Task.sleep(nanoseconds: 900_000_000)
-        await MainActor.run {
-            flowState = .success
-            displayedText = "Remind me in 5 minutes to check the oven"
+    private func beginListening() async {
+        if let err = await speechService.requestAuthorizationIfNeeded() {
+            errorMessage = err
+            flowState = .error
+            return
+        }
+
+        displayedText = ""
+
+        let startError = await speechService.startRecognition(
+            onPartialResult: { [weak self] text in
+                self?.displayedText = text
+            },
+            onRuntimeError: { [weak self] message in
+                guard let self else { return }
+                self.errorMessage = message
+                self.flowState = .error
+            }
+        )
+
+        if let startError {
+            errorMessage = startError
+            flowState = .error
+            return
+        }
+
+        flowState = .listening
+    }
+
+    private func finalizeListening() async {
+        flowState = .processing
+        let outcome = await speechService.stopRecognition()
+        switch outcome {
+        case .success(let text):
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty {
+                displayedText = ""
+                errorMessage = "No words were recognized. Try speaking a bit longer or check the microphone."
+                flowState = .error
+            } else {
+                displayedText = trimmed
+                flowState = .success
+            }
+        case .failure(let error):
+            let message = error.localizedDescription
+            let trimmed = displayedText.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty {
+                errorMessage = message
+            } else {
+                displayedText = trimmed
+                errorMessage = message
+            }
+            flowState = .error
         }
     }
 }
