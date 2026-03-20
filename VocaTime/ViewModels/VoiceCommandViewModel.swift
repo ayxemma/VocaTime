@@ -1,5 +1,11 @@
 import Foundation
 
+enum ReminderScheduleOutcome: Equatable {
+    case none
+    case succeeded(String)
+    case failed(String)
+}
+
 enum VoiceFlowState: Equatable {
     case idle
     case listening
@@ -15,8 +21,11 @@ final class VoiceCommandViewModel {
     var displayedText: String = ""
     var errorMessage: String?
     var parsedCommand: ParsedCommand?
+    var reminderScheduleOutcome: ReminderScheduleOutcome = .none
+    var isSchedulingReminder = false
 
     private let speechService = SpeechRecognizerService()
+    private let reminderService = ReminderService()
 
     func microphoneTapped() {
         errorMessage = nil
@@ -52,8 +61,46 @@ final class VoiceCommandViewModel {
         displayedText = ""
         errorMessage = nil
         parsedCommand = nil
+        reminderScheduleOutcome = .none
+        isSchedulingReminder = false
         Task { await speechService.cancelForReset() }
     }
+
+    func createReminder() {
+        reminderScheduleOutcome = .none
+        guard let cmd = parsedCommand, cmd.actionType == .reminder else {
+            reminderScheduleOutcome = .failed("This command isn’t a reminder.")
+            return
+        }
+        guard let when = cmd.reminderDate else {
+            reminderScheduleOutcome = .failed("No reminder time found. Try something like “in 5 minutes.”")
+            return
+        }
+        guard !isSchedulingReminder else { return }
+        isSchedulingReminder = true
+        Task { @MainActor in
+            defer { isSchedulingReminder = false }
+            let result = await reminderService.scheduleReminder(
+                title: cmd.title,
+                notes: cmd.notes,
+                at: when
+            )
+            switch result {
+            case .success:
+                let whenText = Self.reminderFeedbackFormatter.string(from: when)
+                reminderScheduleOutcome = .succeeded("Reminder scheduled for \(whenText).")
+            case .failure(let error):
+                reminderScheduleOutcome = .failed(error.localizedDescription)
+            }
+        }
+    }
+
+    private static let reminderFeedbackFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateStyle = .medium
+        f.timeStyle = .short
+        return f
+    }()
 
     private func beginListening() async {
         if let err = await speechService.requestAuthorizationIfNeeded() {
@@ -64,6 +111,7 @@ final class VoiceCommandViewModel {
 
         displayedText = ""
         parsedCommand = nil
+        reminderScheduleOutcome = .none
 
         let startError = await speechService.startRecognition(
             onPartialResult: { [weak self] text in

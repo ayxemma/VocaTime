@@ -21,6 +21,7 @@
 		A10000000000000000000012 /* CalendarEventItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000012 /* CalendarEventItem.swift */; };
 		A10000000000000000000013 /* DateParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000013 /* DateParser.swift */; };
 		A10000000000000000000014 /* IntentParserService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000014 /* IntentParserService.swift */; };
+		A10000000000000000000015 /* ReminderService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000015 /* ReminderService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -38,6 +39,7 @@
 		A20000000000000000000012 /* CalendarEventItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarEventItem.swift; sourceTree = "<group>"; };
 		A20000000000000000000013 /* DateParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DateParser.swift; sourceTree = "<group>"; };
 		A20000000000000000000014 /* IntentParserService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntentParserService.swift; sourceTree = "<group>"; };
+		A20000000000000000000015 /* ReminderService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReminderService.swift; sourceTree = "<group>"; };
 		A30000000000000000000001 /* VocaTime.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VocaTime.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -116,6 +118,7 @@
 				A20000000000000000000006 /* PermissionService.swift */,
 				A20000000000000000000009 /* SpeechRecognizerService.swift */,
 				A20000000000000000000014 /* IntentParserService.swift */,
+				A20000000000000000000015 /* ReminderService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -211,6 +214,7 @@
 				A10000000000000000000012 /* CalendarEventItem.swift in Sources */,
 				A10000000000000000000013 /* DateParser.swift in Sources */,
 				A10000000000000000000014 /* IntentParserService.swift in Sources */,
+				A10000000000000000000015 /* ReminderService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

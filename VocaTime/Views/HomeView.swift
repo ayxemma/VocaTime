@@ -108,6 +108,30 @@ struct HomeView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+
+            if parsed.actionType == .reminder {
+                Button {
+                    viewModel.createReminder()
+                } label: {
+                    Text("Create Reminder")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(viewModel.isSchedulingReminder)
+
+                switch viewModel.reminderScheduleOutcome {
+                case .none:
+                    EmptyView()
+                case .succeeded(let message):
+                    Text(message)
+                        .font(.footnote)
+                        .foregroundStyle(.green)
+                case .failed(let message):
+                    Text(message)
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                }
+            }
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)
