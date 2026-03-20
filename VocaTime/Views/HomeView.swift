@@ -3,59 +3,94 @@ import SwiftUI
 struct HomeView: View {
     @Environment(PermissionService.self) private var permissionService
     @State private var viewModel = VoiceCommandViewModel()
+    @State private var showChat = false
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 28) {
-                VStack(spacing: 8) {
-                    Text("VocaTime")
-                        .font(.largeTitle.weight(.semibold))
-                    Text("Speak → Understand → Schedule → Remind")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
+        ZStack(alignment: .bottomTrailing) {
+            ScrollView {
+                VStack(spacing: 24) {
+                    VStack(spacing: 8) {
+                        Text("VocaTime")
+                            .font(.largeTitle.weight(.semibold))
+                        Text("Speak → Understand → Schedule → Remind")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    .padding(.top, 24)
+
+                    statusStrip
+
+                    dashboardSection
+
+                    NavigationLink {
+                        PermissionsView()
+                    } label: {
+                        Label("Permission status", systemImage: "lock.shield")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .padding(.horizontal)
+                    .padding(.bottom, 100)
                 }
-                .padding(.top, 24)
-
-                statusStrip
-
-                RecordButtonView(
-                    isListening: viewModel.flowState == .listening,
-                    isEnabled: viewModel.flowState != .processing,
-                    action: { viewModel.microphoneTapped() }
-                )
-                .padding(.vertical, 8)
-
-                flowStateLabel
-
-                textCard
-
-                if let parsed = viewModel.parsedCommand, viewModel.flowState == .success {
-                    parsedResultCard(parsed)
-                }
-
-                Button(action: { viewModel.primaryActionTapped() }) {
-                    Text(primaryButtonTitle)
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-                .padding(.horizontal)
-
-                NavigationLink {
-                    PermissionsView()
-                } label: {
-                    Label("Permission status", systemImage: "lock.shield")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-                .padding(.horizontal)
-                .padding(.bottom, 32)
             }
+
+            Button {
+                showChat = true
+            } label: {
+                Image(systemName: "message.fill")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 56, height: 56)
+                    .background(Color.accentColor)
+                    .clipShape(Circle())
+                    .shadow(color: .black.opacity(0.2), radius: 6, y: 3)
+            }
+            .accessibilityLabel("Open command chat")
+            .padding(.trailing, 20)
+            .padding(.bottom, 28)
+        }
+        .sheet(isPresented: $showChat) {
+            ChatSheetView(viewModel: viewModel)
+                .presentationDragIndicator(.visible)
         }
         .task {
             await permissionService.refreshAll()
         }
+    }
+
+    private var dashboardSection: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            Text("Tasks")
+                .font(.title2.weight(.semibold))
+                .padding(.horizontal)
+
+            taskColumn(title: "Today", items: viewModel.todayTasks)
+            taskColumn(title: "Upcoming", items: viewModel.upcomingTasks)
+            taskColumn(title: "Done", items: viewModel.doneTasks)
+        }
+    }
+
+    private func taskColumn(title: String, items: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.headline)
+            if items.isEmpty {
+                Text("Nothing here yet")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                    Text("• \(item)")
+                        .font(.subheadline)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding()
+        .background(Color(.secondarySystemGroupedBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .padding(.horizontal)
     }
 
     @ViewBuilder
@@ -76,141 +111,6 @@ struct HomeView: View {
             .background(Color.orange.opacity(0.12))
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .padding(.horizontal)
-        }
-    }
-
-    private var flowStateLabel: some View {
-        Text(stateDescription)
-            .font(.subheadline.weight(.medium))
-            .foregroundStyle(stateColor)
-    }
-
-    private func parsedResultCard(_ parsed: ParsedCommand) -> some View {
-        let when = parsed.reminderDate ?? parsed.startDate
-        return VStack(alignment: .leading, spacing: 10) {
-            Text("Understood")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-            LabeledContent("Action") {
-                Text(actionLabel(parsed.actionType))
-            }
-            LabeledContent("Title") {
-                Text(parsed.title)
-                    .multilineTextAlignment(.trailing)
-            }
-            if let when {
-                LabeledContent("When") {
-                    Text(Self.dateTimeFormatter.string(from: when))
-                }
-            } else {
-                LabeledContent("When") {
-                    Text("Not detected")
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            if parsed.actionType == .reminder {
-                Button {
-                    viewModel.createReminder()
-                } label: {
-                    Text("Create Reminder")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(viewModel.isSchedulingReminder)
-
-                switch viewModel.reminderScheduleOutcome {
-                case .none:
-                    EmptyView()
-                case .succeeded(let message):
-                    Text(message)
-                        .font(.footnote)
-                        .foregroundStyle(.green)
-                case .failed(let message):
-                    Text(message)
-                        .font(.footnote)
-                        .foregroundStyle(.red)
-                }
-            }
-        }
-        .padding()
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.secondarySystemGroupedBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .padding(.horizontal)
-    }
-
-    private func actionLabel(_ type: ActionType) -> String {
-        switch type {
-        case .reminder: return "Reminder"
-        case .calendarEvent: return "Calendar event"
-        case .unknown: return "Unknown"
-        }
-    }
-
-    private static let dateTimeFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateStyle = .medium
-        f.timeStyle = .short
-        return f
-    }()
-
-    private var textCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Transcript")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-            Text(displayText)
-                .font(.body)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .foregroundStyle(displayText == placeholderText ? .secondary : .primary)
-        }
-        .padding()
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.secondarySystemGroupedBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .padding(.horizontal)
-    }
-
-    private var placeholderText: String {
-        "Your words will appear here after you speak."
-    }
-
-    private var displayText: String {
-        if let err = viewModel.errorMessage, viewModel.flowState == .error {
-            return err
-        }
-        if viewModel.displayedText.isEmpty {
-            return placeholderText
-        }
-        return viewModel.displayedText
-    }
-
-    private var primaryButtonTitle: String {
-        switch viewModel.flowState {
-        case .success: return "Done"
-        case .error: return "Dismiss"
-        default: return "Continue"
-        }
-    }
-
-    private var stateDescription: String {
-        switch viewModel.flowState {
-        case .idle: return "Idle — tap the microphone to begin"
-        case .listening: return "Listening… tap again when finished"
-        case .processing: return "Processing…"
-        case .success: return "Success"
-        case .error: return "Something went wrong"
-        }
-    }
-
-    private var stateColor: Color {
-        switch viewModel.flowState {
-        case .idle: return .secondary
-        case .listening: return .red
-        case .processing: return .orange
-        case .success: return .green
-        case .error: return .red
         }
     }
 }

@@ -1,11 +1,5 @@
 import Foundation
 
-enum ReminderScheduleOutcome: Equatable {
-    case none
-    case succeeded(String)
-    case failed(String)
-}
-
 enum VoiceFlowState: Equatable {
     case idle
     case listening
@@ -17,160 +11,163 @@ enum VoiceFlowState: Equatable {
 @MainActor
 @Observable
 final class VoiceCommandViewModel {
-    var flowState: VoiceFlowState = .idle
-    var displayedText: String = ""
-    var errorMessage: String?
+    var chatMessages: [ChatMessage] = []
+    var chatFlowState: VoiceFlowState = .idle
+    var chatDraftText: String = ""
     var parsedCommand: ParsedCommand?
-    var reminderScheduleOutcome: ReminderScheduleOutcome = .none
-    var isSchedulingReminder = false
+
+    /// In-memory dashboard lists (optional persistence later).
+    var todayTasks: [String] = []
+    var upcomingTasks: [String] = []
+    var doneTasks: [String] = []
 
     private let speechService = SpeechRecognizerService()
-    private let reminderService = ReminderService()
 
-    func microphoneTapped() {
-        errorMessage = nil
-        switch flowState {
+    var chatStatusDescription: String {
+        switch chatFlowState {
+        case .idle: return "Tap the microphone to speak."
+        case .listening: return "Listening… tap again when you’re done."
+        case .processing: return "Processing…"
+        case .success: return "Ready for your next command."
+        case .error: return "Something went wrong — try again."
+        }
+    }
+
+    func chatMicrophoneTapped() {
+        switch chatFlowState {
         case .idle, .success, .error:
-            Task { await beginListening() }
+            Task { await chatBeginListening() }
         case .listening:
-            Task { await finalizeListening() }
+            Task { await chatFinalizeListening() }
         case .processing:
             break
         }
     }
 
-    func primaryActionTapped() {
-        errorMessage = nil
-        switch flowState {
-        case .success, .error:
-            reset()
-        case .idle:
-            errorMessage = "Tap the microphone to speak first."
-            flowState = .error
-        case .listening:
-            errorMessage = "Tap the microphone again when you’re done speaking."
-            flowState = .error
-        case .processing:
-            errorMessage = "Please wait until processing finishes."
-            flowState = .error
-        }
-    }
-
-    func reset() {
-        flowState = .idle
-        displayedText = ""
-        errorMessage = nil
-        parsedCommand = nil
-        reminderScheduleOutcome = .none
-        isSchedulingReminder = false
-        Task { await speechService.cancelForReset() }
-    }
-
-    func createReminder() {
-        reminderScheduleOutcome = .none
-        guard let cmd = parsedCommand, cmd.actionType == .reminder else {
-            reminderScheduleOutcome = .failed("This command isn’t a reminder.")
+    func chatBeginListening() async {
+        if let err = await speechService.requestAuthorizationIfNeeded() {
+            chatMessages.append(ChatMessage(role: .assistant, text: err))
+            chatFlowState = .error
             return
         }
-        guard let when = cmd.reminderDate else {
-            reminderScheduleOutcome = .failed("No reminder time found. Try something like “in 5 minutes.”")
-            return
-        }
-        guard !isSchedulingReminder else { return }
-        isSchedulingReminder = true
-        Task { @MainActor in
-            defer { isSchedulingReminder = false }
-            let result = await reminderService.scheduleReminder(
-                title: cmd.title,
-                notes: cmd.notes,
-                at: when
-            )
-            switch result {
-            case .success:
-                let whenText = Self.reminderFeedbackFormatter.string(from: when)
-                reminderScheduleOutcome = .succeeded("Reminder scheduled for \(whenText).")
-            case .failure(let error):
-                reminderScheduleOutcome = .failed(error.localizedDescription)
+
+        chatDraftText = ""
+
+        let startError = await speechService.startRecognition(
+            onPartialResult: { [weak self] text in
+                self?.chatDraftText = text
+            },
+            onRuntimeError: { [weak self] message in
+                guard let self else { return }
+                self.chatMessages.append(ChatMessage(role: .assistant, text: message))
+                self.chatFlowState = .error
             }
+        )
+
+        if let startError {
+            chatMessages.append(ChatMessage(role: .assistant, text: startError))
+            chatFlowState = .error
+            return
+        }
+
+        chatFlowState = .listening
+    }
+
+    func chatFinalizeListening() async {
+        chatFlowState = .processing
+        let outcome = await speechService.stopRecognition()
+        switch outcome {
+        case .success(let text):
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            chatDraftText = ""
+            if trimmed.isEmpty {
+                chatMessages.append(
+                    ChatMessage(role: .assistant, text: "I didn’t catch that. Try speaking a bit longer.")
+                )
+                chatFlowState = .error
+            } else {
+                chatMessages.append(ChatMessage(role: .user, text: trimmed))
+                applyChatParse(transcript: trimmed)
+            }
+        case .failure(let error):
+            chatDraftText = ""
+            chatMessages.append(ChatMessage(role: .assistant, text: error.localizedDescription))
+            parsedCommand = nil
+            chatFlowState = .error
         }
     }
 
-    private static let reminderFeedbackFormatter: DateFormatter = {
+    private func applyChatParse(transcript: String) {
+        let parser = IntentParserService(referenceDate: Date())
+        switch parser.parse(transcript) {
+        case .success(let command):
+            parsedCommand = command
+            let reply = Self.confirmationMessage(for: command, userTranscript: transcript)
+            chatMessages.append(ChatMessage(role: .assistant, text: reply))
+            if command.reminderDate != nil || command.startDate != nil {
+                upcomingTasks.append(command.title)
+            } else if command.actionType != .unknown {
+                todayTasks.append(command.title)
+            }
+            chatFlowState = .success
+        case .failure(let error):
+            parsedCommand = nil
+            chatMessages.append(ChatMessage(role: .assistant, text: error.localizedDescription))
+            chatFlowState = .error
+        }
+    }
+
+    private static func confirmationMessage(for command: ParsedCommand, userTranscript: String) -> String {
+        let low = userTranscript.lowercased()
+        if command.actionType == .reminder {
+            if let n = extractLeadingMinutes(from: low) {
+                return "Got it. I’ll remind you in \(n) minute\(n == 1 ? "" : "s")."
+            }
+            if let n = extractLeadingHours(from: low) {
+                return "Got it. I’ll remind you in \(n) hour\(n == 1 ? "" : "s")."
+            }
+            if let when = command.reminderDate {
+                let t = chatReplyFormatter.string(from: when)
+                return "Got it. I’ll remind you at \(t) about “\(command.title)”."
+            }
+            return "Got it. I’ll remind you about “\(command.title)”."
+        }
+        if command.actionType == .calendarEvent {
+            if let when = command.startDate {
+                let t = chatReplyFormatter.string(from: when)
+                return "Got it. I’ve noted “\(command.title)” for \(t)."
+            }
+            return "Got it. I’ve noted “\(command.title)” for your calendar."
+        }
+        return "I’m not sure how to schedule that yet. Try “remind me…” or “today at 3 PM…”."
+    }
+
+    private static func extractLeadingMinutes(from low: String) -> Int? {
+        let ns = low as NSString
+        guard let regex = try? NSRegularExpression(pattern: #"in\s+(\d+)\s+minutes?"#, options: .caseInsensitive),
+              let m = regex.firstMatch(in: low, options: [], range: NSRange(location: 0, length: ns.length)),
+              m.numberOfRanges >= 2,
+              let r = Range(m.range(at: 1), in: low),
+              let n = Int(low[r]), n > 0
+        else { return nil }
+        return n
+    }
+
+    private static func extractLeadingHours(from low: String) -> Int? {
+        let ns = low as NSString
+        guard let regex = try? NSRegularExpression(pattern: #"in\s+(\d+)\s+hours?"#, options: .caseInsensitive),
+              let m = regex.firstMatch(in: low, options: [], range: NSRange(location: 0, length: ns.length)),
+              m.numberOfRanges >= 2,
+              let r = Range(m.range(at: 1), in: low),
+              let n = Int(low[r]), n > 0
+        else { return nil }
+        return n
+    }
+
+    private static let chatReplyFormatter: DateFormatter = {
         let f = DateFormatter()
         f.dateStyle = .medium
         f.timeStyle = .short
         return f
     }()
-
-    private func beginListening() async {
-        if let err = await speechService.requestAuthorizationIfNeeded() {
-            errorMessage = err
-            flowState = .error
-            return
-        }
-
-        displayedText = ""
-        parsedCommand = nil
-        reminderScheduleOutcome = .none
-
-        let startError = await speechService.startRecognition(
-            onPartialResult: { [weak self] text in
-                self?.displayedText = text
-            },
-            onRuntimeError: { [weak self] message in
-                guard let self else { return }
-                self.errorMessage = message
-                self.flowState = .error
-            }
-        )
-
-        if let startError {
-            errorMessage = startError
-            flowState = .error
-            return
-        }
-
-        flowState = .listening
-    }
-
-    private func finalizeListening() async {
-        flowState = .processing
-        let outcome = await speechService.stopRecognition()
-        switch outcome {
-        case .success(let text):
-            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            if trimmed.isEmpty {
-                displayedText = ""
-                errorMessage = "No words were recognized. Try speaking a bit longer or check the microphone."
-                flowState = .error
-            } else {
-                displayedText = trimmed
-                applyParseResult(for: trimmed)
-            }
-        case .failure(let error):
-            let message = error.localizedDescription
-            let trimmed = displayedText.trimmingCharacters(in: .whitespacesAndNewlines)
-            if trimmed.isEmpty {
-                errorMessage = message
-            } else {
-                displayedText = trimmed
-                errorMessage = message
-            }
-            parsedCommand = nil
-            flowState = .error
-        }
-    }
-
-    private func applyParseResult(for transcript: String) {
-        let parser = IntentParserService(referenceDate: Date())
-        switch parser.parse(transcript) {
-        case .success(let command):
-            parsedCommand = command
-            flowState = .success
-        case .failure(let error):
-            parsedCommand = nil
-            errorMessage = error.localizedDescription
-            flowState = .error
-        }
-    }
 }
