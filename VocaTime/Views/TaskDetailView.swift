@@ -137,19 +137,13 @@ struct TaskDetailView: View {
             task.updatedAt = Date()
             return
         }
-
-        let day = calendar.startOfDay(for: daySelection)
-        if specificTimeEnabled {
-            let h = calendar.component(.hour, from: timeSelection)
-            let m = calendar.component(.minute, from: timeSelection)
-            var c = calendar.dateComponents([.year, .month, .day], from: day)
-            c.hour = h
-            c.minute = m
-            c.second = 0
-            task.scheduledDate = calendar.date(from: c) ?? day
-        } else {
-            task.scheduledDate = day
-        }
+        task.scheduledDate = TaskScheduleHelpers.scheduledDate(
+            calendar: calendar,
+            hasDate: true,
+            daySelection: daySelection,
+            hasSpecificTime: specificTimeEnabled,
+            timeSelection: timeSelection
+        )
         task.updatedAt = Date()
     }
 }

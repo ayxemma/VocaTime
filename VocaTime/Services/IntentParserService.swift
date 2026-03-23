@@ -25,12 +25,12 @@ struct IntentParserService {
         let hasRemind = lower.range(of: #"\bremind(?:er)?\b"#, options: .regularExpression) != nil
             || lower.contains("remember to")
 
-        let matchedLower: String = {
+        let matchedSnippet: String = {
             guard let r = dateMatch?.range else { return "" }
-            return String(trimmed[r]).lowercased()
+            return String(trimmed[r])
         }()
 
-        let isRelativeIn = matchedLower.range(of: #"^in\s+\d+\s+(minutes?|hours?)$"#, options: .regularExpression) != nil
+        let isRelativeIn = isRelativeTimeMatch(snippet: matchedSnippet)
 
         let actionType: ActionType
         if hasRemind {
@@ -82,6 +82,14 @@ struct IntentParserService {
         return .success(command)
     }
 
+    /// True when the date match is English `in … minutes/hours` (digits or words) or Chinese 分钟后 / 小时后.
+    private func isRelativeTimeMatch(snippet: String) -> Bool {
+        guard !snippet.isEmpty else { return false }
+        if snippet.contains("分钟") || snippet.contains("小时") { return true }
+        let low = snippet.lowercased()
+        return low.range(of: #"\bin\s+.+?\s+(minutes?|hours?)\b"#, options: .regularExpression) != nil
+    }
+
     private func buildTitle(from text: String, stripping range: Range<String.Index>?) -> String {
         var t = text
         if let range {
@@ -91,7 +99,7 @@ struct IntentParserService {
         t = t.trimmingCharacters(in: .whitespacesAndNewlines)
 
         let prefixPatterns = [
-            #"(?i)^remind\s+me\s+in\s+\d+\s+(?:minutes?|hours?)\s+to\s+"#,
+            #"(?i)^remind\s+me\s+in\s+(?:\d+|[a-z]+(?:[\s\-]+[a-z]+)?)\s+(?:minutes?|hours?)\s+to\s+"#,
             #"(?i)^remind\s+me\s+to\s+"#,
             #"(?i)^remind\s+me\s+"#,
             #"(?i)^reminder\s+to\s+"#,

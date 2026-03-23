@@ -1,6 +1,6 @@
 import Foundation
 
-/// Extracts a single primary date/time from natural phrases. Deterministic; English patterns only.
+/// Extracts a single primary date/time from natural phrases. Deterministic; English + basic Chinese relative time.
 struct DateParser {
     private let calendar: Calendar
     private let referenceDate: Date
@@ -17,8 +17,12 @@ struct DateParser {
             (#"(?i)next\s+(sunday|monday|tuesday|wednesday|thursday|friday|saturday)\s+at\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)"#, { self.parseNextWeekdayAt($0, $1) }),
             (#"(?i)today\s+at\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)"#, { self.parseTodayAt($0, $1) }),
             (#"(?i)tomorrow\s+at\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)"#, { self.parseTomorrowAt($0, $1) }),
-            (#"(?i)in\s+(\d+)\s+hours?"#, { self.parseInHours($0, $1) }),
-            (#"(?i)in\s+(\d+)\s+minutes?"#, { self.parseInMinutes($0, $1) }),
+            // Basic Chinese: N分钟后 / N小时后 (anywhere in sentence)
+            (#"([一二三四五六七八九十两零]+)分钟后"#, { self.parseChineseRelative($0, $1, component: .minute) }),
+            (#"([一二三四五六七八九十两零]+)小时后"#, { self.parseChineseRelative($0, $1, component: .hour) }),
+            // English: in N minutes/hours — digits or spelled (e.g. five, twenty, twenty five)
+            (#"(?i)in\s+((?:\d+)|(?:[a-z]+(?:[\s\-]+[a-z]+)?))\s+hours?"#, { self.parseInHoursFlexible($0, $1) }),
+            (#"(?i)in\s+((?:\d+)|(?:[a-z]+(?:[\s\-]+[a-z]+)?))\s+minutes?"#, { self.parseInMinutesFlexible($0, $1) }),
             (#"(?i)\bat\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)"#, { self.parseAtTime($0, $1) }),
         ]
 
@@ -33,23 +37,111 @@ struct DateParser {
         return nil
     }
 
-    // MARK: - Handlers
+    // MARK: - Relative (English flexible)
 
-    private func parseInMinutes(_ match: NSTextCheckingResult, _ string: String) -> Date? {
+    private func parseInMinutesFlexible(_ match: NSTextCheckingResult, _ string: String) -> Date? {
         guard match.numberOfRanges >= 2,
               let r = Range(match.range(at: 1), in: string),
-              let n = Int(string[r]), n > 0
+              let n = Self.parseDurationAmount(String(string[r])),
+              n > 0
         else { return nil }
         return calendar.date(byAdding: .minute, value: n, to: referenceDate)
     }
 
-    private func parseInHours(_ match: NSTextCheckingResult, _ string: String) -> Date? {
+    private func parseInHoursFlexible(_ match: NSTextCheckingResult, _ string: String) -> Date? {
         guard match.numberOfRanges >= 2,
               let r = Range(match.range(at: 1), in: string),
-              let n = Int(string[r]), n > 0
+              let n = Self.parseDurationAmount(String(string[r])),
+              n > 0
         else { return nil }
         return calendar.date(byAdding: .hour, value: n, to: referenceDate)
     }
+
+    /// Digits or English words (one–twenty, compounds with twenty–sixty + one–nine).
+    private static func parseDurationAmount(_ raw: String) -> Int? {
+        let s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if s.isEmpty { return nil }
+        if let n = Int(s), n > 0 { return n }
+        return parseEnglishNumberPhrase(s.lowercased())
+    }
+
+    private static func parseEnglishNumberPhrase(_ s: String) -> Int? {
+        let norm = s.replacingOccurrences(of: "-", with: " ")
+        let parts = norm.split(whereSeparator: { $0 == " " }).map(String.init)
+        guard let first = parts.first else { return nil }
+        if parts.count == 1 {
+            return englishWordToInt[first]
+        }
+        if parts.count == 2, let tens = englishTens[first], let ones = englishWordToInt[parts[1]], ones >= 1, ones <= 9 {
+            return tens + ones
+        }
+        return nil
+    }
+
+    private static let englishWordToInt: [String: Int] = [
+        "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9,
+        "ten": 10, "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14, "fifteen": 15,
+        "sixteen": 16, "seventeen": 17, "eighteen": 18, "nineteen": 19, "twenty": 20,
+        "thirty": 30, "forty": 40, "fifty": 50, "sixty": 60,
+    ]
+
+    private static let englishTens: [String: Int] = [
+        "twenty": 20, "thirty": 30, "forty": 40, "fifty": 50, "sixty": 60,
+    ]
+
+    // MARK: - Relative (Chinese)
+
+    private enum ChineseTimeComponent {
+        case minute
+        case hour
+    }
+
+    private func parseChineseRelative(_ match: NSTextCheckingResult, _ string: String, component: ChineseTimeComponent) -> Date? {
+        guard match.numberOfRanges >= 2,
+              let r = Range(match.range(at: 1), in: string),
+              let n = Self.parseChineseNumber(String(string[r])),
+              n > 0
+        else { return nil }
+        switch component {
+        case .minute:
+            return calendar.date(byAdding: .minute, value: n, to: referenceDate)
+        case .hour:
+            return calendar.date(byAdding: .hour, value: n, to: referenceDate)
+        }
+    }
+
+    /// Basic coverage: 一…十, 两, compounds like 十五, 二十, 二十三.
+    private static func parseChineseNumber(_ raw: String) -> Int? {
+        let trimmed = String(raw.filter { !$0.isWhitespace })
+        if trimmed.isEmpty { return nil }
+        let d: [Character: Int] = [
+            "零": 0, "一": 1, "二": 2, "两": 2, "三": 3, "四": 4, "五": 5,
+            "六": 6, "七": 7, "八": 8, "九": 9,
+        ]
+        let chars = Array(trimmed)
+        if chars.count == 1 {
+            if chars[0] == "十" { return 10 }
+            return d[chars[0]]
+        }
+        if chars.count == 2 {
+            if chars[0] == "十" {
+                let o = d[chars[1]] ?? 0
+                return 10 + o
+            }
+            if chars[1] == "十" {
+                let t = d[chars[0]] ?? 0
+                if t >= 1, t <= 9 { return t * 10 }
+            }
+        }
+        if chars.count == 3, chars[1] == "十" {
+            let t = d[chars[0]] ?? 0
+            let o = d[chars[2]] ?? 0
+            if t >= 1, t <= 9, o >= 0, o <= 9 { return t * 10 + o }
+        }
+        return nil
+    }
+
+    // MARK: - Handlers (fixed clock times)
 
     private func parseTodayAt(_ match: NSTextCheckingResult, _ string: String) -> Date? {
         let day = calendar.startOfDay(for: referenceDate)

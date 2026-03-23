@@ -31,6 +31,8 @@
 		A1000000000000000000001E /* TaskParsing.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001E /* TaskParsing.swift */; };
 		A1000000000000000000001F /* LLMTaskParserService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001F /* LLMTaskParserService.swift */; };
 		A10000000000000000000020 /* TaskParsingCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000020 /* TaskParsingCoordinator.swift */; };
+		A10000000000000000000021 /* TaskScheduleHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000021 /* TaskScheduleHelpers.swift */; };
+		A10000000000000000000022 /* TaskComposerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000022 /* TaskComposerView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -58,6 +60,8 @@
 		A2000000000000000000001E /* TaskParsing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskParsing.swift; sourceTree = "<group>"; };
 		A2000000000000000000001F /* LLMTaskParserService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMTaskParserService.swift; sourceTree = "<group>"; };
 		A20000000000000000000020 /* TaskParsingCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskParsingCoordinator.swift; sourceTree = "<group>"; };
+		A20000000000000000000021 /* TaskScheduleHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskScheduleHelpers.swift; sourceTree = "<group>"; };
+		A20000000000000000000022 /* TaskComposerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskComposerView.swift; sourceTree = "<group>"; };
 		A30000000000000000000001 /* VocaTime.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VocaTime.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -122,6 +126,7 @@
 				A2000000000000000000001B /* RootTabView.swift */,
 				A20000000000000000000019 /* TaskRowView.swift */,
 				A2000000000000000000001C /* TaskDetailView.swift */,
+				A20000000000000000000022 /* TaskComposerView.swift */,
 				A20000000000000000000003 /* RecordButtonView.swift */,
 				A20000000000000000000004 /* PermissionsView.swift */,
 				A20000000000000000000017 /* ChatSheetView.swift */,
@@ -155,6 +160,7 @@
 			children = (
 				A20000000000000000000007 /* AppError.swift */,
 				A20000000000000000000013 /* DateParser.swift */,
+				A20000000000000000000021 /* TaskScheduleHelpers.swift */,
 			);
 			path = Utilities;
 			sourceTree = "<group>";
@@ -251,6 +257,8 @@
 				A1000000000000000000001E /* TaskParsing.swift in Sources */,
 				A1000000000000000000001F /* LLMTaskParserService.swift in Sources */,
 				A10000000000000000000020 /* TaskParsingCoordinator.swift in Sources */,
+				A10000000000000000000021 /* TaskScheduleHelpers.swift in Sources */,
+				A10000000000000000000022 /* TaskComposerView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

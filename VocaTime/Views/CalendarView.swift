@@ -6,6 +6,7 @@ struct CalendarView: View {
 
     @State private var displayedMonth: Date
     @State private var selectedDate: Date
+    @State private var showTaskComposer = false
 
     private var calendar: Calendar { .current }
 
@@ -42,6 +43,22 @@ struct CalendarView: View {
         .background(Color(.systemGroupedBackground))
         .navigationTitle("Calendar")
         .navigationBarTitleDisplayMode(.large)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    showTaskComposer = true
+                } label: {
+                    Image(systemName: "plus")
+                }
+                .accessibilityLabel("New task")
+            }
+        }
+        .sheet(isPresented: $showTaskComposer) {
+            NavigationStack {
+                TaskComposerView()
+            }
+            .presentationDragIndicator(.visible)
+        }
     }
 
     private var monthHeader: some View {

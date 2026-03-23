@@ -8,6 +8,7 @@ struct HomeView: View {
 
     @State private var viewModel = VoiceCommandViewModel()
     @State private var showChat = false
+    @State private var showTaskComposer = false
 
     private var calendar: Calendar { .current }
 
@@ -105,6 +106,22 @@ struct HomeView: View {
         .sheet(isPresented: $showChat) {
             ChatSheetView(viewModel: viewModel)
                 .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $showTaskComposer) {
+            NavigationStack {
+                TaskComposerView()
+            }
+            .presentationDragIndicator(.visible)
+        }
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    showTaskComposer = true
+                } label: {
+                    Image(systemName: "plus")
+                }
+                .accessibilityLabel("New task")
+            }
         }
         .task {
             await permissionService.refreshAll()
