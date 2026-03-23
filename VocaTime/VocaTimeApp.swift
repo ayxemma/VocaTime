@@ -7,10 +7,8 @@ struct VocaTimeApp: App {
 
     var body: some Scene {
         WindowGroup {
-            NavigationStack {
-                HomeView()
-                    .environment(permissionService)
-            }
+            RootTabView()
+                .environment(permissionService)
         }
         .modelContainer(for: TaskItem.self)
     }

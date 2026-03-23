@@ -23,6 +23,10 @@
 		A10000000000000000000014 /* IntentParserService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000014 /* IntentParserService.swift */; };
 		A10000000000000000000017 /* ChatSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000017 /* ChatSheetView.swift */; };
 		A10000000000000000000018 /* TaskItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000018 /* TaskItem.swift */; };
+		A10000000000000000000019 /* TaskRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000019 /* TaskRowView.swift */; };
+		A1000000000000000000001A /* CalendarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001A /* CalendarView.swift */; };
+		A1000000000000000000001B /* RootTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001B /* RootTabView.swift */; };
+		A1000000000000000000001C /* TaskDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000001C /* TaskDetailView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -42,6 +46,10 @@
 		A20000000000000000000014 /* IntentParserService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntentParserService.swift; sourceTree = "<group>"; };
 		A20000000000000000000017 /* ChatSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatSheetView.swift; sourceTree = "<group>"; };
 		A20000000000000000000018 /* TaskItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskItem.swift; sourceTree = "<group>"; };
+		A20000000000000000000019 /* TaskRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskRowView.swift; sourceTree = "<group>"; };
+		A2000000000000000000001A /* CalendarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarView.swift; sourceTree = "<group>"; };
+		A2000000000000000000001B /* RootTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootTabView.swift; sourceTree = "<group>"; };
+		A2000000000000000000001C /* TaskDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskDetailView.swift; sourceTree = "<group>"; };
 		A30000000000000000000001 /* VocaTime.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VocaTime.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -101,6 +109,10 @@
 			isa = PBXGroup;
 			children = (
 				A20000000000000000000002 /* HomeView.swift */,
+				A2000000000000000000001A /* CalendarView.swift */,
+				A2000000000000000000001B /* RootTabView.swift */,
+				A20000000000000000000019 /* TaskRowView.swift */,
+				A2000000000000000000001C /* TaskDetailView.swift */,
 				A20000000000000000000003 /* RecordButtonView.swift */,
 				A20000000000000000000004 /* PermissionsView.swift */,
 				A20000000000000000000017 /* ChatSheetView.swift */,
@@ -219,6 +231,10 @@
 				A10000000000000000000014 /* IntentParserService.swift in Sources */,
 				A10000000000000000000017 /* ChatSheetView.swift in Sources */,
 				A10000000000000000000018 /* TaskItem.swift in Sources */,
+				A10000000000000000000019 /* TaskRowView.swift in Sources */,
+				A1000000000000000000001A /* CalendarView.swift in Sources */,
+				A1000000000000000000001B /* RootTabView.swift in Sources */,
+				A1000000000000000000001C /* TaskDetailView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
