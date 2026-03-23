@@ -21,8 +21,8 @@
 		A10000000000000000000012 /* CalendarEventItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000012 /* CalendarEventItem.swift */; };
 		A10000000000000000000013 /* DateParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000013 /* DateParser.swift */; };
 		A10000000000000000000014 /* IntentParserService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000014 /* IntentParserService.swift */; };
-		A10000000000000000000016 /* ChatMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000016 /* ChatMessage.swift */; };
 		A10000000000000000000017 /* ChatSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000017 /* ChatSheetView.swift */; };
+		A10000000000000000000018 /* TaskItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000018 /* TaskItem.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -40,8 +40,8 @@
 		A20000000000000000000012 /* CalendarEventItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarEventItem.swift; sourceTree = "<group>"; };
 		A20000000000000000000013 /* DateParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DateParser.swift; sourceTree = "<group>"; };
 		A20000000000000000000014 /* IntentParserService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntentParserService.swift; sourceTree = "<group>"; };
-		A20000000000000000000016 /* ChatMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatMessage.swift; sourceTree = "<group>"; };
 		A20000000000000000000017 /* ChatSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatSheetView.swift; sourceTree = "<group>"; };
+		A20000000000000000000018 /* TaskItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskItem.swift; sourceTree = "<group>"; };
 		A30000000000000000000001 /* VocaTime.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VocaTime.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -84,7 +84,7 @@
 				A20000000000000000000010 /* ParsedCommand.swift */,
 				A20000000000000000000011 /* ReminderItem.swift */,
 				A20000000000000000000012 /* CalendarEventItem.swift */,
-				A20000000000000000000016 /* ChatMessage.swift */,
+				A20000000000000000000018 /* TaskItem.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -217,8 +217,8 @@
 				A10000000000000000000012 /* CalendarEventItem.swift in Sources */,
 				A10000000000000000000013 /* DateParser.swift in Sources */,
 				A10000000000000000000014 /* IntentParserService.swift in Sources */,
-				A10000000000000000000016 /* ChatMessage.swift in Sources */,
 				A10000000000000000000017 /* ChatSheetView.swift in Sources */,
+				A10000000000000000000018 /* TaskItem.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

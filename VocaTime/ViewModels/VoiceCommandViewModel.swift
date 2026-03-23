@@ -1,4 +1,24 @@
 import Foundation
+import SwiftData
+
+enum ChatMessageRole: String, Equatable {
+    case user
+    case assistant
+}
+
+struct ChatMessage: Identifiable, Equatable {
+    let id: UUID
+    let role: ChatMessageRole
+    let text: String
+    let timestamp: Date
+
+    init(id: UUID = UUID(), role: ChatMessageRole, text: String, timestamp: Date = .now) {
+        self.id = id
+        self.role = role
+        self.text = text
+        self.timestamp = timestamp
+    }
+}
 
 enum VoiceFlowState: Equatable {
     case idle
@@ -16,12 +36,12 @@ final class VoiceCommandViewModel {
     var chatDraftText: String = ""
     var parsedCommand: ParsedCommand?
 
-    /// In-memory dashboard lists (optional persistence later).
-    var todayTasks: [String] = []
-    var upcomingTasks: [String] = []
-    var doneTasks: [String] = []
-
     private let speechService = SpeechRecognizerService()
+    private var persistenceContext: ModelContext?
+
+    func attachPersistence(_ context: ModelContext) {
+        persistenceContext = context
+    }
 
     var chatStatusDescription: String {
         switch chatFlowState {
@@ -104,10 +124,8 @@ final class VoiceCommandViewModel {
             parsedCommand = command
             let reply = Self.confirmationMessage(for: command, userTranscript: transcript)
             chatMessages.append(ChatMessage(role: .assistant, text: reply))
-            if command.reminderDate != nil || command.startDate != nil {
-                upcomingTasks.append(command.title)
-            } else if command.actionType != .unknown {
-                todayTasks.append(command.title)
+            if let ctx = persistenceContext {
+                TaskItem.insertFromParsedCommand(command, context: ctx)
             }
             chatFlowState = .success
         case .failure(let error):

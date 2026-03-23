@@ -1,3 +1,4 @@
+import SwiftData
 import SwiftUI
 
 @main
@@ -11,5 +12,6 @@ struct VocaTimeApp: App {
                     .environment(permissionService)
             }
         }
+        .modelContainer(for: TaskItem.self)
     }
 }

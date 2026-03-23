@@ -3,6 +3,7 @@ import SwiftUI
 struct ChatSheetView: View {
     @Bindable var viewModel: VoiceCommandViewModel
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
 
     var body: some View {
         NavigationStack {
@@ -60,6 +61,9 @@ struct ChatSheetView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") { dismiss() }
                 }
+            }
+            .onAppear {
+                viewModel.attachPersistence(modelContext)
             }
         }
     }
