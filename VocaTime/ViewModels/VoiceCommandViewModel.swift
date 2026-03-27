@@ -37,7 +37,10 @@ final class VoiceCommandViewModel {
     var parsedCommand: ParsedCommand?
 
     private let speechService = SpeechRecognizerService()
-    private let parsingCoordinator = TaskParsingCoordinator()
+    private let parsingCoordinator = TaskParsingCoordinator(
+        localParser: LocalTaskParser(),
+        llmParser: LLMTaskParserService()
+    )
     private var persistenceContext: ModelContext?
     private var silenceTimerTask: Task<Void, Never>?
 
