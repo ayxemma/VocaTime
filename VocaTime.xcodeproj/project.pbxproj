@@ -33,6 +33,7 @@
 		A10000000000000000000020 /* TaskParsingCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000020 /* TaskParsingCoordinator.swift */; };
 		A10000000000000000000021 /* TaskScheduleHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000021 /* TaskScheduleHelpers.swift */; };
 		A10000000000000000000022 /* TaskComposerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000022 /* TaskComposerView.swift */; };
+		A10000000000000000000023 /* Secrets.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000023 /* Secrets.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -62,6 +63,7 @@
 		A20000000000000000000020 /* TaskParsingCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskParsingCoordinator.swift; sourceTree = "<group>"; };
 		A20000000000000000000021 /* TaskScheduleHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskScheduleHelpers.swift; sourceTree = "<group>"; };
 		A20000000000000000000022 /* TaskComposerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskComposerView.swift; sourceTree = "<group>"; };
+		A20000000000000000000023 /* Secrets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Secrets.swift; sourceTree = "<group>"; };
 		A30000000000000000000001 /* VocaTime.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VocaTime.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -88,6 +90,7 @@
 			isa = PBXGroup;
 			children = (
 				A20000000000000000000001 /* VocaTimeApp.swift */,
+				A20000000000000000000023 /* Secrets.swift */,
 				A50000000000000000000004 /* Views */,
 				A50000000000000000000005 /* ViewModels */,
 				A50000000000000000000008 /* Models */,
@@ -259,6 +262,7 @@
 				A10000000000000000000020 /* TaskParsingCoordinator.swift in Sources */,
 				A10000000000000000000021 /* TaskScheduleHelpers.swift in Sources */,
 				A10000000000000000000022 /* TaskComposerView.swift in Sources */,
+				A10000000000000000000023 /* Secrets.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

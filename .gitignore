@@ -1,0 +1,12 @@
+# Local-only API credentials (never commit)
+VocaTime/Secrets.swift
+
+# Xcode / macOS
+xcuserdata/
+*.xcuserstate
+DerivedData/
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+.DS_Store

@@ -1,4 +1,4 @@
-// Note to developer: After Cursor applies this, replace "YOUR_API_KEY_HERE" with your actual OpenAI API key from platform.openai.com.
+// OpenAI API key lives in `Secrets.swift` (gitignored). Copy `Secrets.swift.example` → `Secrets.swift` if missing.
 
 import Foundation
 
@@ -8,7 +8,7 @@ enum LLMError: Error {
 }
 
 struct LLMTaskParserService: TaskParsing {
-    private let apiKey = "YOUR_API_KEY_HERE"
+    private var apiKey: String { Secrets.openAIAPIKey }
     private let endpoint = "https://api.openai.com/v1/chat/completions"
     private let model = "gpt-4o-mini"
 
