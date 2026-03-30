@@ -21,15 +21,6 @@ enum AppUILanguage: String, CaseIterable, Identifiable, Hashable {
 
     static let storageKey = "appUILanguage"
 
-    /// BCP 47 for `SFSpeechRecognizer` (UI language alignment; task text is never translated).
-    var speechRecognitionLocaleIdentifier: String {
-        switch self {
-        case .en: return "en-US"
-        case .zhHans: return "zh-CN"
-        case .es: return "es-ES"
-        }
-    }
-
     var locale: Locale {
         switch self {
         case .en: return Locale(identifier: "en_US")
@@ -40,10 +31,6 @@ enum AppUILanguage: String, CaseIterable, Identifiable, Hashable {
 
     var uiLocaleIdentifier: String {
         locale.identifier.replacingOccurrences(of: "-", with: "_")
-    }
-
-    var speechLocale: Locale {
-        Locale(identifier: speechRecognitionLocaleIdentifier)
     }
 
     init(storageRaw: String) {
@@ -97,9 +84,6 @@ extension EnvironmentValues {
         set { self[AppUILanguageEnvironmentKey.self] = newValue }
     }
 }
-
-/// Legacy name for `AppUILanguage`.
-typealias SpeechInputLanguage = AppUILanguage
 
 // MARK: - UI strings
 
@@ -176,6 +160,7 @@ struct AppStrings {
     let voiceStartListening: String
     let voiceStopListening: String
     let chatEmptyTranscript: String
+    let chatTranscriptionFailed: String
     let chatUnknownSchedule: String
     let chatTryRemind: String
     let chatReminderMinutes: String
@@ -270,6 +255,7 @@ struct AppStrings {
         voiceStartListening: "Start listening",
         voiceStopListening: "Stop listening",
         chatEmptyTranscript: "I didn’t catch that. Try speaking a bit longer.",
+        chatTranscriptionFailed: "Couldn’t transcribe your voice. Check your network and API key, then try again.",
         chatUnknownSchedule: """
             I saved %@, but I couldn’t confidently figure out a date or time from what you said.
 
@@ -369,6 +355,7 @@ struct AppStrings {
         voiceStartListening: "开始聆听",
         voiceStopListening: "停止聆听",
         chatEmptyTranscript: "没听清，请再说长一点。",
+        chatTranscriptionFailed: "语音转写失败。请检查网络与 API 密钥后重试。",
         chatUnknownSchedule: """
             已保存 %@，但无法从您的话里确定日期或时间。
 
@@ -468,6 +455,7 @@ struct AppStrings {
         voiceStartListening: "Empezar a escuchar",
         voiceStopListening: "Dejar de escuchar",
         chatEmptyTranscript: "No te he oído bien. Habla un poco más.",
+        chatTranscriptionFailed: "No se pudo transcribir tu voz. Revisa la red y la clave de API e inténtalo de nuevo.",
         chatUnknownSchedule: """
             Guardé %@, pero no pude deducir con seguridad una fecha u hora de lo que dijiste.
 

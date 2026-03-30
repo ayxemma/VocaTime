@@ -180,12 +180,12 @@ struct HomeView: View {
             }
         }
         .onAppear {
-            viewModel.appLanguage = selectedUILanguage
+            viewModel.uiLanguage = selectedUILanguage
         }
         .onChange(of: languageRaw) { _, _ in
-            viewModel.appLanguage = selectedUILanguage
+            viewModel.uiLanguage = selectedUILanguage
             Task {
-                await viewModel.handleAppLanguageChanged()
+                await viewModel.handleUILanguageChanged()
             }
         }
         .task {

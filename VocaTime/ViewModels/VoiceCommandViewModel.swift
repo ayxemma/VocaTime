@@ -1,4 +1,5 @@
 import Foundation
+import os.log
 import SwiftData
 
 enum ChatMessageRole: String, Equatable {
@@ -31,21 +32,18 @@ enum VoiceFlowState: Equatable {
 @MainActor
 @Observable
 final class VoiceCommandViewModel {
+    private static let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "VocaTime", category: "VoiceChat")
+
     var chatMessages: [ChatMessage] = []
     var chatFlowState: VoiceFlowState = .idle
     var chatDraftText: String = ""
     var parsedCommand: ParsedCommand?
 
-    /// Backing store for UI/speech locale (synced from `@AppStorage` via owning views).
-    var chatSpeechInputLanguage: AppUILanguage = .defaultForDevice()
-
-    /// Same as `chatSpeechInputLanguage` (legacy name for speech/UI alignment).
-    var appLanguage: AppUILanguage {
-        get { chatSpeechInputLanguage }
-        set { chatSpeechInputLanguage = newValue }
-    }
+    /// In-app UI language only (labels, helper text, date formatting). Does not select speech recognition locale.
+    var uiLanguage: AppUILanguage = .defaultForDevice()
 
     private let speechService = SpeechRecognizerService()
+    private let transcriptionService = MultilingualTranscriptionService()
     private let parsingCoordinator = TaskParsingCoordinator(
         localParser: LocalTaskParser(),
         llmParser: LLMTaskParserService()
@@ -58,7 +56,7 @@ final class VoiceCommandViewModel {
     }
 
     var chatStatusDescription: String {
-        let s = appLanguage.strings
+        let s = uiLanguage.strings
         switch chatFlowState {
         case .idle: return s.voiceTapToSpeak
         case .listening: return s.voiceListening
@@ -68,8 +66,8 @@ final class VoiceCommandViewModel {
         }
     }
 
-    /// Call when app language changes while this view model may be active (e.g. chat sheet open).
-    func handleAppLanguageChanged() async {
+    /// Call when UI language changes while this view model may be active (e.g. chat sheet open).
+    func handleUILanguageChanged() async {
         await speechService.cancelForReset()
         cancelSilenceTimer()
         if chatFlowState == .listening {
@@ -89,14 +87,21 @@ final class VoiceCommandViewModel {
         }
     }
 
+    /// Safety-net maximum recording duration (30 s). The user is expected to stop manually.
+    /// We no longer use a 2-second silence timeout here because AVAudioRecorder has no
+    /// partial-result callbacks to detect speech end — auto-stopping after 2 s always
+    /// produced a near-silent clip that the transcription API rejected.
+    private static let maxRecordingNanoseconds: UInt64 = 30_000_000_000
+
     private func resetSilenceTimer() {
         silenceTimerTask?.cancel()
         silenceTimerTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            try? await Task.sleep(nanoseconds: Self.maxRecordingNanoseconds)
             guard !Task.isCancelled else { return }
 
             guard let self else { return }
             if self.chatFlowState == .listening {
+                Self.log.info("[VoiceChat] maximum recording duration reached — auto-stopping")
                 await self.chatFinalizeListening()
             }
         }
@@ -110,7 +115,9 @@ final class VoiceCommandViewModel {
     func chatBeginListening() async {
         cancelSilenceTimer()
 
-        let msgs = appLanguage.speechMessages
+        let msgs = uiLanguage.speechMessages
+        Self.log.info("[VoiceChat] recording start appUILanguage=\(self.uiLanguage.rawValue, privacy: .public)")
+
         if let err = await speechService.requestAuthorizationIfNeeded(messages: msgs) {
             chatMessages.append(ChatMessage(role: .assistant, text: err))
             chatFlowState = .error
@@ -119,20 +126,7 @@ final class VoiceCommandViewModel {
 
         chatDraftText = ""
 
-        let startError = await speechService.startRecognition(
-            locale: appLanguage.speechLocale,
-            messages: msgs,
-            onPartialResult: { [weak self] text in
-                self?.chatDraftText = text
-                self?.resetSilenceTimer()
-            },
-            onRuntimeError: { [weak self] message in
-                guard let self else { return }
-                self.cancelSilenceTimer()
-                self.chatMessages.append(ChatMessage(role: .assistant, text: message))
-                self.chatFlowState = .error
-            }
-        )
+        let startError = await speechService.startRecording(messages: msgs)
 
         if let startError {
             chatMessages.append(ChatMessage(role: .assistant, text: startError))
@@ -142,19 +136,72 @@ final class VoiceCommandViewModel {
 
         chatFlowState = .listening
         resetSilenceTimer()
+        Self.log.info("[VoiceChat] recording session active (live Apple transcript disabled; final text from OpenAI transcription)")
     }
 
     func chatFinalizeListening() async {
         silenceTimerTask?.cancel()
         silenceTimerTask = nil
         chatFlowState = .processing
-        let outcome = await speechService.stopRecognition()
-        let strings = appLanguage.strings
-        let speechMsgs = appLanguage.speechMessages
-        switch outcome {
-        case .success(let text):
-            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        Self.log.info("[VoiceChat] recording stop requested")
+        let recordOutcome = await speechService.stopRecording()
+        let strings = uiLanguage.strings
+        let speechMsgs = uiLanguage.speechMessages
+
+        switch recordOutcome {
+        case .failure(let error):
             chatDraftText = ""
+            let ns = error as NSError
+            // "Too small" means the recorder captured no real audio — show "no speech" hint rather than a generic error.
+            let userMsg: String
+            if ns.domain == VocaTimeSpeechDomain.name,
+               ns.code == VocaTimeSpeechErrorCode.recordingFailed.rawValue,
+               ns.localizedDescription.contains("too small") {
+                userMsg = strings.chatEmptyTranscript
+            } else {
+                userMsg = localizedStopFailure(error, speechMsgs: speechMsgs)
+            }
+            chatMessages.append(ChatMessage(role: .assistant, text: userMsg))
+            parsedCommand = nil
+            chatFlowState = .error
+        case .success(let audioURL):
+            Self.log.info("[VoiceChat] audio file ready path=\(audioURL.path, privacy: .public)")
+            defer {
+                try? FileManager.default.removeItem(at: audioURL)
+            }
+
+            let transcript: String
+            do {
+                transcript = try await transcriptionService.transcribe(audioFileURL: audioURL)
+            } catch {
+                chatDraftText = ""
+                let rootCause: String
+                switch error {
+                case MultilingualTranscriptionError.missingAPIKey:
+                    rootCause = "missingAPIKey"
+                case MultilingualTranscriptionError.fileReadFailed(let u):
+                    rootCause = "fileReadFailed — \(u.localizedDescription)"
+                case MultilingualTranscriptionError.fileEmpty:
+                    rootCause = "fileEmpty — AVAudioRecorder produced empty/near-empty container (likely recorded silence or was stopped immediately)"
+                case MultilingualTranscriptionError.networkError(let u):
+                    rootCause = "networkError — \(u.localizedDescription)"
+                case MultilingualTranscriptionError.httpError(let code, _):
+                    rootCause = "http\(code)"
+                case MultilingualTranscriptionError.decodingFailed(let u, _):
+                    rootCause = "decodingFailed — \(u.localizedDescription)"
+                default:
+                    rootCause = "unknown — \(String(describing: error))"
+                }
+                Self.log.error("[VoiceChat] transcriptionFailureRootCause=\(rootCause, privacy: .public)")
+                chatMessages.append(ChatMessage(role: .assistant, text: strings.chatTranscriptionFailed))
+                parsedCommand = nil
+                chatFlowState = .error
+                return
+            }
+
+            chatDraftText = ""
+            Self.log.info("[VoiceChat] transcript (API)=\(transcript, privacy: .public)")
+            let trimmed = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
             if trimmed.isEmpty {
                 chatMessages.append(
                     ChatMessage(role: .assistant, text: strings.chatEmptyTranscript)
@@ -164,13 +211,6 @@ final class VoiceCommandViewModel {
                 chatMessages.append(ChatMessage(role: .user, text: trimmed))
                 await applyChatParse(transcript: trimmed)
             }
-        case .failure(let error):
-            chatDraftText = ""
-            chatMessages.append(
-                ChatMessage(role: .assistant, text: localizedStopFailure(error, speechMsgs: speechMsgs))
-            )
-            parsedCommand = nil
-            chatFlowState = .error
         }
     }
 
@@ -180,7 +220,7 @@ final class VoiceCommandViewModel {
             switch code {
             case .nothingToStop: return speechMsgs.nothingToStop
             case .interrupted: return speechMsgs.interrupted
-            case .recognitionStopped: return speechMsgs.recognitionStopped
+            case .recordingFailed: return speechMsgs.recognitionStopped
             case .generic: break
             }
         }
@@ -188,12 +228,14 @@ final class VoiceCommandViewModel {
     }
 
     private func applyChatParse(transcript: String) async {
+        Self.log.info("[VoiceChat] parse input appUILanguage=\(self.uiLanguage.rawValue, privacy: .public) transcript=\(transcript, privacy: .public)")
         let command = await parsingCoordinator.parse(
             text: transcript,
             now: Date(),
-            localeIdentifier: appLanguage.uiLocaleIdentifier,
+            localeIdentifier: uiLanguage.uiLocaleIdentifier,
             timeZoneIdentifier: TimeZone.current.identifier
         )
+        Self.log.info("[VoiceChat] parse outcome actionType=\(String(describing: command.actionType), privacy: .public) parserSource=\(String(describing: command.parserSource), privacy: .public) title=\(command.title, privacy: .public) (see [TaskParsing] routingDecision for local-vs-LLM path)")
         parsedCommand = command
         let reply = confirmationMessage(for: command, userTranscript: transcript)
         chatMessages.append(ChatMessage(role: .assistant, text: reply))
@@ -204,13 +246,13 @@ final class VoiceCommandViewModel {
     }
 
     private func confirmationMessage(for command: ParsedCommand, userTranscript: String) -> String {
-        let s = appLanguage.strings
+        let s = uiLanguage.strings
         if command.actionType == .unknown {
             let name = command.title.trimmingCharacters(in: .whitespacesAndNewlines)
             let label: String
             if name.isEmpty {
                 label = s.chatYourTask
-            } else if appLanguage == .en {
+            } else if uiLanguage == .en {
                 label = "“\(name)”"
             } else {
                 label = "「\(name)」"
@@ -248,7 +290,7 @@ final class VoiceCommandViewModel {
 
     private var replyDateFormatter: DateFormatter {
         let f = DateFormatter()
-        f.locale = appLanguage.locale
+        f.locale = uiLanguage.locale
         f.dateStyle = .medium
         f.timeStyle = .short
         return f

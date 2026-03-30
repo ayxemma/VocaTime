@@ -1,12 +1,12 @@
 import AVFoundation
 import Foundation
-import Speech
+import os.log
 
 enum VocaTimeSpeechErrorCode: Int {
     case generic = 0
     case nothingToStop = 1
     case interrupted = 2
-    case recognitionStopped = 3
+    case recordingFailed = 3
 }
 
 enum VocaTimeSpeechDomain {
@@ -17,48 +17,21 @@ private func speechRecognitionError(code: VocaTimeSpeechErrorCode, fallbackMessa
     NSError(domain: VocaTimeSpeechDomain.name, code: code.rawValue, userInfo: [NSLocalizedDescriptionKey: fallbackMessage])
 }
 
-/// Streams microphone audio to on-device/server speech recognition. All public methods and callbacks are main-actor isolated.
+/// Captures microphone audio to a temporary `.m4a` file. Transcription is done separately via `MultilingualTranscriptionService` (not Apple speech APIs).
 @MainActor
 final class SpeechRecognizerService {
-    /// Strong reference for the active session only; created per `startRecognition(locale:)`.
-    private var sessionRecognizer: SFSpeechRecognizer?
-    private var audioEngine: AVAudioEngine?
-    private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
-    private var recognitionTask: SFSpeechRecognitionTask?
+    private static let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "VocaTime", category: "Speech")
 
-    private var onPartialResult: ((String) -> Void)?
-    private var onRuntimeError: ((String) -> Void)?
-    private var sessionMessages: SpeechServiceMessages?
-
-    private var lastTranscript: String = ""
-    private var isStopping = false
-    private var stopContinuation: CheckedContinuation<Result<String, Error>, Never>?
-    private var stopTimeoutTask: Task<Void, Never>?
+    private var audioRecorder: AVAudioRecorder?
+    private var recordingFileURL: URL?
 
     /// Stops any in-flight session when the user dismisses the flow (e.g. Done).
     func cancelForReset() async {
         await cancelOngoingSessionSilently()
     }
 
-    /// Returns `nil` if authorized (or became authorized), otherwise a user-readable error.
+    /// Microphone only (no `SFSpeechRecognizer` / Speech permission required for the command flow).
     func requestAuthorizationIfNeeded(messages: SpeechServiceMessages) async -> String? {
-        let speechStatus = SFSpeechRecognizer.authorizationStatus()
-        switch speechStatus {
-        case .authorized:
-            break
-        case .notDetermined:
-            let newStatus = await withCheckedContinuation { continuation in
-                SFSpeechRecognizer.requestAuthorization { continuation.resume(returning: $0) }
-            }
-            if newStatus != .authorized {
-                return speechAuthErrorMessage(for: newStatus, messages: messages)
-            }
-        case .denied, .restricted:
-            return speechAuthErrorMessage(for: speechStatus, messages: messages)
-        @unknown default:
-            return messages.speechNotAvailable
-        }
-
         let micStatus = AVCaptureDevice.authorizationStatus(for: .audio)
         switch micStatus {
         case .authorized:
@@ -78,246 +51,83 @@ final class SpeechRecognizerService {
         }
     }
 
-    /// Starts capturing audio and recognition for the given locale. Returns an immediate error string if setup fails; otherwise `nil`.
-    func startRecognition(
-        locale: Locale,
-        messages: SpeechServiceMessages,
-        onPartialResult: @escaping (String) -> Void,
-        onRuntimeError: @escaping (String) -> Void
-    ) async -> String? {
-        stopTimeoutTask?.cancel()
-        stopTimeoutTask = nil
+    /// Starts recording to a new temporary `.m4a` file. Returns an error string if setup fails.
+    func startRecording(messages: SpeechServiceMessages) async -> String? {
         await cancelOngoingSessionSilently()
-
-        let recognizer = SFSpeechRecognizer(locale: locale)
-        guard let recognizer else {
-            return String(format: messages.unsupportedLocale, locale.identifier)
-        }
-        guard recognizer.isAvailable else {
-            return String(format: messages.localeUnavailable, locale.identifier)
-        }
-
-        sessionRecognizer = recognizer
-        sessionMessages = messages
-
-        self.onPartialResult = onPartialResult
-        self.onRuntimeError = onRuntimeError
-        lastTranscript = ""
-        isStopping = false
 
         let session = AVAudioSession.sharedInstance()
         do {
-            try session.setCategory(.record, mode: .measurement, options: [.duckOthers])
+            // `.default` mode for plain recording; `.measurement` is tuned for live speech-recognition engines.
+            try session.setCategory(.record, mode: .default, options: [.duckOthers])
             try session.setActive(true, options: .notifyOthersOnDeactivation)
         } catch {
             return String(format: messages.micUseFailed, error.localizedDescription)
         }
 
-        let engine = AVAudioEngine()
-        let request = SFSpeechAudioBufferRecognitionRequest()
-        request.shouldReportPartialResults = true
-        request.requiresOnDeviceRecognition = false
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("VocaTime-\(UUID().uuidString).m4a", isDirectory: false)
+        let settings: [String: Any] = [
+            AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
+            AVSampleRateKey: 44_100,
+            AVNumberOfChannelsKey: 1,
+            AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue
+        ]
 
-        let inputNode = engine.inputNode
-        let format = inputNode.outputFormat(forBus: 0)
-        guard format.sampleRate > 0 else {
-            try? session.setActive(false)
-            return messages.micInputUnavailable
-        }
-
-        inputNode.removeTap(onBus: 0)
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak request] buffer, _ in
-            request?.append(buffer)
-        }
-
-        audioEngine = engine
-        recognitionRequest = request
-
-        recognitionTask = recognizer.recognitionTask(with: request) { [weak self] result, error in
-            guard let self else { return }
-            Task { @MainActor in
-                self.handleRecognitionCallback(recognitionResult: result, error: error)
-            }
-        }
-
+        let recorder: AVAudioRecorder
         do {
-            engine.prepare()
-            try engine.start()
+            recorder = try AVAudioRecorder(url: url, settings: settings)
         } catch {
-            cleanupAfterFailedStart()
+            try? session.setActive(false)
             return String(format: messages.audioStartFailed, error.localizedDescription)
         }
+        guard recorder.prepareToRecord(), recorder.record() else {
+            try? session.setActive(false)
+            return String(format: messages.audioStartFailed, "Could not start recording.")
+        }
 
+        audioRecorder = recorder
+        recordingFileURL = url
+        Self.log.info("[Speech] recording started path=\(url.path, privacy: .public)")
         return nil
     }
 
-    /// Ends audio input and waits for a final transcript (or timeout using the last partial result).
-    func stopRecognition() async -> Result<String, Error> {
-        guard audioEngine != nil || recognitionTask != nil else {
-            let trimmed = lastTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmed.isEmpty {
-                return .success(trimmed)
-            }
+    /// Stops recording and returns the finalized audio file URL (caller should delete after upload).
+    func stopRecording() async -> Result<URL, Error> {
+        guard let recorder = audioRecorder, let url = recordingFileURL else {
             return .failure(speechRecognitionError(code: .nothingToStop, fallbackMessage: "Nothing to stop — start listening first."))
         }
 
-        isStopping = true
-        recognitionRequest?.endAudio()
-        removeTapAndStopEngine()
-
-        return await withCheckedContinuation { continuation in
-            stopContinuation = continuation
-
-            stopTimeoutTask?.cancel()
-            stopTimeoutTask = Task { @MainActor in
-                try? await Task.sleep(nanoseconds: 3_000_000_000)
-                guard !Task.isCancelled else { return }
-                self.finishStopIfNeeded(
-                    outcome: .success(self.lastTranscript.trimmingCharacters(in: .whitespacesAndNewlines))
-                )
-            }
-        }
-    }
-
-    private func handleRecognitionCallback(recognitionResult: SFSpeechRecognitionResult?, error: Error?) {
-        if let error {
-            let ns = error as NSError
-            if isStopping, ns.domain == "kAFAssistantErrorDomain", ns.code == 216 {
-                finishStopIfNeeded(outcome: .success(lastTranscript.trimmingCharacters(in: .whitespacesAndNewlines)))
-                return
-            }
-            if isStopping {
-                let trimmed = lastTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
-                if trimmed.isEmpty {
-                    finishStopIfNeeded(outcome: .failure(error))
-                } else {
-                    finishStopIfNeeded(outcome: .success(trimmed))
-                }
-                return
-            }
-            let msgs = sessionMessages ?? .english
-            onRuntimeError?(userFacingRecognitionError(error, messages: msgs))
-            teardownAfterFailure()
-            return
-        }
-
-        guard let recognitionResult else { return }
-
-        let text = recognitionResult.bestTranscription.formattedString
-        lastTranscript = text
-        onPartialResult?(text)
-
-        if recognitionResult.isFinal {
-            finishStopIfNeeded(outcome: .success(text.trimmingCharacters(in: .whitespacesAndNewlines)))
-        }
-    }
-
-    private func finishStopIfNeeded(outcome: Result<String, Error>) {
-        stopTimeoutTask?.cancel()
-        stopTimeoutTask = nil
-        if let cont = stopContinuation {
-            stopContinuation = nil
-            cont.resume(returning: outcome)
-        }
-        fullTeardown()
-    }
-
-    private func removeTapAndStopEngine() {
-        let engine = audioEngine
-        engine?.inputNode.removeTap(onBus: 0)
-        engine?.stop()
-        engine?.reset()
-    }
-
-    private func teardownAfterFailure() {
-        if let cont = stopContinuation {
-            cont.resume(returning: .failure(speechRecognitionError(code: .recognitionStopped, fallbackMessage: "Recognition stopped.")))
-        }
-        stopContinuation = nil
-        stopTimeoutTask?.cancel()
-        stopTimeoutTask = nil
-        fullTeardown()
-    }
-
-    private func cleanupAfterFailedStart() {
-        recognitionTask?.cancel()
-        recognitionTask = nil
-        recognitionRequest = nil
-        if let engine = audioEngine {
-            engine.inputNode.removeTap(onBus: 0)
-            engine.stop()
-            engine.reset()
-        }
-        audioEngine = nil
-        sessionRecognizer = nil
-        onPartialResult = nil
-        onRuntimeError = nil
-        sessionMessages = nil
-        isStopping = false
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-    }
-
-    private func fullTeardown() {
-        recognitionTask?.cancel()
-        recognitionTask = nil
-        recognitionRequest = nil
-        audioEngine = nil
-        sessionRecognizer = nil
-        onPartialResult = nil
-        onRuntimeError = nil
-        sessionMessages = nil
-        isStopping = false
+        recorder.stop()
+        audioRecorder = nil
+        recordingFileURL = nil
 
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+
+        let fileSize = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int) ?? 0
+        Self.log.info("[Speech] recording stopped path=\(url.path, privacy: .public) fileBytes=\(fileSize, privacy: .public)")
+
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            Self.log.error("[Speech] recording file missing path=\(url.path, privacy: .public)")
+            return .failure(speechRecognitionError(code: .recordingFailed, fallbackMessage: "Recording file missing."))
+        }
+        // A valid M4A container with real audio is always well above 10 KB.
+        // A file ≤ 4096 bytes is an empty container header with no audio frames.
+        guard fileSize > 4096 else {
+            Self.log.error("[Speech] recording file too small (likely empty audio) fileBytes=\(fileSize, privacy: .public)")
+            return .failure(speechRecognitionError(code: .recordingFailed, fallbackMessage: "Recording captured no audio — file too small (\(fileSize) bytes)."))
+        }
+        return .success(url)
     }
 
     private func cancelOngoingSessionSilently() async {
-        stopTimeoutTask?.cancel()
-        stopTimeoutTask = nil
-        if let cont = stopContinuation {
-            cont.resume(returning: .failure(speechRecognitionError(code: .interrupted, fallbackMessage: "Interrupted.")))
+        if let recorder = audioRecorder {
+            recorder.stop()
+            audioRecorder = nil
         }
-        stopContinuation = nil
-        recognitionTask?.cancel()
-        recognitionTask = nil
-        recognitionRequest?.endAudio()
-        recognitionRequest = nil
-        if let engine = audioEngine {
-            engine.inputNode.removeTap(onBus: 0)
-            engine.stop()
-            engine.reset()
+        if let url = recordingFileURL {
+            try? FileManager.default.removeItem(at: url)
+            recordingFileURL = nil
         }
-        audioEngine = nil
-        sessionRecognizer = nil
-        onPartialResult = nil
-        onRuntimeError = nil
-        sessionMessages = nil
-        isStopping = false
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
         await Task.yield()
-    }
-
-    private func speechAuthErrorMessage(for status: SFSpeechRecognizerAuthorizationStatus, messages: SpeechServiceMessages) -> String {
-        switch status {
-        case .denied:
-            return messages.speechDeniedSettings
-        case .restricted:
-            return messages.speechRestricted
-        case .notDetermined:
-            return messages.speechNotDetermined
-        default:
-            return messages.speechNotAllowed
-        }
-    }
-
-    private func userFacingRecognitionError(_ error: Error, messages: SpeechServiceMessages) -> String {
-        let ns = error as NSError
-        if ns.domain == "kAFAssistantErrorDomain", ns.code == 203 {
-            return messages.noSpeechDetected
-        }
-        if ns.domain == "kAFAssistantErrorDomain", ns.code == 216 {
-            return messages.recognitionCanceled
-        }
-        return String(format: messages.recognitionFailedFormat, error.localizedDescription)
     }
 }

@@ -35,6 +35,7 @@
 		A10000000000000000000022 /* TaskComposerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000022 /* TaskComposerView.swift */; };
 		A10000000000000000000023 /* Secrets.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000023 /* Secrets.swift */; };
 		A10000000000000000000025 /* AppUILanguage.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000025 /* AppUILanguage.swift */; };
+		A10000000000000000000026 /* MultilingualTranscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000026 /* MultilingualTranscriptionService.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -66,6 +67,7 @@
 		A20000000000000000000022 /* TaskComposerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskComposerView.swift; sourceTree = "<group>"; };
 		A20000000000000000000023 /* Secrets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Secrets.swift; sourceTree = "<group>"; };
 		A20000000000000000000025 /* AppUILanguage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppUILanguage.swift; sourceTree = "<group>"; };
+		A20000000000000000000026 /* MultilingualTranscriptionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MultilingualTranscriptionService.swift; sourceTree = "<group>"; };
 		A30000000000000000000001 /* VocaTime.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VocaTime.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -153,6 +155,7 @@
 			children = (
 				A20000000000000000000006 /* PermissionService.swift */,
 				A20000000000000000000009 /* SpeechRecognizerService.swift */,
+				A20000000000000000000026 /* MultilingualTranscriptionService.swift */,
 				A20000000000000000000014 /* IntentParserService.swift */,
 				A2000000000000000000001E /* TaskParsing.swift */,
 				A2000000000000000000001F /* LLMTaskParserService.swift */,
@@ -267,6 +270,7 @@
 				A10000000000000000000022 /* TaskComposerView.swift in Sources */,
 				A10000000000000000000023 /* Secrets.swift in Sources */,
 				A10000000000000000000025 /* AppUILanguage.swift in Sources */,
+				A10000000000000000000026 /* MultilingualTranscriptionService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

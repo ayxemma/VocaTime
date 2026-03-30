@@ -71,7 +71,7 @@ struct ChatSheetView: View {
             }
             .onAppear {
                 viewModel.attachPersistence(modelContext)
-                viewModel.appLanguage = appUILanguage
+                viewModel.uiLanguage = appUILanguage
                 if viewModel.chatFlowState == .idle {
                     Task {
                         await viewModel.chatBeginListening()
@@ -79,9 +79,9 @@ struct ChatSheetView: View {
                 }
             }
             .onChange(of: appUILanguage) { _, newValue in
-                viewModel.appLanguage = newValue
+                viewModel.uiLanguage = newValue
                 Task {
-                    await viewModel.handleAppLanguageChanged()
+                    await viewModel.handleUILanguageChanged()
                 }
             }
         }
