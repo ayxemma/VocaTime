@@ -69,7 +69,7 @@ final class VoiceCommandViewModel {
     /// Call when UI language changes while this view model may be active (e.g. chat sheet open).
     func handleUILanguageChanged() async {
         await speechService.cancelForReset()
-        cancelSilenceTimer()
+        cancelMaxRecordingTimer()
         if chatFlowState == .listening {
             chatFlowState = .idle
             chatDraftText = ""
@@ -81,39 +81,34 @@ final class VoiceCommandViewModel {
         case .idle, .success, .error:
             Task { await chatBeginListening() }
         case .listening:
+            Self.log.info("[VoiceChat] stopReason=manual — user tapped mic to stop")
             Task { await chatFinalizeListening() }
         case .processing:
             break
         }
     }
 
-    /// Safety-net maximum recording duration (30 s). The user is expected to stop manually.
-    /// We no longer use a 2-second silence timeout here because AVAudioRecorder has no
-    /// partial-result callbacks to detect speech end — auto-stopping after 2 s always
-    /// produced a near-silent clip that the transcription API rejected.
+    /// 30-second safety net — fires only if silence-based auto-stop and manual stop both fail.
     private static let maxRecordingNanoseconds: UInt64 = 30_000_000_000
 
-    private func resetSilenceTimer() {
+    private func startMaxRecordingTimer() {
         silenceTimerTask?.cancel()
         silenceTimerTask = Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: Self.maxRecordingNanoseconds)
             guard !Task.isCancelled else { return }
-
-            guard let self else { return }
-            if self.chatFlowState == .listening {
-                Self.log.info("[VoiceChat] maximum recording duration reached — auto-stopping")
-                await self.chatFinalizeListening()
-            }
+            guard let self, self.chatFlowState == .listening else { return }
+            Self.log.info("[VoiceChat] stopReason=maxTimeout — safety net fired after 30 s")
+            await self.chatFinalizeListening()
         }
     }
 
-    private func cancelSilenceTimer() {
+    private func cancelMaxRecordingTimer() {
         silenceTimerTask?.cancel()
         silenceTimerTask = nil
     }
 
     func chatBeginListening() async {
-        cancelSilenceTimer()
+        cancelMaxRecordingTimer()
 
         let msgs = uiLanguage.speechMessages
         Self.log.info("[VoiceChat] recording start appUILanguage=\(self.uiLanguage.rawValue, privacy: .public)")
@@ -126,7 +121,11 @@ final class VoiceCommandViewModel {
 
         chatDraftText = ""
 
-        let startError = await speechService.startRecording(messages: msgs)
+        let startError = await speechService.startRecording(messages: msgs, onAutoStop: { [weak self] in
+            guard let self, self.chatFlowState == .listening else { return }
+            Self.log.info("[VoiceChat] stopReason=autoSilence — silence threshold reached, stopping recording")
+            Task { await self.chatFinalizeListening() }
+        })
 
         if let startError {
             chatMessages.append(ChatMessage(role: .assistant, text: startError))
@@ -135,15 +134,16 @@ final class VoiceCommandViewModel {
         }
 
         chatFlowState = .listening
-        resetSilenceTimer()
-        Self.log.info("[VoiceChat] recording session active (live Apple transcript disabled; final text from OpenAI transcription)")
+        startMaxRecordingTimer()
+        Self.log.info("[VoiceChat] recording active — silence detection running; max timeout=30s")
     }
 
     func chatFinalizeListening() async {
-        silenceTimerTask?.cancel()
-        silenceTimerTask = nil
+        // Guard against double-invocation (auto-stop and manual tap arriving close together).
+        guard chatFlowState == .listening else { return }
+        cancelMaxRecordingTimer()
         chatFlowState = .processing
-        Self.log.info("[VoiceChat] recording stop requested")
+        Self.log.info("[VoiceChat] stopping recording")
         let recordOutcome = await speechService.stopRecording()
         let strings = uiLanguage.strings
         let speechMsgs = uiLanguage.speechMessages
