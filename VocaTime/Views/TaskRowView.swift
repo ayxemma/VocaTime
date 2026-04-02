@@ -18,6 +18,8 @@ enum TaskRowScheduleContext {
     case calendar
 }
 
+// MARK: - Completion toggle
+
 struct TaskRowCompletionButton: View {
     @Bindable var task: TaskItem
     @Environment(\.appUILanguage) private var appUILanguage
@@ -32,12 +34,14 @@ struct TaskRowCompletionButton: View {
         } label: {
             Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
                 .font(.title3)
-                .foregroundStyle(task.isCompleted ? Color.accentColor : Color.secondary)
+                .foregroundStyle(task.isCompleted ? Color.accentColor : Color(.tertiaryLabel))
         }
         .buttonStyle(.plain)
         .accessibilityLabel(task.isCompleted ? s.markIncomplete : s.markComplete)
     }
 }
+
+// MARK: - Row content (title + metadata)
 
 struct TaskRowMainContent: View {
     @Bindable var task: TaskItem
@@ -47,64 +51,72 @@ struct TaskRowMainContent: View {
     @Environment(\.appUILanguage) private var appUILanguage
 
     private var calendar: Calendar { .current }
-
     private var strings: AppStrings { appUILanguage.strings }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Text(timePrefix)
-                .font(.subheadline)
-                .fontWeight(timeFontWeight)
-                .monospacedDigit()
-                .foregroundStyle(timeForegroundStyle)
-                .frame(width: Self.timeColumnWidth, alignment: .leading)
+        VStack(alignment: .leading, spacing: 4) {
+            // Title — most prominent element
+            Text(task.title)
+                .font(.body.weight(.semibold))
+                .foregroundStyle(titleForegroundColor)
+                .strikethrough(task.isCompleted)
                 .fixedSize(horizontal: false, vertical: true)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(task.title)
-                    .font(.subheadline)
-                    .foregroundStyle(titleForegroundColor)
+            // Time + notes on a single metadata line
+            HStack(spacing: 5) {
+                Text(timeText)
+                    .font(.caption)
+                    .fontWeight(timeFontWeight)
+                    .foregroundStyle(timeForegroundStyle)
                     .strikethrough(task.isCompleted)
+                    .monospacedDigit()
 
                 if let notes = task.notes, !notes.isEmpty {
+                    Text("·")
+                        .font(.caption)
+                        .foregroundStyle(Color(.tertiaryLabel))
                     Text(notes)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.secondary)
                         .strikethrough(task.isCompleted)
-                }
-
-                if showUpcomingDaySubtitle, let d = task.scheduledDate {
-                    Text(d.formatted(Date.FormatStyle().weekday(.abbreviated).month(.abbreviated).day().locale(locale)))
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                        .strikethrough(task.isCompleted)
-                }
-
-                if showOverdueDaySubtitle, let d = task.scheduledDate {
-                    Text(d.formatted(Date.FormatStyle().weekday(.abbreviated).month(.abbreviated).day().locale(locale)))
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                        .strikethrough(task.isCompleted)
+                        .lineLimit(1)
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+
+            // Day label for upcoming or off-today overdue
+            if let day = daySubtitleText {
+                Text(day)
+                    .font(.caption2)
+                    .foregroundStyle(Color(.tertiaryLabel))
+                    .strikethrough(task.isCompleted)
+            }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private var timePrefix: String {
+    // MARK: Computed
+
+    private var isTimedTask: Bool {
+        guard let d = task.scheduledDate else { return false }
+        return TaskScheduleFormatting.hasWallClockTime(d, calendar: calendar)
+    }
+
+    private var timeText: String {
         let s = strings
         guard let d = task.scheduledDate else { return s.anytime }
         guard TaskScheduleFormatting.hasWallClockTime(d, calendar: calendar) else { return s.anytime }
         return d.formatted(Date.FormatStyle(date: .omitted, time: .shortened).locale(locale))
     }
 
-    private var showUpcomingDaySubtitle: Bool {
-        scheduleContext == .upcoming && task.scheduledDate != nil
-    }
-
-    private var showOverdueDaySubtitle: Bool {
-        guard scheduleContext == .overdue, let d = task.scheduledDate else { return false }
-        return !calendar.isDate(d, inSameDayAs: Date())
+    private var daySubtitleText: String? {
+        if scheduleContext == .upcoming, let d = task.scheduledDate {
+            return d.formatted(Date.FormatStyle().weekday(.abbreviated).month(.abbreviated).day().locale(locale))
+        }
+        if scheduleContext == .overdue, let d = task.scheduledDate,
+           !calendar.isDate(d, inSameDayAs: Date()) {
+            return d.formatted(Date.FormatStyle().weekday(.abbreviated).month(.abbreviated).day().locale(locale))
+        }
+        return nil
     }
 
     private var treatAsOverdueInCalendar: Bool {
@@ -114,28 +126,45 @@ struct TaskRowMainContent: View {
     }
 
     private var timeFontWeight: Font.Weight {
-        if scheduleContext == .overdue, !task.isCompleted {
-            return .semibold
-        }
-        if treatAsOverdueInCalendar {
-            return .semibold
-        }
+        if scheduleContext == .overdue, !task.isCompleted { return .medium }
+        if treatAsOverdueInCalendar { return .medium }
         return .regular
     }
 
     private var timeForegroundStyle: AnyShapeStyle {
-        if task.isCompleted { return AnyShapeStyle(.tertiary) }
+        if task.isCompleted { return AnyShapeStyle(Color(.tertiaryLabel)) }
         if scheduleContext == .overdue { return AnyShapeStyle(Color.orange) }
         if treatAsOverdueInCalendar { return AnyShapeStyle(Color.orange) }
-        return AnyShapeStyle(.secondary)
+        if isTimedTask { return AnyShapeStyle(Color.secondary) }
+        return AnyShapeStyle(Color(.tertiaryLabel))
     }
 
     private var titleForegroundColor: Color {
         task.isCompleted ? Color.secondary : Color.primary
     }
-
-    private static let timeColumnWidth: CGFloat = 82
 }
+
+// MARK: - Card wrapper helpers
+
+private struct TaskCardModifier: ViewModifier {
+    var dimmed: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(Color(.secondarySystemGroupedBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+            .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 1)
+            .overlay(
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .strokeBorder(Color(.separator).opacity(0.25), lineWidth: 0.5)
+            )
+            .opacity(dimmed ? 0.6 : 1)
+    }
+}
+
+// MARK: - Standalone row (no navigation)
 
 struct TaskRowView: View {
     @Bindable var task: TaskItem
@@ -146,16 +175,15 @@ struct TaskRowView: View {
     @Environment(\.appUILanguage) private var appUILanguage
 
     private var calendar: Calendar { .current }
-
     private var strings: AppStrings { appUILanguage.strings }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
+        HStack(alignment: .top, spacing: 12) {
             TaskRowCompletionButton(task: task)
+                .padding(.top, 2)
             TaskRowMainContent(task: task, scheduleContext: scheduleContext)
         }
-        .padding(.vertical, 4)
-        .opacity(emphasizeCompleted && task.isCompleted ? 0.75 : 1)
+        .modifier(TaskCardModifier(dimmed: emphasizeCompleted && task.isCompleted))
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityLabelText)
     }
@@ -174,19 +202,20 @@ struct TaskRowView: View {
     }
 }
 
-/// Completion control stays independent; main content navigates to detail.
+// MARK: - Navigable row (completion stays independent; content navigates)
+
 struct TaskNavigableRow: View {
     @Bindable var task: TaskItem
     var emphasizeCompleted: Bool
     var scheduleContext: TaskRowScheduleContext
 
     @Environment(\.appUILanguage) private var appUILanguage
-
     private var strings: AppStrings { appUILanguage.strings }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
+        HStack(alignment: .top, spacing: 12) {
             TaskRowCompletionButton(task: task)
+                .padding(.top, 2)
             NavigationLink {
                 TaskDetailView(task: task)
             } label: {
@@ -195,8 +224,7 @@ struct TaskNavigableRow: View {
             .buttonStyle(.plain)
             .accessibilityHint(strings.editTaskDetails)
         }
-        .padding(.vertical, 4)
-        .opacity(emphasizeCompleted && task.isCompleted ? 0.75 : 1)
+        .modifier(TaskCardModifier(dimmed: emphasizeCompleted && task.isCompleted))
         .accessibilityElement(children: .combine)
     }
 }

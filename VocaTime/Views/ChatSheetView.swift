@@ -49,21 +49,40 @@ struct ChatSheetView: View {
                             .padding(.horizontal, 4)
                     }
 
-                    HStack {
-                        Text(viewModel.chatStatusDescription)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Spacer()
+                    if viewModel.chatFlowState != .conflictPending {
+                        HStack {
+                            Text(viewModel.chatStatusDescription)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                        }
                     }
 
-                    RecordButtonView(
-                        isListening: viewModel.chatFlowState == .listening,
-                        isEnabled: viewModel.chatFlowState != .processing,
-                        startListeningAccessibilityLabel: s.voiceStartListening,
-                        stopListeningAccessibilityLabel: s.voiceStopListening,
-                        action: { viewModel.chatMicrophoneTapped() }
-                    )
-                    .frame(maxWidth: .infinity)
+                    if viewModel.chatFlowState == .conflictPending {
+                        HStack(spacing: 12) {
+                            Button(s.chatConflictCancel) {
+                                viewModel.chatCancelConflict()
+                            }
+                            .buttonStyle(.bordered)
+                            .frame(maxWidth: .infinity)
+
+                            Button(s.chatConflictAddAnyway) {
+                                viewModel.chatConfirmConflict()
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .frame(maxWidth: .infinity)
+                        }
+                        .padding(.top, 2)
+                    } else {
+                        RecordButtonView(
+                            isListening: viewModel.chatFlowState == .listening,
+                            isEnabled: viewModel.chatFlowState != .processing,
+                            startListeningAccessibilityLabel: s.voiceStartListening,
+                            stopListeningAccessibilityLabel: s.voiceStopListening,
+                            action: { viewModel.chatMicrophoneTapped() }
+                        )
+                        .frame(maxWidth: .infinity)
+                    }
                 }
                 .padding()
                 .background(Color(.systemBackground))

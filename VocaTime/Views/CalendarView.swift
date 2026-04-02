@@ -171,7 +171,7 @@ struct CalendarView: View {
 
     private var selectedDaySection: some View {
         let s = strings
-        return VStack(alignment: .leading, spacing: 10) {
+        return VStack(alignment: .leading, spacing: 12) {
             Text(selectedDate, format: Date.FormatStyle().weekday(.wide).month(.abbreviated).day().locale(locale))
                 .font(.headline)
 
@@ -181,7 +181,7 @@ struct CalendarView: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             } else {
-                VStack(alignment: .leading, spacing: 0) {
+                VStack(spacing: 8) {
                     ForEach(items) { task in
                         TaskNavigableRow(
                             task: task,
@@ -190,10 +190,6 @@ struct CalendarView: View {
                         )
                     }
                 }
-                .padding(12)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color(.secondarySystemGroupedBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
         }
     }

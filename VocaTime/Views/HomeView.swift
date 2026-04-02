@@ -99,7 +99,7 @@ struct HomeView: View {
         let s = strings
         ZStack(alignment: .bottomTrailing) {
             ScrollView {
-                VStack(spacing: 24) {
+                VStack(spacing: 28) {
                     statusStrip
 
                     dashboardSection
@@ -114,8 +114,9 @@ struct HomeView: View {
                     .padding(.horizontal)
                     .padding(.bottom, 100)
                 }
-                .padding(.top, 8)
+                .padding(.top, 12)
             }
+            .background(Color(.systemGroupedBackground))
 
             Button {
                 showChat = true
@@ -197,34 +198,39 @@ struct HomeView: View {
     private func taskColumn(column: DashboardColumn, items: [TaskItem], isExpanded: Binding<Bool>, doneStyle: Bool = false) -> some View {
         let s = strings
         let title = column.title(s)
-        return VStack(alignment: .leading, spacing: 8) {
-            Button(action: {
+        return VStack(alignment: .leading, spacing: 10) {
+            // Section header
+            Button {
                 withAnimation(.easeInOut(duration: 0.2)) {
                     isExpanded.wrappedValue.toggle()
                 }
-            }) {
-                HStack {
-                    Text(title)
-                        .font(.headline)
-                        .foregroundStyle(.primary)
+            } label: {
+                HStack(spacing: 8) {
+                    Text(title.uppercased())
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.secondary)
+                        .kerning(0.4)
                     Spacer()
                     Image(systemName: "chevron.right")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.tertiary)
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(Color(.tertiaryLabel))
                         .rotationEffect(.degrees(isExpanded.wrappedValue ? 90 : 0))
                 }
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .padding(.horizontal)
 
+            // Task cards
             if isExpanded.wrappedValue {
                 if items.isEmpty {
                     Text(s.nothingHereYet)
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .padding(.top, 4)
+                        .foregroundStyle(Color(.tertiaryLabel))
+                        .padding(.horizontal)
+                        .padding(.top, 2)
                 } else {
-                    VStack(spacing: 0) {
+                    VStack(spacing: 8) {
                         ForEach(items) { task in
                             TaskNavigableRow(
                                 task: task,
@@ -233,14 +239,10 @@ struct HomeView: View {
                             )
                         }
                     }
+                    .padding(.horizontal)
                 }
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding()
-        .background(Color(.secondarySystemGroupedBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .padding(.horizontal)
     }
 
     /// Timed tasks first (by time ascending); unscheduled / date-only clock ("Anytime") last, newest first among those.

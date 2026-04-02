@@ -25,6 +25,7 @@ enum VoiceFlowState: Equatable {
     case idle
     case listening
     case processing
+    case conflictPending
     case success
     case error
 }
@@ -38,6 +39,8 @@ final class VoiceCommandViewModel {
     var chatFlowState: VoiceFlowState = .idle
     var chatDraftText: String = ""
     var parsedCommand: ParsedCommand?
+    /// Holds a parsed command that is waiting for the user to confirm or dismiss a conflict warning.
+    private var pendingConflictCommand: ParsedCommand?
 
     /// In-app UI language only (labels, helper text, date formatting). Does not select speech recognition locale.
     var uiLanguage: AppUILanguage = .defaultForDevice()
@@ -61,6 +64,7 @@ final class VoiceCommandViewModel {
         case .idle: return s.voiceTapToSpeak
         case .listening: return s.voiceListening
         case .processing: return s.voiceProcessing
+        case .conflictPending: return ""
         case .success: return s.voiceReady
         case .error: return s.voiceError
         }
@@ -83,7 +87,7 @@ final class VoiceCommandViewModel {
         case .listening:
             Self.log.info("[VoiceChat] stopReason=manual — user tapped mic to stop")
             Task { await chatFinalizeListening() }
-        case .processing:
+        case .processing, .conflictPending:
             break
         }
     }
@@ -236,6 +240,7 @@ final class VoiceCommandViewModel {
         chatDraftText = ""
         chatMessages = []
         parsedCommand = nil
+        pendingConflictCommand = nil
         Self.log.info("[VoiceChat] chatDismissReset completed — state ready for new session")
     }
 
@@ -247,15 +252,73 @@ final class VoiceCommandViewModel {
             localeIdentifier: uiLanguage.uiLocaleIdentifier,
             timeZoneIdentifier: TimeZone.current.identifier
         )
-        Self.log.info("[VoiceChat] parse outcome actionType=\(String(describing: command.actionType), privacy: .public) parserSource=\(String(describing: command.parserSource), privacy: .public) title=\(command.title, privacy: .public) (see [TaskParsing] routingDecision for local-vs-LLM path)")
+        Self.log.info("[VoiceChat] parse outcome actionType=\(String(describing: command.actionType), privacy: .public) parserSource=\(String(describing: command.parserSource), privacy: .public) title=\(command.title, privacy: .public)")
         parsedCommand = command
-        let reply = confirmationMessage(for: command, userTranscript: transcript)
+
+        // Check for a time conflict before committing the save.
+        let scheduledDate = command.reminderDate ?? command.startDate
+        if let date = scheduledDate,
+           TaskScheduleFormatting.hasWallClockTime(date),
+           let conflicting = findConflictingTask(near: date) {
+            Self.log.info("[VoiceChat] conflictDetected existingTitle=\(conflicting.title, privacy: .public) newTitle=\(command.title, privacy: .public)")
+            pendingConflictCommand = command
+            let timeStr = shortTimeFormatter.string(from: date)
+            let warning = String(format: uiLanguage.strings.chatConflictWarning,
+                                 conflicting.title, timeStr, command.title)
+            chatMessages.append(ChatMessage(role: .assistant, text: warning))
+            chatFlowState = .conflictPending
+            return
+        }
+
+        commitSave(command: command)
+    }
+
+    /// User chose "Add anyway" — save the pending command and finish.
+    func chatConfirmConflict() {
+        guard let command = pendingConflictCommand else { return }
+        pendingConflictCommand = nil
+        commitSave(command: command)
+    }
+
+    /// User chose "Don't add" — discard the pending command.
+    func chatCancelConflict() {
+        pendingConflictCommand = nil
+        chatMessages.append(ChatMessage(role: .assistant, text: uiLanguage.strings.chatConflictCanceled))
+        chatFlowState = .error
+    }
+
+    /// Inserts the task into SwiftData and transitions to `.success`.
+    private func commitSave(command: ParsedCommand) {
+        let reply = confirmationMessage(for: command, userTranscript: command.originalText)
         chatMessages.append(ChatMessage(role: .assistant, text: reply))
         if let ctx = persistenceContext {
             TaskItem.insertFromParsedCommand(command, context: ctx)
             Self.log.info("[VoiceChat] taskSaveSuccess title=\(command.title, privacy: .public) actionType=\(String(describing: command.actionType), privacy: .public)")
         }
         chatFlowState = .success
+    }
+
+    /// Returns the first non-completed task with a wall-clock time within ±15 minutes of `date`.
+    private func findConflictingTask(near date: Date) -> TaskItem? {
+        guard let ctx = persistenceContext else { return nil }
+        let descriptor = FetchDescriptor<TaskItem>(
+            predicate: #Predicate<TaskItem> { !$0.isCompleted }
+        )
+        let candidates = (try? ctx.fetch(descriptor)) ?? []
+        let window: TimeInterval = 15 * 60
+        return candidates.first { item in
+            guard let d = item.scheduledDate,
+                  TaskScheduleFormatting.hasWallClockTime(d) else { return false }
+            return abs(d.timeIntervalSince(date)) <= window
+        }
+    }
+
+    private var shortTimeFormatter: DateFormatter {
+        let f = DateFormatter()
+        f.locale = uiLanguage.locale
+        f.dateStyle = .none
+        f.timeStyle = .short
+        return f
     }
 
     private func confirmationMessage(for command: ParsedCommand, userTranscript: String) -> String {

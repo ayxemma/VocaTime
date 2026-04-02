@@ -181,6 +181,10 @@ struct AppStrings {
     let permissionNotificationsErrorPrefix: String
     let permissionCalendarDenied: String
     let permissionCalendarErrorPrefix: String
+    let chatConflictWarning: String
+    let chatConflictAddAnyway: String
+    let chatConflictCancel: String
+    let chatConflictCanceled: String
 
     static let english = AppStrings(
         tagline: "Speak → Understand → Schedule → Remind",
@@ -279,7 +283,11 @@ struct AppStrings {
         permissionNotificationsDenied: "Notifications were not allowed. You can enable them in Settings.",
         permissionNotificationsErrorPrefix: "Could not request notifications:",
         permissionCalendarDenied: "Calendar access was denied. You can enable it in Settings.",
-        permissionCalendarErrorPrefix: "Calendar error:"
+        permissionCalendarErrorPrefix: "Calendar error:",
+        chatConflictWarning: "Heads up — you already have \"%@\" at %@. Add \"%@\" at the same time anyway?",
+        chatConflictAddAnyway: "Add anyway",
+        chatConflictCancel: "Don't add",
+        chatConflictCanceled: "Got it, task not saved."
     )
 
     static let chineseSimplified = AppStrings(
@@ -379,7 +387,11 @@ struct AppStrings {
         permissionNotificationsDenied: "未允许通知。可在设置中开启。",
         permissionNotificationsErrorPrefix: "无法请求通知：",
         permissionCalendarDenied: "日历权限被拒绝。可在设置中开启。",
-        permissionCalendarErrorPrefix: "日历错误："
+        permissionCalendarErrorPrefix: "日历错误：",
+        chatConflictWarning: "注意：你已有「%@」安排在 %@。仍要添加「%@」吗？",
+        chatConflictAddAnyway: "仍要添加",
+        chatConflictCancel: "不添加",
+        chatConflictCanceled: "好的，已取消。"
     )
 
     static let spanish = AppStrings(
@@ -479,7 +491,11 @@ struct AppStrings {
         permissionNotificationsDenied: "No se permitieron notificaciones. Puedes activarlas en Ajustes.",
         permissionNotificationsErrorPrefix: "No se pudieron solicitar notificaciones:",
         permissionCalendarDenied: "Se denegó el calendario. Puedes activarlo en Ajustes.",
-        permissionCalendarErrorPrefix: "Error de calendario:"
+        permissionCalendarErrorPrefix: "Error de calendario:",
+        chatConflictWarning: "Aviso: ya tienes \"%@\" a las %@. ¿Añadir \"%@\" a la misma hora de todas formas?",
+        chatConflictAddAnyway: "Añadir igual",
+        chatConflictCancel: "No añadir",
+        chatConflictCanceled: "Entendido, tarea no guardada."
     )
 }
 
