@@ -27,6 +27,7 @@ enum VoiceFlowState: Equatable {
     case processing
     case conflictPending
     case deletePending
+    case disambiguating
     case success
     case error
 }
@@ -40,10 +41,27 @@ final class VoiceCommandViewModel {
     var chatFlowState: VoiceFlowState = .idle
     var chatDraftText: String = ""
     var parsedCommand: ParsedCommand?
+    /// Candidate tasks exposed to the view during disambiguation.
+    var disambiguationCandidates: [TaskItem] = []
+
     /// Holds a parsed command that is waiting for the user to confirm or dismiss a conflict warning.
     private var pendingConflictCommand: ParsedCommand?
     /// Holds a task that is waiting for delete confirmation.
     private var pendingDeleteTask: TaskItem?
+    /// Holds the pending edit action while the user is choosing among disambiguation candidates.
+    private var pendingEditAction: PendingEditAction?
+
+    // MARK: - Pending edit model
+
+    private enum PendingEditType {
+        case delete
+        case reschedule(newDate: Date)
+        case appendNote(text: String)
+    }
+
+    private struct PendingEditAction {
+        let type: PendingEditType
+    }
 
     /// In-app UI language only (labels, helper text, date formatting). Does not select speech recognition locale.
     var uiLanguage: AppUILanguage = .defaultForDevice()
@@ -67,7 +85,7 @@ final class VoiceCommandViewModel {
         case .idle: return s.voiceTapToSpeak
         case .listening: return s.voiceListening
         case .processing: return s.voiceProcessing
-        case .conflictPending, .deletePending: return ""
+        case .conflictPending, .deletePending, .disambiguating: return ""
         case .success: return s.voiceReady
         case .error: return s.voiceError
         }
@@ -90,7 +108,7 @@ final class VoiceCommandViewModel {
         case .listening:
             Self.log.info("[VoiceChat] stopReason=manual — user tapped mic to stop")
             Task { await chatFinalizeListening() }
-        case .processing, .conflictPending, .deletePending:
+        case .processing, .conflictPending, .deletePending, .disambiguating:
             break
         }
     }
@@ -245,6 +263,8 @@ final class VoiceCommandViewModel {
         parsedCommand = nil
         pendingConflictCommand = nil
         pendingDeleteTask = nil
+        pendingEditAction = nil
+        disambiguationCandidates = []
         Self.log.info("[VoiceChat] chatDismissReset completed — state ready for new session")
     }
 
@@ -303,14 +323,10 @@ final class VoiceCommandViewModel {
             chatFlowState = .error
         case .ambiguous(let matches):
             Self.log.info("[VoiceChat] deleteIntent — ambiguous matchCount=\(matches.count, privacy: .public)")
-            chatMessages.append(ChatMessage(role: .assistant, text: s.chatEditAmbiguousTask))
-            chatFlowState = .error
+            enterDisambiguation(matches: matches, editType: .delete, strings: s)
         case .found(let task):
             Self.log.info("[VoiceChat] deleteIntent — found task title=\(task.title, privacy: .public)")
-            pendingDeleteTask = task
-            let prompt = String(format: s.chatDeletePrompt, task.title)
-            chatMessages.append(ChatMessage(role: .assistant, text: prompt))
-            chatFlowState = .deletePending
+            enterDeleteConfirmation(for: task, strings: s)
         }
     }
 
@@ -323,28 +339,31 @@ final class VoiceCommandViewModel {
             chatFlowState = .error
         case .ambiguous(let matches):
             Self.log.info("[VoiceChat] rescheduleIntent — ambiguous matchCount=\(matches.count, privacy: .public)")
-            chatMessages.append(ChatMessage(role: .assistant, text: s.chatEditAmbiguousTask))
-            chatFlowState = .error
-        case .found(let task):
             guard let newDate = command.newScheduledDate else {
-                Self.log.warning("[VoiceChat] rescheduleIntent — newScheduledDate is nil, cannot reschedule")
                 chatMessages.append(ChatMessage(role: .assistant, text: s.chatEditNoTaskFound))
                 chatFlowState = .error
                 return
             }
-            Self.log.info("[VoiceChat] rescheduleIntent — rescheduling task title=\(task.title, privacy: .public) newDate=\(newDate, privacy: .public)")
-            task.scheduledDate = newDate
-            task.updatedAt = Date()
-            try? persistenceContext?.save()
-            let timeStr = shortTimeFormatter.string(from: newDate)
-            chatMessages.append(ChatMessage(role: .assistant,
-                                            text: String(format: s.chatRescheduleSuccess, task.title, timeStr)))
-            chatFlowState = .success
+            enterDisambiguation(matches: matches, editType: .reschedule(newDate: newDate), strings: s)
+        case .found(let task):
+            guard let newDate = command.newScheduledDate else {
+                Self.log.warning("[VoiceChat] rescheduleIntent — newScheduledDate is nil")
+                chatMessages.append(ChatMessage(role: .assistant, text: s.chatEditNoTaskFound))
+                chatFlowState = .error
+                return
+            }
+            applyReschedule(task: task, newDate: newDate, strings: s)
         }
     }
 
     private func handleAppendIntent(_ command: ParsedCommand) {
         let s = uiLanguage.strings
+        let text = command.appendText ?? command.title
+        guard !text.isEmpty else {
+            chatMessages.append(ChatMessage(role: .assistant, text: s.chatEditNoTaskFound))
+            chatFlowState = .error
+            return
+        }
         switch resolveTargetTask(near: command.targetDate) {
         case .notFound:
             Self.log.info("[VoiceChat] appendIntent — no task found")
@@ -352,27 +371,79 @@ final class VoiceCommandViewModel {
             chatFlowState = .error
         case .ambiguous(let matches):
             Self.log.info("[VoiceChat] appendIntent — ambiguous matchCount=\(matches.count, privacy: .public)")
+            enterDisambiguation(matches: matches, editType: .appendNote(text: text), strings: s)
+        case .found(let task):
+            applyAppend(task: task, text: text, strings: s)
+        }
+    }
+
+    // MARK: - Disambiguation
+
+    private static let disambiguationLimit = 5
+
+    private func enterDisambiguation(matches: [TaskItem], editType: PendingEditType, strings s: AppStrings) {
+        if matches.count > Self.disambiguationLimit {
             chatMessages.append(ChatMessage(role: .assistant, text: s.chatEditAmbiguousTask))
             chatFlowState = .error
-        case .found(let task):
-            let text = command.appendText ?? command.title
-            if text.isEmpty {
-                chatMessages.append(ChatMessage(role: .assistant, text: s.chatEditNoTaskFound))
-                chatFlowState = .error
-                return
-            }
-            Self.log.info("[VoiceChat] appendIntent — appending to task title=\(task.title, privacy: .public)")
-            if let existing = task.notes, !existing.isEmpty {
-                task.notes = existing + "\n" + text
-            } else {
-                task.notes = text
-            }
-            task.updatedAt = Date()
-            try? persistenceContext?.save()
-            chatMessages.append(ChatMessage(role: .assistant,
-                                            text: String(format: s.chatAppendSuccess, task.title)))
-            chatFlowState = .success
+            return
         }
+        Self.log.info("[VoiceChat] enterDisambiguation count=\(matches.count, privacy: .public)")
+        disambiguationCandidates = matches
+        pendingEditAction = PendingEditAction(type: editType)
+        chatMessages.append(ChatMessage(role: .assistant,
+                                        text: String(format: s.chatDisambiguateSelect, matches.count)))
+        chatFlowState = .disambiguating
+    }
+
+    /// Called when the user taps a candidate task during disambiguation.
+    func chatSelectCandidate(_ task: TaskItem) {
+        guard let action = pendingEditAction else { return }
+        pendingEditAction = nil
+        disambiguationCandidates = []
+        let s = uiLanguage.strings
+        Self.log.info("[VoiceChat] candidateSelected title=\(task.title, privacy: .public)")
+        switch action.type {
+        case .delete:
+            enterDeleteConfirmation(for: task, strings: s)
+        case .reschedule(let newDate):
+            applyReschedule(task: task, newDate: newDate, strings: s)
+        case .appendNote(let text):
+            applyAppend(task: task, text: text, strings: s)
+        }
+    }
+
+    // MARK: - Shared edit operations
+
+    private func enterDeleteConfirmation(for task: TaskItem, strings s: AppStrings) {
+        pendingDeleteTask = task
+        let prompt = String(format: s.chatDeletePrompt, task.title)
+        chatMessages.append(ChatMessage(role: .assistant, text: prompt))
+        chatFlowState = .deletePending
+    }
+
+    private func applyReschedule(task: TaskItem, newDate: Date, strings s: AppStrings) {
+        Self.log.info("[VoiceChat] rescheduleApplied title=\(task.title, privacy: .public) newDate=\(newDate, privacy: .public)")
+        task.scheduledDate = newDate
+        task.updatedAt = Date()
+        try? persistenceContext?.save()
+        let timeStr = shortTimeFormatter.string(from: newDate)
+        chatMessages.append(ChatMessage(role: .assistant,
+                                        text: String(format: s.chatRescheduleSuccess, task.title, timeStr)))
+        chatFlowState = .success
+    }
+
+    private func applyAppend(task: TaskItem, text: String, strings s: AppStrings) {
+        Self.log.info("[VoiceChat] appendApplied title=\(task.title, privacy: .public)")
+        if let existing = task.notes, !existing.isEmpty {
+            task.notes = existing + "\n" + text
+        } else {
+            task.notes = text
+        }
+        task.updatedAt = Date()
+        try? persistenceContext?.save()
+        chatMessages.append(ChatMessage(role: .assistant,
+                                        text: String(format: s.chatAppendSuccess, task.title)))
+        chatFlowState = .success
     }
 
     // MARK: - Delete confirmation

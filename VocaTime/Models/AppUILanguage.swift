@@ -187,6 +187,7 @@ struct AppStrings {
     let chatConflictCanceled: String
     let chatEditNoTaskFound: String
     let chatEditAmbiguousTask: String
+    let chatDisambiguateSelect: String
     let chatDeletePrompt: String
     let chatDeleteConfirm: String
     let chatDeleteKeep: String
@@ -299,6 +300,7 @@ struct AppStrings {
         chatConflictCanceled: "Got it, task not saved.",
         chatEditNoTaskFound: "I couldn't find a task at that time. Try saying the time more precisely.",
         chatEditAmbiguousTask: "I found more than one task around that time. Please be more specific.",
+        chatDisambiguateSelect: "Found %d tasks at that time — which one did you mean?",
         chatDeletePrompt: "Delete \"%@\"?",
         chatDeleteConfirm: "Delete",
         chatDeleteKeep: "Keep it",
@@ -412,6 +414,7 @@ struct AppStrings {
         chatConflictCanceled: "好的，已取消。",
         chatEditNoTaskFound: "找不到该时间的任务，请说得更精确一些。",
         chatEditAmbiguousTask: "该时间附近有多个任务，请说得更具体一些。",
+        chatDisambiguateSelect: "该时间附近有 %d 个任务，是哪一个？",
         chatDeletePrompt: "删除「%@」？",
         chatDeleteConfirm: "删除",
         chatDeleteKeep: "保留",
@@ -525,6 +528,7 @@ struct AppStrings {
         chatConflictCanceled: "Entendido, tarea no guardada.",
         chatEditNoTaskFound: "No encontré ninguna tarea a esa hora. Intenta decir la hora más exactamente.",
         chatEditAmbiguousTask: "Encontré varias tareas cerca de esa hora. Por favor, sé más específico.",
+        chatDisambiguateSelect: "Encontré %d tareas a esa hora — ¿cuál de ellas?",
         chatDeletePrompt: "¿Eliminar \"%@\"?",
         chatDeleteConfirm: "Eliminar",
         chatDeleteKeep: "Conservar",

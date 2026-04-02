@@ -49,7 +49,7 @@ struct ChatSheetView: View {
                             .padding(.horizontal, 4)
                     }
 
-                    if viewModel.chatFlowState != .conflictPending {
+                    if !viewModel.chatStatusDescription.isEmpty {
                         HStack {
                             Text(viewModel.chatStatusDescription)
                                 .font(.caption)
@@ -89,6 +89,8 @@ struct ChatSheetView: View {
                             .frame(maxWidth: .infinity)
                         }
                         .padding(.top, 2)
+                    } else if viewModel.chatFlowState == .disambiguating {
+                        disambiguationCandidateList
                     } else {
                         RecordButtonView(
                             isListening: viewModel.chatFlowState == .listening,
@@ -143,6 +145,45 @@ struct ChatSheetView: View {
                 Task { await viewModel.handleUILanguageChanged() }
             }
         }
+    }
+
+    @ViewBuilder
+    private var disambiguationCandidateList: some View {
+        VStack(spacing: 6) {
+            ForEach(viewModel.disambiguationCandidates) { task in
+                Button {
+                    viewModel.chatSelectCandidate(task)
+                } label: {
+                    HStack(spacing: 10) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(task.title)
+                                .font(.subheadline.weight(.medium))
+                                .foregroundStyle(.primary)
+                                .lineLimit(1)
+                            if let d = task.scheduledDate,
+                               TaskScheduleFormatting.hasWallClockTime(d) {
+                                Text(d.formatted(
+                                    Date.FormatStyle(date: .omitted, time: .shortened).locale(locale)
+                                ))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            }
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(Color(.tertiaryLabel))
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color(.secondarySystemGroupedBackground))
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.top, 2)
     }
 
     private func chatBubble(_ message: ChatMessage) -> some View {
