@@ -2,6 +2,8 @@ import Foundation
 import os.log
 import SwiftData
 
+// MARK: - Chat types (unchanged)
+
 enum ChatMessageRole: String, Equatable {
     case user
     case assistant
@@ -32,26 +34,34 @@ enum VoiceFlowState: Equatable {
     case error
 }
 
+// MARK: - Transcript source (for logging and parse-strategy selection)
+
+private enum TranscriptSource {
+    case local
+    case cloud
+}
+
+// MARK: - ViewModel
+
 @MainActor
 @Observable
 final class VoiceCommandViewModel {
+
     private static let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "VocaTime", category: "VoiceChat")
+
+    // MARK: - Public state (unchanged from previous version)
 
     var chatMessages: [ChatMessage] = []
     var chatFlowState: VoiceFlowState = .idle
     var chatDraftText: String = ""
     var parsedCommand: ParsedCommand?
-    /// Candidate tasks exposed to the view during disambiguation.
     var disambiguationCandidates: [TaskItem] = []
 
-    /// Holds a parsed command that is waiting for the user to confirm or dismiss a conflict warning.
     private var pendingConflictCommand: ParsedCommand?
-    /// Holds a task that is waiting for delete confirmation.
     private var pendingDeleteTask: TaskItem?
-    /// Holds the pending edit action while the user is choosing among disambiguation candidates.
     private var pendingEditAction: PendingEditAction?
 
-    // MARK: - Pending edit model
+    // MARK: - Pending edit model (unchanged)
 
     private enum PendingEditType {
         case delete
@@ -63,35 +73,60 @@ final class VoiceCommandViewModel {
         let type: PendingEditType
     }
 
-    /// In-app UI language only (labels, helper text, date formatting). Does not select speech recognition locale.
     var uiLanguage: AppUILanguage = .defaultForDevice()
 
-    private let speechService = SpeechRecognizerService()
-    private let transcriptionService = MultilingualTranscriptionService()
-    private let parsingCoordinator = TaskParsingCoordinator(
-        localParser: LocalTaskParser(),
-        llmParser: LLMTaskParserService()
-    )
+    // MARK: - Services (injectable for testing)
+
+    private let speechService: any SpeechManaging
+    private let transcriptionService: any FallbackTranscribing
+    private let transcriptionRouter: any TranscriptionRouting
+    private let localEvaluator: LocalTranscriptEvaluator
+
+    /// Main parsing coordinator. Strategy is set per-call depending on whether the transcript
+    /// came from local recognition (`.localFirst`) or cloud transcription (`.llmFirst`).
+    private var parsingCoordinator: TaskParsingCoordinator
+
     private var persistenceContext: ModelContext?
     private var silenceTimerTask: Task<Void, Never>?
+
+    // MARK: - Init
+
+    init(
+        speechService: (any SpeechManaging)? = nil,
+        transcriptionService: (any FallbackTranscribing)? = nil,
+        transcriptionRouter: (any TranscriptionRouting)? = nil,
+        localEvaluator: LocalTranscriptEvaluator? = nil,
+        parsingCoordinator: TaskParsingCoordinator? = nil
+    ) {
+        self.speechService = speechService ?? SpeechRecognizerService()
+        self.transcriptionService = transcriptionService ?? MultilingualTranscriptionService()
+        self.transcriptionRouter = transcriptionRouter ?? TranscriptionRouter()
+        self.localEvaluator = localEvaluator ?? LocalTranscriptEvaluator()
+        self.parsingCoordinator = parsingCoordinator ?? TaskParsingCoordinator(
+            localParser: LocalTaskParser(),
+            llmParser: LLMTaskParserService(),
+            strategy: .localFirst
+        )
+    }
 
     func attachPersistence(_ context: ModelContext) {
         persistenceContext = context
     }
 
+    // MARK: - Status text
+
     var chatStatusDescription: String {
         let s = uiLanguage.strings
         switch chatFlowState {
-        case .idle: return s.voiceTapToSpeak
-        case .listening: return s.voiceListening
+        case .idle:       return s.voiceTapToSpeak
+        case .listening:  return s.voiceListening
         case .processing: return s.voiceProcessing
         case .conflictPending, .deletePending, .disambiguating: return ""
-        case .success: return s.voiceReady
-        case .error: return s.voiceError
+        case .success:    return s.voiceReady
+        case .error:      return s.voiceError
         }
     }
 
-    /// Call when UI language changes while this view model may be active (e.g. chat sheet open).
     func handleUILanguageChanged() async {
         await speechService.cancelForReset()
         cancelMaxRecordingTimer()
@@ -100,6 +135,8 @@ final class VoiceCommandViewModel {
             chatDraftText = ""
         }
     }
+
+    // MARK: - Mic tap entry point (unchanged)
 
     func chatMicrophoneTapped() {
         switch chatFlowState {
@@ -113,7 +150,8 @@ final class VoiceCommandViewModel {
         }
     }
 
-    /// 30-second safety net — fires only if silence-based auto-stop and manual stop both fail.
+    // MARK: - Max-duration safety net (unchanged)
+
     private static let maxRecordingNanoseconds: UInt64 = 30_000_000_000
 
     private func startMaxRecordingTimer() {
@@ -132,12 +170,22 @@ final class VoiceCommandViewModel {
         silenceTimerTask = nil
     }
 
+    // MARK: - Begin listening
+
     func chatBeginListening() async {
         cancelMaxRecordingTimer()
 
         let msgs = uiLanguage.speechMessages
-        Self.log.info("[VoiceChat] recording start appUILanguage=\(self.uiLanguage.rawValue, privacy: .public)")
+        Self.log.info("[VoiceChat] localListeningStart appUILanguage=\(self.uiLanguage.rawValue, privacy: .public)")
 
+        // Attach partial-transcript callback (set here so the callback captures the current ViewModel).
+        speechService.onPartialTranscript = { [weak self] text in
+            guard let self, self.chatFlowState == .listening else { return }
+            self.chatDraftText = text
+        }
+
+        // Request both microphone + speech recognition permissions.
+        // Speech recognition denial degrades to audio-only — not a fatal error.
         if let err = await speechService.requestAuthorizationIfNeeded(messages: msgs) {
             chatMessages.append(ChatMessage(role: .assistant, text: err))
             chatFlowState = .error
@@ -146,11 +194,15 @@ final class VoiceCommandViewModel {
 
         chatDraftText = ""
 
-        let startError = await speechService.startRecording(messages: msgs, onAutoStop: { [weak self] in
-            guard let self, self.chatFlowState == .listening else { return }
-            Self.log.info("[VoiceChat] stopReason=autoSilence — silence threshold reached, stopping recording")
-            Task { await self.chatFinalizeListening() }
-        })
+        let startError = await speechService.startListening(
+            locale: uiLanguage.locale,
+            messages: msgs,
+            onAutoStop: { [weak self] in
+                guard let self, self.chatFlowState == .listening else { return }
+                Self.log.info("[VoiceChat] stopReason=autoSilence — silence threshold reached")
+                Task { await self.chatFinalizeListening() }
+            }
+        )
 
         if let startError {
             chatMessages.append(ChatMessage(role: .assistant, text: startError))
@@ -160,115 +212,152 @@ final class VoiceCommandViewModel {
 
         chatFlowState = .listening
         startMaxRecordingTimer()
-        Self.log.info("[VoiceChat] recording active — silence detection running; max timeout=30s")
+        Self.log.info("[VoiceChat] listening active — local recognition + audio recording running; max timeout=30s")
     }
 
+    // MARK: - Finalize listening (orchestrator)
+
     func chatFinalizeListening() async {
-        // Guard against double-invocation (auto-stop and manual tap arriving close together).
         guard chatFlowState == .listening else { return }
         cancelMaxRecordingTimer()
         chatFlowState = .processing
-        Self.log.info("[VoiceChat] stopping recording")
-        let recordOutcome = await speechService.stopRecording()
+        chatDraftText = ""
+
+        Self.log.info("[VoiceChat] stoppingListening")
+        let captureOutcome = await speechService.stopListening()
         let strings = uiLanguage.strings
         let speechMsgs = uiLanguage.speechMessages
 
-        switch recordOutcome {
+        switch captureOutcome {
         case .failure(let error):
-            chatDraftText = ""
-            let ns = error as NSError
-            // "Too small" means the recorder captured no real audio — show "no speech" hint rather than a generic error.
-            let userMsg: String
-            if ns.domain == VocaTimeSpeechDomain.name,
-               ns.code == VocaTimeSpeechErrorCode.recordingFailed.rawValue,
-               ns.localizedDescription.contains("too small") {
-                userMsg = strings.chatEmptyTranscript
-            } else {
-                userMsg = localizedStopFailure(error, speechMsgs: speechMsgs)
-            }
-            chatMessages.append(ChatMessage(role: .assistant, text: userMsg))
-            parsedCommand = nil
-            chatFlowState = .error
-        case .success(let audioURL):
-            Self.log.info("[VoiceChat] audio file ready path=\(audioURL.path, privacy: .public)")
-            defer {
-                try? FileManager.default.removeItem(at: audioURL)
-            }
+            handleCaptureFailure(error, strings: strings, speechMsgs: speechMsgs)
 
-            let transcript: String
-            do {
-                transcript = try await transcriptionService.transcribe(audioFileURL: audioURL)
-            } catch {
-                chatDraftText = ""
-                let rootCause: String
-                switch error {
-                case MultilingualTranscriptionError.missingAPIKey:
-                    rootCause = "missingAPIKey"
-                case MultilingualTranscriptionError.fileReadFailed(let u):
-                    rootCause = "fileReadFailed — \(u.localizedDescription)"
-                case MultilingualTranscriptionError.fileEmpty:
-                    rootCause = "fileEmpty — AVAudioRecorder produced empty/near-empty container (likely recorded silence or was stopped immediately)"
-                case MultilingualTranscriptionError.networkError(let u):
-                    rootCause = "networkError — \(u.localizedDescription)"
-                case MultilingualTranscriptionError.httpError(let code, _):
-                    rootCause = "http\(code)"
-                case MultilingualTranscriptionError.decodingFailed(let u, _):
-                    rootCause = "decodingFailed — \(u.localizedDescription)"
-                default:
-                    rootCause = "unknown — \(String(describing: error))"
-                }
-                Self.log.error("[VoiceChat] transcriptionFailureRootCause=\(rootCause, privacy: .public)")
+        case .success(let captureResult):
+            Self.log.info("[VoiceChat] captureSuccess localTranscript=\(captureResult.transcript, privacy: .public) confidence=\(String(describing: captureResult.confidence), privacy: .public) duration=\(captureResult.duration, privacy: .public)s audioURL=\(captureResult.audioURL?.path ?? "nil", privacy: .public)")
+            await handleLocalSpeechResult(captureResult, strings: strings)
+        }
+    }
+
+    // MARK: - Capture failure handler
+
+    private func handleCaptureFailure(_ error: Error, strings: AppStrings, speechMsgs: SpeechServiceMessages) {
+        let ns = error as NSError
+        let userMsg: String
+        if ns.domain == VocaTimeSpeechDomain.name,
+           ns.code == VocaTimeSpeechErrorCode.recordingFailed.rawValue,
+           ns.localizedDescription.contains("too small") {
+            userMsg = strings.chatEmptyTranscript
+        } else {
+            userMsg = localizedStopFailure(error, speechMsgs: speechMsgs)
+        }
+        chatMessages.append(ChatMessage(role: .assistant, text: userMsg))
+        parsedCommand = nil
+        chatFlowState = .error
+    }
+
+    // MARK: - Local speech result handler
+
+    private func handleLocalSpeechResult(
+        _ captureResult: LocalSpeechCaptureResult,
+        strings: AppStrings
+    ) async {
+        // Run the quick local evaluator to get a ParsedCommand for the routing decision.
+        // This is intentionally lightweight (IntentParserService only — no network).
+        let localParsed = await localEvaluator.evaluate(
+            transcript: captureResult.transcript,
+            now: Date(),
+            localeIdentifier: uiLanguage.uiLocaleIdentifier,
+            timeZoneIdentifier: TimeZone.current.identifier
+        )
+
+        let routingDecision = transcriptionRouter.evaluate(
+            transcript: captureResult.transcript,
+            confidence: captureResult.confidence,
+            duration: captureResult.duration,
+            parsedCommand: localParsed
+        )
+
+        switch routingDecision {
+        case .acceptLocalTranscript(let trimmed):
+            Self.log.info("[VoiceChat] routingDecision=acceptLocal transcript=\(trimmed, privacy: .public)")
+            // Audio file is kept alive until the defer below, but we don't upload it.
+            defer { deleteAudioFile(captureResult.audioURL) }
+            await applyTranscriptToFlow(trimmed, source: .local)
+
+        case .fallbackToCloud:
+            guard let audioURL = captureResult.audioURL else {
+                // No audio file — shouldn't happen, but fail gracefully.
                 chatMessages.append(ChatMessage(role: .assistant, text: strings.chatTranscriptionFailed))
-                parsedCommand = nil
                 chatFlowState = .error
                 return
             }
-
-            chatDraftText = ""
-            Self.log.info("[VoiceChat] transcript (API)=\(transcript, privacy: .public)")
-            let trimmed = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
-            if trimmed.isEmpty {
-                chatMessages.append(
-                    ChatMessage(role: .assistant, text: strings.chatEmptyTranscript)
-                )
-                chatFlowState = .error
-            } else {
-                chatMessages.append(ChatMessage(role: .user, text: trimmed))
-                await applyChatParse(transcript: trimmed)
-            }
+            Self.log.info("[VoiceChat] routingDecision=fallbackToCloud — uploading audio")
+            await handleCloudFallback(audioURL: audioURL, strings: strings)
         }
     }
 
-    private func localizedStopFailure(_ error: Error, speechMsgs: SpeechServiceMessages) -> String {
-        let ns = error as NSError
-        if ns.domain == VocaTimeSpeechDomain.name, let code = VocaTimeSpeechErrorCode(rawValue: ns.code) {
-            switch code {
-            case .nothingToStop: return speechMsgs.nothingToStop
-            case .interrupted: return speechMsgs.interrupted
-            case .recordingFailed: return speechMsgs.recognitionStopped
-            case .generic: break
+    // MARK: - Cloud fallback handler
+
+    private func handleCloudFallback(audioURL: URL, strings: AppStrings) async {
+        defer { deleteAudioFile(audioURL) }
+
+        let transcript: String
+        do {
+            Self.log.info("[VoiceChat] cloudTranscriptionStart audioURL=\(audioURL.path, privacy: .public)")
+            transcript = try await transcriptionService.transcribe(audioFileURL: audioURL)
+            Self.log.info("[VoiceChat] cloudTranscriptionSuccess transcript=\(transcript, privacy: .public)")
+        } catch {
+            let rootCause: String
+            switch error {
+            case MultilingualTranscriptionError.missingAPIKey:
+                rootCause = "missingAPIKey"
+            case MultilingualTranscriptionError.fileReadFailed(let u):
+                rootCause = "fileReadFailed — \(u.localizedDescription)"
+            case MultilingualTranscriptionError.fileEmpty:
+                rootCause = "fileEmpty"
+            case MultilingualTranscriptionError.networkError(let u):
+                rootCause = "networkError — \(u.localizedDescription)"
+            case MultilingualTranscriptionError.httpError(let code, _):
+                rootCause = "http\(code)"
+            case MultilingualTranscriptionError.decodingFailed(let u, _):
+                rootCause = "decodingFailed — \(u.localizedDescription)"
+            default:
+                rootCause = "unknown — \(String(describing: error))"
             }
+            Self.log.error("[VoiceChat] cloudTranscriptionFailure rootCause=\(rootCause, privacy: .public)")
+            chatMessages.append(ChatMessage(role: .assistant, text: strings.chatTranscriptionFailed))
+            parsedCommand = nil
+            chatFlowState = .error
+            return
         }
-        return ns.localizedDescription
+
+        await applyTranscriptToFlow(transcript, source: .cloud)
     }
 
-    /// Resets all session state so the next sheet presentation starts clean.
-    /// Called from `ChatSheetView.onDisappear` — safe to call on any dismiss (success, manual, or error).
-    func prepareForNewSession() async {
-        await speechService.cancelForReset()
-        cancelMaxRecordingTimer()
-        chatFlowState = .idle
-        chatDraftText = ""
-        chatMessages = []
-        parsedCommand = nil
-        pendingConflictCommand = nil
-        pendingDeleteTask = nil
-        pendingEditAction = nil
-        disambiguationCandidates = []
-        Self.log.info("[VoiceChat] chatDismissReset completed — state ready for new session")
+    // MARK: - Shared transcript → parse → flow
+
+    /// Appends the user message and runs the full parsing + task-creation flow.
+    /// `source` selects the parsing strategy: local transcripts get `localFirst`, cloud gets `llmFirst`.
+    private func applyTranscriptToFlow(_ rawTranscript: String, source: TranscriptSource) async {
+        let trimmed = rawTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            chatMessages.append(ChatMessage(role: .assistant, text: uiLanguage.strings.chatEmptyTranscript))
+            chatFlowState = .error
+            return
+        }
+
+        chatMessages.append(ChatMessage(role: .user, text: trimmed))
+        Self.log.info("[VoiceChat] transcriptSource=\(String(describing: source), privacy: .public) parsingTranscript=\(trimmed, privacy: .public)")
+
+        // Select parsing strategy based on transcript source.
+        parsingCoordinator.strategy = source == .local ? .localFirst : .llmFirst
+
+        await applyChatParse(transcript: trimmed)
     }
 
-    private func applyChatParse(transcript: String) async {
+    // MARK: - Parse + route to task actions (largely unchanged)
+
+    func applyChatParse(transcript: String) async {
         Self.log.info("[VoiceChat] parse input appUILanguage=\(self.uiLanguage.rawValue, privacy: .public) transcript=\(transcript, privacy: .public)")
         let command = await parsingCoordinator.parse(
             text: transcript,
@@ -312,7 +401,7 @@ final class VoiceCommandViewModel {
         commitSave(command: command)
     }
 
-    // MARK: - Edit intent handlers
+    // MARK: - Edit intent handlers (unchanged)
 
     private func handleDeleteIntent(_ command: ParsedCommand) {
         let s = uiLanguage.strings
@@ -377,7 +466,7 @@ final class VoiceCommandViewModel {
         }
     }
 
-    // MARK: - Disambiguation
+    // MARK: - Disambiguation (unchanged)
 
     private static let disambiguationLimit = 5
 
@@ -395,7 +484,6 @@ final class VoiceCommandViewModel {
         chatFlowState = .disambiguating
     }
 
-    /// Called when the user taps a candidate task during disambiguation.
     func chatSelectCandidate(_ task: TaskItem) {
         guard let action = pendingEditAction else { return }
         pendingEditAction = nil
@@ -412,7 +500,7 @@ final class VoiceCommandViewModel {
         }
     }
 
-    // MARK: - Shared edit operations
+    // MARK: - Shared edit operations (unchanged)
 
     private func enterDeleteConfirmation(for task: TaskItem, strings s: AppStrings) {
         pendingDeleteTask = task
@@ -446,9 +534,8 @@ final class VoiceCommandViewModel {
         chatFlowState = .success
     }
 
-    // MARK: - Delete confirmation
+    // MARK: - Delete confirmation (unchanged)
 
-    /// User tapped "Delete" — remove the pending task.
     func chatConfirmDelete() {
         guard let task = pendingDeleteTask else { return }
         let title = task.title
@@ -463,30 +550,27 @@ final class VoiceCommandViewModel {
         chatFlowState = .success
     }
 
-    /// User tapped "Keep it" — cancel the pending delete.
     func chatCancelDelete() {
         pendingDeleteTask = nil
         chatMessages.append(ChatMessage(role: .assistant, text: uiLanguage.strings.chatDeleteCanceled))
         chatFlowState = .error
     }
 
-    // MARK: - Conflict confirmation
+    // MARK: - Conflict confirmation (unchanged)
 
-    /// User chose "Add anyway" — save the pending command and finish.
     func chatConfirmConflict() {
         guard let command = pendingConflictCommand else { return }
         pendingConflictCommand = nil
         commitSave(command: command)
     }
 
-    /// User chose "Don't add" — discard the pending command.
     func chatCancelConflict() {
         pendingConflictCommand = nil
         chatMessages.append(ChatMessage(role: .assistant, text: uiLanguage.strings.chatConflictCanceled))
         chatFlowState = .error
     }
 
-    // MARK: - Task resolution
+    // MARK: - Task resolution (unchanged)
 
     private enum TaskResolution {
         case found(TaskItem)
@@ -494,7 +578,6 @@ final class VoiceCommandViewModel {
         case notFound
     }
 
-    /// Finds non-completed, timed tasks within ±15 minutes of `targetDate`.
     private func resolveTargetTask(near targetDate: Date?) -> TaskResolution {
         guard let targetDate, let ctx = persistenceContext else { return .notFound }
         let descriptor = FetchDescriptor<TaskItem>(
@@ -514,9 +597,8 @@ final class VoiceCommandViewModel {
         }
     }
 
-    // MARK: - Helpers
+    // MARK: - Helpers (unchanged)
 
-    /// Inserts the task into SwiftData and transitions to `.success`.
     private func commitSave(command: ParsedCommand) {
         let reply = confirmationMessage(for: command, userTranscript: command.originalText)
         chatMessages.append(ChatMessage(role: .assistant, text: reply))
@@ -527,7 +609,6 @@ final class VoiceCommandViewModel {
         chatFlowState = .success
     }
 
-    /// Returns the first non-completed task with a wall-clock time within ±15 minutes of `date`.
     private func findConflictingTask(near date: Date) -> TaskItem? {
         guard let ctx = persistenceContext else { return nil }
         let descriptor = FetchDescriptor<TaskItem>(
@@ -540,6 +621,40 @@ final class VoiceCommandViewModel {
                   TaskScheduleFormatting.hasWallClockTime(d) else { return false }
             return abs(d.timeIntervalSince(date)) <= window
         }
+    }
+
+    private func deleteAudioFile(_ url: URL?) {
+        guard let url else { return }
+        try? FileManager.default.removeItem(at: url)
+        Self.log.info("[VoiceChat] audioFileDeleted path=\(url.path, privacy: .public)")
+    }
+
+    func prepareForNewSession() async {
+        speechService.onPartialTranscript = nil
+        await speechService.cancelForReset()
+        cancelMaxRecordingTimer()
+        chatFlowState = .idle
+        chatDraftText = ""
+        chatMessages = []
+        parsedCommand = nil
+        pendingConflictCommand = nil
+        pendingDeleteTask = nil
+        pendingEditAction = nil
+        disambiguationCandidates = []
+        Self.log.info("[VoiceChat] chatDismissReset completed — state ready for new session")
+    }
+
+    private func localizedStopFailure(_ error: Error, speechMsgs: SpeechServiceMessages) -> String {
+        let ns = error as NSError
+        if ns.domain == VocaTimeSpeechDomain.name, let code = VocaTimeSpeechErrorCode(rawValue: ns.code) {
+            switch code {
+            case .nothingToStop: return speechMsgs.nothingToStop
+            case .interrupted:   return speechMsgs.interrupted
+            case .recordingFailed: return speechMsgs.recognitionStopped
+            case .generic: break
+            }
+        }
+        return ns.localizedDescription
     }
 
     private var shortTimeFormatter: DateFormatter {
@@ -558,9 +673,9 @@ final class VoiceCommandViewModel {
             if name.isEmpty {
                 label = s.chatYourTask
             } else if uiLanguage == .en {
-                label = "“\(name)”"
+                label = "\u{201C}\(name)\u{201D}"
             } else {
-                label = "「\(name)」"
+                label = "\u{300C}\(name)\u{300D}"
             }
             return String(format: s.chatUnknownSchedule, label)
         }

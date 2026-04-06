@@ -1,6 +1,16 @@
 import Foundation
 import os.log
 
+// MARK: - Protocol (for dependency injection / testing)
+
+/// Abstracts the cloud transcription call so `VoiceCommandViewModel` can be tested without
+/// real network access. `MultilingualTranscriptionService` is the production implementation.
+protocol FallbackTranscribing {
+    func transcribe(audioFileURL: URL) async throws -> String
+}
+
+// MARK: - Errors
+
 enum MultilingualTranscriptionError: Error {
     case missingAPIKey
     case fileReadFailed(underlying: Error)
@@ -10,8 +20,10 @@ enum MultilingualTranscriptionError: Error {
     case decodingFailed(underlying: Error, rawBody: String)
 }
 
-/// Sends recorded audio to OpenAI's transcription API. Transcript is the source of truth for parsing (not `SFSpeechRecognizer`).
-struct MultilingualTranscriptionService {
+/// Sends recorded audio to OpenAI's transcription API.
+/// Conforms to `FallbackTranscribing` — used as the cloud fallback when local Apple speech
+/// recognition is unavailable or the transcript quality check fails.
+struct MultilingualTranscriptionService: FallbackTranscribing {
     private static let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "VocaTime", category: "Transcription")
 
     static let model = "gpt-4o-mini-transcribe"
@@ -74,10 +86,22 @@ struct MultilingualTranscriptionService {
             if let d = s.data(using: .utf8) { body.append(d) }
         }
 
-        // File part — use `audio/mp4` (the correct IANA MIME type for M4A; `audio/m4a` is non-standard)
+        // Derive MIME type and filename from the actual file extension.
+        // The pipeline now produces .wav (AVAudioEngine); .m4a is kept for any legacy paths.
+        let ext = audioFileURL.pathExtension.lowercased()
+        let (mimeType, uploadFilename): (String, String) = {
+            switch ext {
+            case "wav":  return ("audio/wav",  "recording.wav")
+            case "flac": return ("audio/flac", "recording.flac")
+            case "mp3":  return ("audio/mpeg", "recording.mp3")
+            default:     return ("audio/mp4",  "recording.m4a")   // m4a / mp4 / unknown
+            }
+        }()
+
+        // File part
         append("--\(boundary)\r\n")
-        append("Content-Disposition: form-data; name=\"file\"; filename=\"recording.m4a\"\r\n")
-        append("Content-Type: audio/mp4\r\n\r\n")
+        append("Content-Disposition: form-data; name=\"file\"; filename=\"\(uploadFilename)\"\r\n")
+        append("Content-Type: \(mimeType)\r\n\r\n")
         body.append(audioData)
         append("\r\n")
 
@@ -99,7 +123,7 @@ struct MultilingualTranscriptionService {
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         request.httpBody = body
 
-        Self.log.info("[Transcription] request endpoint=\(self.endpoint.absoluteString, privacy: .public) model=\(Self.model, privacy: .public) bodyBytes=\(body.count, privacy: .public)")
+        Self.log.info("[Transcription] request endpoint=\(self.endpoint.absoluteString, privacy: .public) model=\(Self.model, privacy: .public) mimeType=\(mimeType, privacy: .public) bodyBytes=\(body.count, privacy: .public)")
 
         // ── 4. Send ─────────────────────────────────────────────────────────────
         let data: Data
