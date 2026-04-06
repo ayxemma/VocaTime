@@ -195,6 +195,7 @@ struct AppStrings {
     let chatDeleteCanceled: String
     let chatRescheduleSuccess: String
     let chatAppendSuccess: String
+    let chatTextInputPlaceholder: String
 
     static let english = AppStrings(
         tagline: "Speak → Understand → Schedule → Remind",
@@ -307,7 +308,8 @@ struct AppStrings {
         chatDeleteSuccess: "Deleted \"%@\".",
         chatDeleteCanceled: "OK, kept it.",
         chatRescheduleSuccess: "Done — moved \"%@\" to %@.",
-        chatAppendSuccess: "Added note to \"%@\"."
+        chatAppendSuccess: "Added note to \"%@\".",
+        chatTextInputPlaceholder: "Type or say a task\u{2026}"
     )
 
     static let chineseSimplified = AppStrings(
@@ -421,7 +423,8 @@ struct AppStrings {
         chatDeleteSuccess: "已删除「%@」。",
         chatDeleteCanceled: "好的，已保留。",
         chatRescheduleSuccess: "已完成——将「%@」改到 %@。",
-        chatAppendSuccess: "已为「%@」添加备注。"
+        chatAppendSuccess: "已为「%@」添加备注。",
+        chatTextInputPlaceholder: "输入或说出任务\u{2026}"
     )
 
     static let spanish = AppStrings(
@@ -535,7 +538,8 @@ struct AppStrings {
         chatDeleteSuccess: "Eliminado \"%@\".",
         chatDeleteCanceled: "De acuerdo, conservado.",
         chatRescheduleSuccess: "Listo — moví \"%@\" a %@.",
-        chatAppendSuccess: "Nota añadida a \"%@\"."
+        chatAppendSuccess: "Nota añadida a \"%@\".",
+        chatTextInputPlaceholder: "Escribe o di una tarea\u{2026}"
     )
 }
 

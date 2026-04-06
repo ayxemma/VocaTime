@@ -136,6 +136,35 @@ final class VoiceCommandViewModel {
         }
     }
 
+    // MARK: - Typed text entry point
+
+    /// Submits a typed string directly into the parse → save flow, bypassing transcription.
+    /// Safe to call from any ready state (idle, success, error). No-op while processing.
+    func chatSubmitTypedText(_ text: String) async {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        guard chatFlowState == .idle || chatFlowState == .success || chatFlowState == .error else { return }
+
+        Self.log.info("[VoiceChat] typedTextSubmit text=\(trimmed, privacy: .public)")
+        chatFlowState = .processing
+        // Typed text is already final — go straight to parse, using the local-first strategy.
+        parsingCoordinator.strategy = .localFirst
+        chatMessages.append(ChatMessage(role: .user, text: trimmed))
+        await applyChatParse(transcript: trimmed)
+    }
+
+    /// Cancels the current recording session without processing any audio.
+    /// Used when the user taps the text field while listening, signalling they prefer to type.
+    func chatCancelListening() async {
+        guard chatFlowState == .listening else { return }
+        cancelMaxRecordingTimer()
+        speechService.onPartialTranscript = nil
+        await speechService.cancelForReset()
+        chatFlowState = .idle
+        chatDraftText = ""
+        Self.log.info("[VoiceChat] listeningCancelled — user switched to text input")
+    }
+
     // MARK: - Mic tap entry point (unchanged)
 
     func chatMicrophoneTapped() {

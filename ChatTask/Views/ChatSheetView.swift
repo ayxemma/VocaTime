@@ -8,102 +8,27 @@ struct ChatSheetView: View {
     @Environment(\.locale) private var locale
     @Environment(\.modelContext) private var modelContext
 
-    /// Task that fires auto-dismiss after a short confirmation delay. Cancelled on disappear to prevent
-    /// a stale dismiss from firing on a subsequently re-opened sheet.
     @State private var autoDismissTask: Task<Void, Never>?
+    /// Text the user is currently composing in the input field.
+    @State private var typedText: String = ""
+    @FocusState private var isTextFieldFocused: Bool
 
     private static let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "VocaTime", category: "ChatSheet")
     private var strings: AppStrings { appUILanguage.strings }
+
+    // MARK: - Body
 
     var body: some View {
         let s = strings
         NavigationStack {
             VStack(spacing: 0) {
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        LazyVStack(alignment: .leading, spacing: 12) {
-                            ForEach(viewModel.chatMessages) { message in
-                                chatBubble(message)
-                                    .id(message.id)
-                            }
-                        }
-                        .padding()
-                    }
-                    .onChange(of: viewModel.chatMessages.count) { _, _ in
-                        if let last = viewModel.chatMessages.last {
-                            withAnimation(.easeOut(duration: 0.2)) {
-                                proxy.scrollTo(last.id, anchor: .bottom)
-                            }
-                        }
-                    }
-                }
+                messageScrollView
 
                 Divider()
 
-                VStack(alignment: .leading, spacing: 10) {
-                    if !viewModel.chatDraftText.isEmpty, viewModel.chatFlowState == .listening {
-                        Text(viewModel.chatDraftText)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 4)
-                    }
-
-                    if !viewModel.chatStatusDescription.isEmpty {
-                        HStack {
-                            Text(viewModel.chatStatusDescription)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                        }
-                    }
-
-                    if viewModel.chatFlowState == .conflictPending {
-                        HStack(spacing: 12) {
-                            Button(s.chatConflictCancel) {
-                                viewModel.chatCancelConflict()
-                            }
-                            .buttonStyle(.bordered)
-                            .frame(maxWidth: .infinity)
-
-                            Button(s.chatConflictAddAnyway) {
-                                viewModel.chatConfirmConflict()
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .frame(maxWidth: .infinity)
-                        }
-                        .padding(.top, 2)
-                    } else if viewModel.chatFlowState == .deletePending {
-                        HStack(spacing: 12) {
-                            Button(s.chatDeleteKeep) {
-                                viewModel.chatCancelDelete()
-                            }
-                            .buttonStyle(.bordered)
-                            .frame(maxWidth: .infinity)
-
-                            Button(s.chatDeleteConfirm) {
-                                viewModel.chatConfirmDelete()
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .tint(.red)
-                            .frame(maxWidth: .infinity)
-                        }
-                        .padding(.top, 2)
-                    } else if viewModel.chatFlowState == .disambiguating {
-                        disambiguationCandidateList
-                    } else {
-                        RecordButtonView(
-                            isListening: viewModel.chatFlowState == .listening,
-                            isEnabled: viewModel.chatFlowState != .processing,
-                            startListeningAccessibilityLabel: s.voiceStartListening,
-                            stopListeningAccessibilityLabel: s.voiceStopListening,
-                            action: { viewModel.chatMicrophoneTapped() }
-                        )
-                        .frame(maxWidth: .infinity)
-                    }
-                }
-                .padding()
-                .background(Color(.systemBackground))
+                inputArea(s: s)
+                    .padding()
+                    .background(Color(.systemBackground))
             }
             .navigationTitle(s.commandTitle)
             .navigationBarTitleDisplayMode(.inline)
@@ -115,15 +40,12 @@ struct ChatSheetView: View {
             .onAppear {
                 viewModel.attachPersistence(modelContext)
                 viewModel.uiLanguage = appUILanguage
-                // Always auto-start — state is reset to .idle in onDisappear via prepareForNewSession().
                 Self.log.info("[ChatSheet] chatAutoStart — sheet opened, beginning recording")
                 Task { await viewModel.chatBeginListening() }
             }
             .onDisappear {
-                // Cancel any pending auto-dismiss so it doesn't fire on a re-opened sheet.
                 autoDismissTask?.cancel()
                 autoDismissTask = nil
-                // Tear down recording and reset all state so the next open starts clean.
                 Task {
                     await viewModel.prepareForNewSession()
                     Self.log.info("[ChatSheet] chatDismissComplete — recorder released, state reset")
@@ -131,7 +53,6 @@ struct ChatSheetView: View {
             }
             .onChange(of: viewModel.chatFlowState) { _, newState in
                 guard newState == .success else { return }
-                // Let the user read the confirmation briefly, then auto-close.
                 autoDismissTask?.cancel()
                 autoDismissTask = Task {
                     try? await Task.sleep(for: .seconds(1.5))
@@ -146,6 +67,187 @@ struct ChatSheetView: View {
             }
         }
     }
+
+    // MARK: - Message scroll area
+
+    private var messageScrollView: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 12) {
+                    ForEach(viewModel.chatMessages) { message in
+                        chatBubble(message)
+                            .id(message.id)
+                    }
+                }
+                .padding()
+            }
+            .onChange(of: viewModel.chatMessages.count) { _, _ in
+                if let last = viewModel.chatMessages.last {
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        proxy.scrollTo(last.id, anchor: .bottom)
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Input area
+
+    @ViewBuilder
+    private func inputArea(s: AppStrings) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // Live partial transcript (shown while listening)
+            if !viewModel.chatDraftText.isEmpty, viewModel.chatFlowState == .listening {
+                Text(viewModel.chatDraftText)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 4)
+            }
+
+            // Status label
+            if !viewModel.chatStatusDescription.isEmpty {
+                HStack {
+                    Text(viewModel.chatStatusDescription)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                }
+            }
+
+            // Action rows — conflict / delete / disambiguation replace the composer
+            if viewModel.chatFlowState == .conflictPending {
+                conflictButtons(s: s)
+            } else if viewModel.chatFlowState == .deletePending {
+                deleteButtons(s: s)
+            } else if viewModel.chatFlowState == .disambiguating {
+                disambiguationCandidateList
+            } else {
+                // Chat composer: text field + send button or mic button
+                composerRow(s: s)
+            }
+        }
+    }
+
+    // MARK: - Composer row
+
+    private func composerRow(s: AppStrings) -> some View {
+        HStack(alignment: .bottom, spacing: 8) {
+            // Text field
+            TextField(s.chatTextInputPlaceholder, text: $typedText, axis: .vertical)
+                .lineLimit(1...5)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 9)
+                .background(Color(.secondarySystemGroupedBackground))
+                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .focused($isTextFieldFocused)
+                .submitLabel(.send)
+                .onSubmit { submitTypedText() }
+                .disabled(viewModel.chatFlowState == .processing)
+                .onChange(of: isTextFieldFocused) { _, focused in
+                    // When the user taps into the text field while recording, cancel the
+                    // recording session so they can type freely without noisy audio.
+                    if focused, viewModel.chatFlowState == .listening {
+                        Task { await viewModel.chatCancelListening() }
+                    }
+                }
+
+            // Right button: send (when text is ready) or mic (when field is empty)
+            if typedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                micButton(s: s)
+            } else {
+                sendButton
+            }
+        }
+    }
+
+    // MARK: - Mic button (compact, inline with the text field)
+
+    private func micButton(s: AppStrings) -> some View {
+        let isListening = viewModel.chatFlowState == .listening
+        let isEnabled   = viewModel.chatFlowState != .processing
+
+        return Button {
+            isTextFieldFocused = false
+            viewModel.chatMicrophoneTapped()
+        } label: {
+            ZStack {
+                Circle()
+                    .fill(isListening ? Color.red.opacity(0.15) : Color.accentColor.opacity(0.12))
+                    .frame(width: 44, height: 44)
+                Image(systemName: "mic.fill")
+                    .font(.system(size: 20, weight: .medium))
+                    .foregroundStyle(isListening ? Color.red : Color.accentColor)
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: isListening)
+        .accessibilityLabel(isListening ? s.voiceStopListening : s.voiceStartListening)
+    }
+
+    // MARK: - Send button
+
+    private var sendButton: some View {
+        Button(action: submitTypedText) {
+            ZStack {
+                Circle()
+                    .fill(Color.accentColor)
+                    .frame(width: 44, height: 44)
+                Image(systemName: "arrow.up")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(.white)
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(viewModel.chatFlowState == .processing)
+        .accessibilityLabel("Send")
+        .transition(.scale.combined(with: .opacity))
+    }
+
+    // MARK: - Submit typed text
+
+    private func submitTypedText() {
+        let trimmed = typedText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let textToSend = trimmed
+        typedText = ""
+        isTextFieldFocused = false
+        Task { await viewModel.chatSubmitTypedText(textToSend) }
+    }
+
+    // MARK: - Conflict buttons
+
+    private func conflictButtons(s: AppStrings) -> some View {
+        HStack(spacing: 12) {
+            Button(s.chatConflictCancel) { viewModel.chatCancelConflict() }
+                .buttonStyle(.bordered)
+                .frame(maxWidth: .infinity)
+
+            Button(s.chatConflictAddAnyway) { viewModel.chatConfirmConflict() }
+                .buttonStyle(.borderedProminent)
+                .frame(maxWidth: .infinity)
+        }
+        .padding(.top, 2)
+    }
+
+    // MARK: - Delete buttons
+
+    private func deleteButtons(s: AppStrings) -> some View {
+        HStack(spacing: 12) {
+            Button(s.chatDeleteKeep) { viewModel.chatCancelDelete() }
+                .buttonStyle(.bordered)
+                .frame(maxWidth: .infinity)
+
+            Button(s.chatDeleteConfirm) { viewModel.chatConfirmDelete() }
+                .buttonStyle(.borderedProminent)
+                .tint(.red)
+                .frame(maxWidth: .infinity)
+        }
+        .padding(.top, 2)
+    }
+
+    // MARK: - Disambiguation list
 
     @ViewBuilder
     private var disambiguationCandidateList: some View {
@@ -185,6 +287,8 @@ struct ChatSheetView: View {
         }
         .padding(.top, 2)
     }
+
+    // MARK: - Chat bubble
 
     private func chatBubble(_ message: ChatMessage) -> some View {
         let isUser = message.role == .user
