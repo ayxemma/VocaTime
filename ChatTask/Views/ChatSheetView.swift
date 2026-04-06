@@ -65,6 +65,14 @@ struct ChatSheetView: View {
                 viewModel.uiLanguage = newValue
                 Task { await viewModel.handleUILanguageChanged() }
             }
+            // When voice capture produces a transcript, move it into the text field
+            // so the user can review and edit before tapping send.
+            .onChange(of: viewModel.pendingVoiceTranscript) { _, transcript in
+                guard !transcript.isEmpty else { return }
+                typedText = transcript
+                viewModel.pendingVoiceTranscript = ""
+                isTextFieldFocused = true
+            }
         }
     }
 

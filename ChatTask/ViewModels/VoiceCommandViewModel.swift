@@ -54,6 +54,9 @@ final class VoiceCommandViewModel {
     var chatMessages: [ChatMessage] = []
     var chatFlowState: VoiceFlowState = .idle
     var chatDraftText: String = ""
+    /// Set after voice capture completes. The view observes this and moves it into the text
+    /// field so the user can review and edit before sending. Cleared by the view after pickup.
+    var pendingVoiceTranscript: String = ""
     var parsedCommand: ParsedCommand?
     var disambiguationCandidates: [TaskItem] = []
 
@@ -290,8 +293,7 @@ final class VoiceCommandViewModel {
         _ captureResult: LocalSpeechCaptureResult,
         strings: AppStrings
     ) async {
-        // Run the quick local evaluator to get a ParsedCommand for the routing decision.
-        // This is intentionally lightweight (IntentParserService only — no network).
+        // Quick local eval to inform the routing decision (no network).
         let localParsed = await localEvaluator.evaluate(
             transcript: captureResult.transcript,
             now: Date(),
@@ -309,13 +311,11 @@ final class VoiceCommandViewModel {
         switch routingDecision {
         case .acceptLocalTranscript(let trimmed):
             Self.log.info("[VoiceChat] routingDecision=acceptLocal transcript=\(trimmed, privacy: .public)")
-            // Audio file is kept alive until the defer below, but we don't upload it.
             defer { deleteAudioFile(captureResult.audioURL) }
-            await applyTranscriptToFlow(trimmed, source: .local)
+            deliverTranscriptToInputField(trimmed)
 
         case .fallbackToCloud:
             guard let audioURL = captureResult.audioURL else {
-                // No audio file — shouldn't happen, but fail gracefully.
                 chatMessages.append(ChatMessage(role: .assistant, text: strings.chatTranscriptionFailed))
                 chatFlowState = .error
                 return
@@ -360,28 +360,24 @@ final class VoiceCommandViewModel {
             return
         }
 
-        await applyTranscriptToFlow(transcript, source: .cloud)
+        deliverTranscriptToInputField(transcript)
     }
 
-    // MARK: - Shared transcript → parse → flow
+    // MARK: - Transcript → input field delivery
 
-    /// Appends the user message and runs the full parsing + task-creation flow.
-    /// `source` selects the parsing strategy: local transcripts get `localFirst`, cloud gets `llmFirst`.
-    private func applyTranscriptToFlow(_ rawTranscript: String, source: TranscriptSource) async {
+    /// Places the transcribed text into the input field for the user to review and send.
+    /// This is the final step of the voice pipeline — the user then taps send (or return)
+    /// which routes through `chatSubmitTypedText`, the same path as manual typed input.
+    private func deliverTranscriptToInputField(_ rawTranscript: String) {
         let trimmed = rawTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             chatMessages.append(ChatMessage(role: .assistant, text: uiLanguage.strings.chatEmptyTranscript))
             chatFlowState = .error
             return
         }
-
-        chatMessages.append(ChatMessage(role: .user, text: trimmed))
-        Self.log.info("[VoiceChat] transcriptSource=\(String(describing: source), privacy: .public) parsingTranscript=\(trimmed, privacy: .public)")
-
-        // Select parsing strategy based on transcript source.
-        parsingCoordinator.strategy = source == .local ? .localFirst : .llmFirst
-
-        await applyChatParse(transcript: trimmed)
+        Self.log.info("[VoiceChat] transcriptDeliveredToInputField=\(trimmed, privacy: .public)")
+        pendingVoiceTranscript = trimmed
+        chatFlowState = .idle
     }
 
     // MARK: - Parse + route to task actions (largely unchanged)
@@ -664,6 +660,7 @@ final class VoiceCommandViewModel {
         cancelMaxRecordingTimer()
         chatFlowState = .idle
         chatDraftText = ""
+        pendingVoiceTranscript = ""
         chatMessages = []
         parsedCommand = nil
         pendingConflictCommand = nil
