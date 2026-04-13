@@ -209,21 +209,12 @@ struct HomeView: View {
         .navigationTitle(strings.tasks)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
-                Menu {
-                    Picker("Language", selection: $languageRaw) {
-                        ForEach(AppUILanguage.allCases) { lang in
-                            Text(lang.displayName).tag(lang.rawValue)
-                        }
-                    }
+                NavigationLink {
+                    SettingsView()
                 } label: {
-                    HStack(spacing: 4) {
-                        Text(selectedUILanguage.displayName)
-                        Text("▾")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                    }
+                    Image(systemName: "gearshape")
                 }
-                .accessibilityLabel("Language")
+                .accessibilityLabel(strings.settingsNavigationTitle)
             }
             ToolbarItem(placement: .primaryAction) {
                 Button { showTaskComposer = true } label: {

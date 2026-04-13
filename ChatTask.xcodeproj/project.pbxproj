@@ -40,6 +40,7 @@
 		A10000000000000000000028 /* LocalTranscriptEvaluator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000028 /* LocalTranscriptEvaluator.swift */; };
 		A10000000000000000000029 /* TaskReminderService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000029 /* TaskReminderService.swift */; };
 		A1000000000000000000002A /* ReminderOffset.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000002A /* ReminderOffset.swift */; };
+		A1000000000000000000002B /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000002B /* SettingsView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -76,6 +77,7 @@
 		A20000000000000000000028 /* LocalTranscriptEvaluator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalTranscriptEvaluator.swift; sourceTree = "<group>"; };
 		A20000000000000000000029 /* TaskReminderService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskReminderService.swift; sourceTree = "<group>"; };
 		A2000000000000000000002A /* ReminderOffset.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReminderOffset.swift; sourceTree = "<group>"; };
+		A2000000000000000000002B /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		A30000000000000000000001 /* VocaTime.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VocaTime.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -147,6 +149,7 @@
 				A20000000000000000000003 /* RecordButtonView.swift */,
 				A20000000000000000000004 /* PermissionsView.swift */,
 				A20000000000000000000017 /* ChatSheetView.swift */,
+				A2000000000000000000002B /* SettingsView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -287,6 +290,7 @@
 				A10000000000000000000028 /* LocalTranscriptEvaluator.swift in Sources */,
 				A10000000000000000000029 /* TaskReminderService.swift in Sources */,
 				A1000000000000000000002A /* ReminderOffset.swift in Sources */,
+				A1000000000000000000002B /* SettingsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

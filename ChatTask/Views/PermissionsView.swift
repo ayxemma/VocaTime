@@ -5,16 +5,8 @@ struct PermissionsView: View {
     @Environment(PermissionService.self) private var permissionService
     @Environment(\.appUILanguage) private var appUILanguage
     @Environment(\.openURL) private var openURL
-    @AppStorage(ReminderOffset.defaultsKey) private var reminderDefaultMinutes: Int = 0
 
     private var strings: AppStrings { appUILanguage.strings }
-
-    private var selectedReminderOffset: Binding<ReminderOffset> {
-        Binding(
-            get: { ReminderOffset.nearest(to: reminderDefaultMinutes) },
-            set: { reminderDefaultMinutes = $0.rawValue }
-        )
-    }
 
     var body: some View {
         let s = strings
@@ -24,14 +16,6 @@ struct PermissionsView: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
-            }
-
-            Section(s.reminderDefaultLabel) {
-                Picker(s.reminderLabel, selection: selectedReminderOffset) {
-                    ForEach(ReminderOffset.allCases) { option in
-                        Text(option.displayLabel).tag(option)
-                    }
-                }
             }
 
             Section(s.permissionsStatusHeader) {

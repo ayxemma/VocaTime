@@ -198,6 +198,8 @@ struct AppStrings {
     let chatTextInputPlaceholder: String
     let reminderLabel: String
     let reminderDefaultLabel: String
+    let appLanguage: String
+    let settingsNavigationTitle: String
 
     static let english = AppStrings(
         tagline: "Speak → Understand → Schedule → Remind",
@@ -313,7 +315,9 @@ struct AppStrings {
         chatAppendSuccess: "Added note to \"%@\".",
         chatTextInputPlaceholder: "Type or say a task\u{2026}",
         reminderLabel: "Reminder",
-        reminderDefaultLabel: "Default Reminder"
+        reminderDefaultLabel: "Default Reminder",
+        appLanguage: "App Language",
+        settingsNavigationTitle: "Settings"
     )
 
     static let chineseSimplified = AppStrings(
@@ -430,7 +434,9 @@ struct AppStrings {
         chatAppendSuccess: "已为「%@」添加备注。",
         chatTextInputPlaceholder: "输入或说出任务\u{2026}",
         reminderLabel: "提醒",
-        reminderDefaultLabel: "默认提醒时间"
+        reminderDefaultLabel: "默认提醒时间",
+        appLanguage: "应用语言",
+        settingsNavigationTitle: "设置"
     )
 
     static let spanish = AppStrings(
@@ -547,7 +553,9 @@ struct AppStrings {
         chatAppendSuccess: "Nota añadida a \"%@\".",
         chatTextInputPlaceholder: "Escribe o di una tarea\u{2026}",
         reminderLabel: "Recordatorio",
-        reminderDefaultLabel: "Recordatorio predeterminado"
+        reminderDefaultLabel: "Recordatorio predeterminado",
+        appLanguage: "Idioma",
+        settingsNavigationTitle: "Ajustes"
     )
 }
 
