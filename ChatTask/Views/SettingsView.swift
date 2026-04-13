@@ -2,8 +2,11 @@ import SwiftUI
 
 struct SettingsView: View {
     @Environment(\.appUILanguage) private var appUILanguage
+    @Environment(SubscriptionManager.self) private var subscriptionManager
     @AppStorage(AppUILanguage.storageKey) private var languageRaw: String = AppUILanguage.defaultForDevice().rawValue
     @AppStorage(ReminderOffset.defaultsKey) private var reminderDefaultMinutes: Int = 0
+
+    @State private var showPaywall = false
 
     private var strings: AppStrings { appUILanguage.strings }
 
@@ -36,9 +39,20 @@ struct SettingsView: View {
                 .pickerStyle(.inline)
                 .labelsHidden()
             }
+
+            // Developer preview — remove before shipping
+            Section("Developer") {
+                Button("Preview Paywall") {
+                    showPaywall = true
+                }
+                .foregroundStyle(Color.accentColor)
+            }
         }
         .navigationTitle(s.settingsNavigationTitle)
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(isPresented: $showPaywall) {
+            PaywallView()
+        }
     }
 }
 

@@ -4,6 +4,7 @@ import SwiftUI
 @main
 struct ChatTaskApp: App {
     @State private var permissionService = PermissionService()
+    @State private var subscriptionManager = SubscriptionManager()
 
     init() {
         AppUILanguage.migrateLegacyUserDefaultsIfNeeded()
@@ -13,9 +14,15 @@ struct ChatTaskApp: App {
         WindowGroup {
             AppShellView()
                 .environment(permissionService)
+                .environment(subscriptionManager)
                 .task {
-                    // Request notification permission on first launch (no-op if already decided).
-                    await permissionService.requestNotificationsIfNeeded()
+                    // Subscription: start listening before any other async work so
+                    // background renewals and deferred purchases are never missed.
+                    subscriptionManager.startListeningForTransactions()
+                    async let entitlements: () = subscriptionManager.checkEntitlements()
+                    async let products: ()      = subscriptionManager.loadProducts()
+                    async let notifications: () = permissionService.requestNotificationsIfNeeded()
+                    _ = await (entitlements, products, notifications)
                 }
         }
         .modelContainer(for: TaskItem.self)
@@ -24,11 +31,23 @@ struct ChatTaskApp: App {
 
 private struct AppShellView: View {
     @AppStorage(AppUILanguage.storageKey) private var languageRaw: String = AppUILanguage.defaultForDevice().rawValue
+    @Environment(SubscriptionManager.self) private var subscriptionManager
+    @Query private var allTasks: [TaskItem]
+
+    @State private var showPaywall = false
 
     var body: some View {
         let uiLang = AppUILanguage(storageRaw: languageRaw)
         RootTabView()
             .environment(\.appUILanguage, uiLang)
             .environment(\.locale, uiLang.locale)
+            .sheet(isPresented: $showPaywall) {
+                PaywallView()
+            }
+            .onChange(of: allTasks.count) { _, newCount in
+                if !showPaywall && subscriptionManager.shouldShowPaywall(taskCount: newCount) {
+                    showPaywall = true
+                }
+            }
     }
 }

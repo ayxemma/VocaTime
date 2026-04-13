@@ -41,6 +41,9 @@
 		A10000000000000000000029 /* TaskReminderService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000029 /* TaskReminderService.swift */; };
 		A1000000000000000000002A /* ReminderOffset.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000002A /* ReminderOffset.swift */; };
 		A1000000000000000000002B /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000002B /* SettingsView.swift */; };
+		A1000000000000000000002C /* SubscriptionConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000002C /* SubscriptionConfig.swift */; };
+		A1000000000000000000002D /* SubscriptionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000002D /* SubscriptionManager.swift */; };
+		A1000000000000000000002E /* PaywallView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000002E /* PaywallView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -78,6 +81,10 @@
 		A20000000000000000000029 /* TaskReminderService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskReminderService.swift; sourceTree = "<group>"; };
 		A2000000000000000000002A /* ReminderOffset.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReminderOffset.swift; sourceTree = "<group>"; };
 		A2000000000000000000002B /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		A2000000000000000000002C /* SubscriptionConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubscriptionConfig.swift; sourceTree = "<group>"; };
+		A2000000000000000000002D /* SubscriptionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubscriptionManager.swift; sourceTree = "<group>"; };
+		A2000000000000000000002E /* PaywallView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaywallView.swift; sourceTree = "<group>"; };
+		A2000000000000000000002F /* ChatTask.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = "ChatTask.storekit"; sourceTree = "<group>"; };
 		A30000000000000000000001 /* VocaTime.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VocaTime.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -105,6 +112,7 @@
 			children = (
 				A20000000000000000000001 /* ChatTaskApp.swift */,
 				A20000000000000000000023 /* Secrets.swift */,
+				A2000000000000000000002F /* ChatTask.storekit */,
 				A50000000000000000000004 /* Views */,
 				A50000000000000000000005 /* ViewModels */,
 				A50000000000000000000008 /* Models */,
@@ -125,6 +133,7 @@
 				A20000000000000000000012 /* CalendarEventItem.swift */,
 				A20000000000000000000018 /* TaskItem.swift */,
 				A2000000000000000000002A /* ReminderOffset.swift */,
+				A2000000000000000000002C /* SubscriptionConfig.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -150,6 +159,7 @@
 				A20000000000000000000004 /* PermissionsView.swift */,
 				A20000000000000000000017 /* ChatSheetView.swift */,
 				A2000000000000000000002B /* SettingsView.swift */,
+				A2000000000000000000002E /* PaywallView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -175,6 +185,7 @@
 				A20000000000000000000027 /* TranscriptionRouter.swift */,
 				A20000000000000000000028 /* LocalTranscriptEvaluator.swift */,
 				A20000000000000000000029 /* TaskReminderService.swift */,
+				A2000000000000000000002D /* SubscriptionManager.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -291,6 +302,9 @@
 				A10000000000000000000029 /* TaskReminderService.swift in Sources */,
 				A1000000000000000000002A /* ReminderOffset.swift in Sources */,
 				A1000000000000000000002B /* SettingsView.swift in Sources */,
+				A1000000000000000000002C /* SubscriptionConfig.swift in Sources */,
+				A1000000000000000000002D /* SubscriptionManager.swift in Sources */,
+				A1000000000000000000002E /* PaywallView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

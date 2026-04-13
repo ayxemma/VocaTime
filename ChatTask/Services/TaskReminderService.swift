@@ -23,18 +23,38 @@ struct TaskReminderService {
 
     func schedule(for task: TaskItem) {
         let identifier = task.id.uuidString
+
+        // Always cancel the existing pending notification for this task first (upsert).
         center.removePendingNotificationRequests(withIdentifiers: [identifier])
 
-        guard
-            !task.isCompleted,
-            let scheduledDate = task.scheduledDate,
-            hasWallClockTime(scheduledDate)
-        else { return }
+        print("""
+        [Reminder] schedule() — id=\(identifier) title='\(task.title)' \
+        scheduledDate=\(String(describing: task.scheduledDate)) \
+        reminderOffsetMinutes=\(String(describing: task.reminderOffsetMinutes))
+        """)
+
+        guard !task.isCompleted else {
+            print("[Reminder] skip — task is already completed (id=\(identifier))")
+            return
+        }
+
+        guard let scheduledDate = task.scheduledDate else {
+            print("[Reminder] skip — no scheduledDate (id=\(identifier))")
+            return
+        }
+
+        guard hasWallClockTime(scheduledDate) else {
+            print("[Reminder] skip — date-only task, no wall-clock time (id=\(identifier), date=\(scheduledDate))")
+            return
+        }
 
         let offsetMinutes = task.reminderOffsetMinutes ?? ReminderOffset.globalDefault.rawValue
         let fireDate = scheduledDate.addingTimeInterval(-Double(offsetMinutes) * 60)
 
-        guard fireDate > Date() else { return }
+        guard fireDate > Date() else {
+            print("[Reminder] skip — triggerDate \(fireDate) is in the past (id=\(identifier))")
+            return
+        }
 
         let content = UNMutableNotificationContent()
         content.title = task.title
@@ -48,11 +68,19 @@ struct TaskReminderService {
         let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
         let request  = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
 
-        center.add(request)
+        center.add(request) { error in
+            if let error {
+                print("[Reminder] ERROR adding notification — id=\(identifier) error=\(error)")
+            } else {
+                print("[Reminder] scheduled ✓ — id=\(identifier) triggerDate=\(fireDate) offset=\(offsetMinutes)min")
+            }
+        }
     }
 
     func cancel(taskID: UUID) {
-        center.removePendingNotificationRequests(withIdentifiers: [taskID.uuidString])
+        let identifier = taskID.uuidString
+        print("[Reminder] cancel() — id=\(identifier)")
+        center.removePendingNotificationRequests(withIdentifiers: [identifier])
     }
 
     // MARK: - Helpers
@@ -76,9 +104,9 @@ struct TaskReminderService {
         let timeString = f.string(from: scheduledDate)
 
         switch offsetMinutes {
-        case 0:           return "Now · \(timeString)"
-        case 60:          return "In 1 hr · \(timeString)"
-        default:          return "In \(offsetMinutes) min · \(timeString)"
+        case 0:  return "Now · \(timeString)"
+        case 60: return "In 1 hr · \(timeString)"
+        default: return "In \(offsetMinutes) min · \(timeString)"
         }
     }
 }

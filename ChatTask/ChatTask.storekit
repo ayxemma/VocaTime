@@ -1,0 +1,84 @@
+{
+  "identifier" : "A1B2C3D4",
+  "nonConsumableProducts" : [],
+  "nonRenewingSubscriptionProducts" : [],
+  "products" : [],
+  "settings" : {
+    "_applicationUsername" : ""
+  },
+  "subscriptionGroups" : [
+    {
+      "id" : "CHATTASKPRO01",
+      "localizations" : [
+        {
+          "description" : "Full access to all ChatTask Pro features.",
+          "displayName" : "ChatTask Pro",
+          "locale" : "en_US"
+        }
+      ],
+      "name" : "ChatTask Pro",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "2.99",
+          "familySharable" : false,
+          "groupNumber" : 1,
+          "internalID" : "MONTHLY_001",
+          "introductoryOffer" : {
+            "duration" : "P5D",
+            "identifier" : "TRIAL_MONTHLY",
+            "offerMode" : "freeTrial",
+            "paymentMode" : "freeTrial",
+            "periodCount" : 1,
+            "type" : "introductory"
+          },
+          "localizations" : [
+            {
+              "description" : "Full access to ChatTask Pro. Billed monthly.",
+              "displayName" : "ChatTask Pro Monthly",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.chattask.pro.monthly",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "ChatTask Pro Monthly",
+          "subscriptionGroupID" : "CHATTASKPRO01",
+          "type" : "RecurringSubscription"
+        },
+        {
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "24.99",
+          "familySharable" : false,
+          "groupNumber" : 2,
+          "internalID" : "YEARLY_001",
+          "introductoryOffer" : {
+            "duration" : "P5D",
+            "identifier" : "TRIAL_YEARLY",
+            "offerMode" : "freeTrial",
+            "paymentMode" : "freeTrial",
+            "periodCount" : 1,
+            "type" : "introductory"
+          },
+          "localizations" : [
+            {
+              "description" : "Full access to ChatTask Pro. Billed yearly.",
+              "displayName" : "ChatTask Pro Yearly",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.chattask.pro.yearly",
+          "recurringSubscriptionPeriod" : "P1Y",
+          "referenceName" : "ChatTask Pro Yearly",
+          "subscriptionGroupID" : "CHATTASKPRO01",
+          "type" : "RecurringSubscription"
+        }
+      ]
+    }
+  ],
+  "version" : {
+    "major" : 2,
+    "minor" : 0
+  }
+}

@@ -7,6 +7,9 @@ struct TaskComposerView: View {
     @Environment(\.locale) private var locale
     @Environment(\.appUILanguage) private var appUILanguage
 
+    // All @State properties start at their defaults.
+    // onAppear resets them explicitly on every presentation so SwiftUI's state
+    // preservation across sheet presentations never leaks old values into a new task.
     @State private var title = ""
     @State private var notes = ""
     @State private var hasDate = false
@@ -20,7 +23,6 @@ struct TaskComposerView: View {
     @FocusState private var titleFocused: Bool
 
     private var calendar: Calendar { .current }
-
     private var strings: AppStrings { appUILanguage.strings }
 
     private var trimmedTitle: String {
@@ -146,10 +148,32 @@ struct TaskComposerView: View {
             }
         }
         .onAppear {
-            titleFocused = true
+            // FIX: Reset all local state on every appearance.
+            // SwiftUI can preserve @State across sheet presentations (same view
+            // identity in the hierarchy). Without this reset, values from a previous
+            // task creation — especially hasSpecificTime and timeSelection — carry
+            // into the new task and corrupt its scheduledDate and reminder.
+            title = ""
+            notes = ""
+            hasDate = false
+            hasSpecificTime = false
+            daySelection = calendar.startOfDay(for: Date())
+            timeSelection = Date()
+            showDatePicker = false
+            showTimePicker = false
             reminderOffset = ReminderOffset.globalDefault
+            titleFocused = true
+
+            print("""
+            [TaskComposer] Opened — state reset to clean defaults.
+              hasDate=\(hasDate)  hasSpecificTime=\(hasSpecificTime)
+              daySelection=\(daySelection)  timeSelection=\(timeSelection)
+              reminderOffset=\(reminderOffset.displayLabel)
+            """)
         }
     }
+
+    // MARK: - Summaries
 
     private var dateSummary: String {
         let s = strings
@@ -165,6 +189,8 @@ struct TaskComposerView: View {
         if !hasSpecificTime { return s.anytime }
         return timeSelection.formatted(Date.FormatStyle(date: .omitted, time: .shortened).locale(locale))
     }
+
+    // MARK: - Row builder
 
     private func composeRow(
         label: String,
@@ -190,7 +216,17 @@ struct TaskComposerView: View {
         .buttonStyle(.plain)
     }
 
+    // MARK: - Save
+
     private func save() {
+        print("""
+        [TaskComposer] Saving task —
+          title='\(trimmedTitle)'
+          hasDate=\(hasDate)  daySelection=\(daySelection)
+          hasSpecificTime=\(hasSpecificTime)  timeSelection=\(timeSelection)
+          reminderOffset=\(reminderOffset.displayLabel) (\(reminderOffset.rawValue) min)
+        """)
+
         let notesTrimmed = notes.trimmingCharacters(in: .whitespacesAndNewlines)
         let now = Date()
         let scheduled = TaskScheduleHelpers.scheduledDate(
@@ -215,6 +251,15 @@ struct TaskComposerView: View {
         )
         modelContext.insert(item)
         try? modelContext.save()
+
+        print("""
+        [TaskComposer] Task inserted —
+          id=\(item.id)
+          title='\(item.title)'
+          scheduledDate=\(String(describing: item.scheduledDate))
+          reminderOffsetMinutes=\(String(describing: item.reminderOffsetMinutes))
+        """)
+
         TaskReminderService.shared.schedule(for: item)
         dismiss()
     }
