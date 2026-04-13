@@ -410,14 +410,41 @@ final class VoiceCommandViewModel {
 
         // ── Create: conflict check then save ─────────────────────────────────
         let scheduledDate = command.reminderDate ?? command.startDate
+        print("""
+        [VoiceChat] conflictCheckInput
+          newTitle='\(command.title)'
+          reminderDate=\(String(describing: command.reminderDate))
+          startDate=\(String(describing: command.startDate))
+          resolvedScheduledDate=\(String(describing: scheduledDate))
+          timeZone=\(TimeZone.current.identifier)
+          hasWallClockTime=\(scheduledDate.map { TaskScheduleFormatting.hasWallClockTime($0) } ?? false)
+        """)
         if let date = scheduledDate,
            TaskScheduleFormatting.hasWallClockTime(date),
            let conflicting = findConflictingTask(near: date) {
-            Self.log.info("[VoiceChat] conflictDetected existingTitle=\(conflicting.title, privacy: .public) newTitle=\(command.title, privacy: .public)")
-            pendingConflictCommand = command
-            let timeStr = shortTimeFormatter.string(from: date)
+            // Use the EXISTING conflicting task's own scheduledDate for the time string
+            // so the warning says "you already have X at <X's actual time>", not the
+            // new task's proposed time.
+            let conflictingDate = conflicting.scheduledDate ?? date
+            let timeStr = shortTimeFormatter.string(from: conflictingDate)
             let warning = String(format: uiLanguage.strings.chatConflictWarning,
                                  conflicting.title, timeStr, command.title)
+            Self.log.info("""
+                [VoiceChat] conflictDetected \
+                existingTitle=\(conflicting.title, privacy: .public) \
+                existingScheduledDate=\(String(describing: conflicting.scheduledDate), privacy: .public) \
+                newTitle=\(command.title, privacy: .public) \
+                newScheduledDate=\(String(describing: date), privacy: .public) \
+                warningTimeStr=\(timeStr, privacy: .public)
+                """)
+            print("""
+            [VoiceChat] conflictDetected
+              existing: '\(conflicting.title)' at \(String(describing: conflicting.scheduledDate))
+              new:      '\(command.title)' proposed at \(date)
+              warningTimeStr=\(timeStr)
+              warning=\(warning)
+            """)
+            pendingConflictCommand = command
             chatMessages.append(ChatMessage(role: .assistant, text: warning))
             chatFlowState = .conflictPending
             return
@@ -629,23 +656,62 @@ final class VoiceCommandViewModel {
         let reply = confirmationMessage(for: command, userTranscript: command.originalText)
         chatMessages.append(ChatMessage(role: .assistant, text: reply))
         if let ctx = persistenceContext {
+            let resolvedDate = command.reminderDate ?? command.startDate
+            print("""
+            [VoiceChat] commitSave
+              title='\(command.title)'
+              scheduledDate=\(String(describing: resolvedDate))
+              reminderOffsetMinutes=\(ReminderOffset.globalDefault.rawValue) (globalDefault)
+            """)
             TaskItem.insertFromParsedCommand(command, context: ctx)
-            Self.log.info("[VoiceChat] taskSaveSuccess title=\(command.title, privacy: .public) actionType=\(String(describing: command.actionType), privacy: .public)")
+            Self.log.info("""
+                [VoiceChat] taskSaveSuccess \
+                title=\(command.title, privacy: .public) \
+                scheduledDate=\(String(describing: resolvedDate), privacy: .public) \
+                actionType=\(String(describing: command.actionType), privacy: .public)
+                """)
         }
         chatFlowState = .success
     }
 
+    /// Returns the first incomplete task whose scheduled time falls on the same
+    /// calendar day **and** the same exact hour+minute as `date`.
+    ///
+    /// The previous ±15-minute window was too broad: tasks 5 or 10 minutes apart
+    /// were incorrectly treated as conflicting, making every closely-timed task
+    /// appear to clash with the previous one.  Exact clock-time matching is the
+    /// correct MVP rule for this app.
     private func findConflictingTask(near date: Date) -> TaskItem? {
         guard let ctx = persistenceContext else { return nil }
         let descriptor = FetchDescriptor<TaskItem>(
             predicate: #Predicate<TaskItem> { !$0.isCompleted }
         )
         let candidates = (try? ctx.fetch(descriptor)) ?? []
-        let window: TimeInterval = 15 * 60
+        let cal = Calendar.current
+        let newHour   = cal.component(.hour,   from: date)
+        let newMinute = cal.component(.minute, from: date)
+
+        print("[ConflictCheck] scanning \(candidates.count) incomplete task(s) for exact-time match with \(date)")
+
         return candidates.first { item in
             guard let d = item.scheduledDate,
                   TaskScheduleFormatting.hasWallClockTime(d) else { return false }
-            return abs(d.timeIntervalSince(date)) <= window
+
+            let sameDay    = cal.isDate(d, inSameDayAs: date)
+            let sameHour   = cal.component(.hour,   from: d) == newHour
+            let sameMinute = cal.component(.minute, from: d) == newMinute
+            let isMatch    = sameDay && sameHour && sameMinute
+            let diffMin    = abs(d.timeIntervalSince(date)) / 60
+
+            print("""
+            [ConflictCheck] candidate='\(item.title)' \
+            existingDate=\(d) \
+            diffMin=\(String(format: "%.1f", diffMin)) \
+            sameDay=\(sameDay) sameHour=\(sameHour) sameMinute=\(sameMinute) \
+            → match=\(isMatch)
+            """)
+
+            return isMatch
         }
     }
 
