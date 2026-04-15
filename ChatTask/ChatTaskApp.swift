@@ -8,6 +8,9 @@ struct ChatTaskApp: App {
 
     init() {
         AppUILanguage.migrateLegacyUserDefaultsIfNeeded()
+        // Register the notification-center delegate immediately so foreground
+        // notifications are presented.  Must happen before any notification fires.
+        TaskReminderService.shared.setup()
     }
 
     var body: some Scene {
