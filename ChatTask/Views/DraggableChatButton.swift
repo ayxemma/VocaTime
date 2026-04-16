@@ -1,5 +1,29 @@
 import SwiftUI
 
+// MARK: - Storage (defaults vs saved position)
+
+private enum DraggableChatFABStorage {
+    private static let migratedKey = "homeChatFABPositionStorageMigrated_v1"
+
+    /// Ensures `homeChatFABHasSavedPosition` exists for installs that only had rel X/Y keys.
+    static func migrateIfNeeded() {
+        guard !UserDefaults.standard.bool(forKey: migratedKey) else { return }
+        defer { UserDefaults.standard.set(true, forKey: migratedKey) }
+
+        guard UserDefaults.standard.object(forKey: "homeChatFABHasSavedPosition") == nil else { return }
+
+        let hasRel = UserDefaults.standard.object(forKey: "homeChatFABRelX") != nil
+            || UserDefaults.standard.object(forKey: "homeChatFABRelY") != nil
+        guard hasRel else { return }
+
+        let xv = UserDefaults.standard.double(forKey: "homeChatFABRelX")
+        let yv = UserDefaults.standard.double(forKey: "homeChatFABRelY")
+        let isExactlyBottomRight = abs(xv - 1.0) < 1e-6 && abs(yv - 1.0) < 1e-6
+        // Any non–bottom-right stored values imply the user had dragged before.
+        UserDefaults.standard.set(!isExactlyBottomRight, forKey: "homeChatFABHasSavedPosition")
+    }
+}
+
 // MARK: - Metrics
 
 private enum DraggableChatButtonMetrics {
@@ -18,10 +42,12 @@ private enum DraggableChatButtonMetrics {
 /// non-blocking (full-screen pass-through except on the circle).
 struct DraggableChatButton: View {
 
-    /// Persisted horizontal position: 0 = left edge of the safe band, 1 = right (default).
+    /// Persisted horizontal position: 0 = left edge of the safe band, 1 = right.
     @AppStorage("homeChatFABRelX") private var storedRelX: Double = 1.0
-    /// Persisted vertical position: 0 = top of the safe band, 1 = bottom (default).
+    /// Persisted vertical position: 0 = top of the safe band, 1 = bottom.
     @AppStorage("homeChatFABRelY") private var storedRelY: Double = 1.0
+    /// After the first completed drag, restored values are used; until then, bottom-right default.
+    @AppStorage("homeChatFABHasSavedPosition") private var hasSavedPosition: Bool = false
 
     let onTap: () -> Void
     let accessibilityLabel: String
@@ -30,9 +56,11 @@ struct DraggableChatButton: View {
     @State private var isDragging = false
     #if DEBUG
     @State private var didLogInitialLayout = false
+    @State private var didLogPlacementMode = false
     #endif
 
     var body: some View {
+        let _ = DraggableChatFABStorage.migrateIfNeeded()
         GeometryReader { geo in
             let layout = layoutMetrics(in: geo)
             if layout.isValid {
@@ -106,6 +134,7 @@ struct DraggableChatButton: View {
                                     logLayoutDebug(geo: geo, layout: layoutNow, phase: "drop", droppedCenterY: snapped.y)
                                     #endif
                                     withAnimation(.spring(response: 0.38, dampingFraction: 0.84)) {
+                                        hasSavedPosition = true
                                         storedRelX = Double(nx)
                                         storedRelY = Double(ny)
                                     }
@@ -114,6 +143,11 @@ struct DraggableChatButton: View {
                 }
                 #if DEBUG
                 .onAppear {
+                    if !didLogPlacementMode {
+                        didLogPlacementMode = true
+                        let mode = hasSavedPosition ? "saved" : "default_bottom_right"
+                        print("[DraggableChatButton] placement: \(mode) rel=(\(storedRelX),\(storedRelY)) hasSavedPosition=\(hasSavedPosition)")
+                    }
                     guard !didLogInitialLayout else { return }
                     didLogInitialLayout = true
                     logLayoutDebug(geo: geo, layout: layout, phase: "initial", droppedCenterY: nil)
@@ -170,8 +204,16 @@ struct DraggableChatButton: View {
     }
 
     private func storedCenter(in band: SafeBand) -> CGPoint {
-        let nx = CGFloat(storedRelX.clamped(to: 0...1))
-        let ny = CGFloat(storedRelY.clamped(to: 0...1))
+        let nx: CGFloat
+        let ny: CGFloat
+        if hasSavedPosition {
+            nx = CGFloat(storedRelX.clamped(to: 0...1))
+            ny = CGFloat(storedRelY.clamped(to: 0...1))
+        } else {
+            // Bottom-right in the safe band (respects margins + home indicator via layout metrics).
+            nx = 1.0
+            ny = 1.0
+        }
         let x = band.minCenterX + nx * (band.maxCenterX - band.minCenterX)
         let y = band.minCenterY + ny * (band.maxCenterY - band.minCenterY)
         return CGPoint(x: x, y: y)
