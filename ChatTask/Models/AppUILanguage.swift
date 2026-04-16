@@ -220,6 +220,24 @@ struct AppStrings {
     let settingsPermissionNotificationsFooter: String
     let settingsPermissionMicrophoneFooter: String
     let settingsPermissionSpeechFooter: String
+    let settingsSectionGeneral: String
+    let settingsUILanguageFooter: String
+    let settingsSectionReminders: String
+    let settingsReminderDefaultFooter: String
+    let settingsSectionVoice: String
+    let settingsSectionSubscription: String
+    let settingsSubscriptionTitle: String
+    let settingsSubscriptionStatusActive: String
+    let settingsSubscriptionStatusNotSubscribed: String
+    let settingsRestorePurchases: String
+    let settingsSectionSupport: String
+    let settingsPrivacyPolicy: String
+    let settingsTermsOfUse: String
+    let settingsContactSupport: String
+    let settingsSectionAbout: String
+    let settingsVersionLabel: String
+    let settingsAppRowLabel: String
+    let settingsAlertErrorTitle: String
 
     static let english = AppStrings(
         tagline: "Speak → Understand → Schedule → Remind",
@@ -351,7 +369,25 @@ struct AppStrings {
         settingsPermissionDisabled: "Disabled",
         settingsPermissionNotificationsFooter: "Required for reminders to alert you on time.",
         settingsPermissionMicrophoneFooter: "Used for voice commands.",
-        settingsPermissionSpeechFooter: "Used to convert your voice into tasks."
+        settingsPermissionSpeechFooter: "Used to convert your voice into tasks.",
+        settingsSectionGeneral: "General",
+        settingsUILanguageFooter: "Applies to buttons and menus. Your task titles stay as you enter them.",
+        settingsSectionReminders: "Reminders",
+        settingsReminderDefaultFooter: "Used as the default lead time for new tasks and voice commands.",
+        settingsSectionVoice: "Voice & Input",
+        settingsSectionSubscription: "Subscription",
+        settingsSubscriptionTitle: "ChatTask Pro",
+        settingsSubscriptionStatusActive: "Active",
+        settingsSubscriptionStatusNotSubscribed: "Not subscribed",
+        settingsRestorePurchases: "Restore Purchases",
+        settingsSectionSupport: "Support",
+        settingsPrivacyPolicy: "Privacy Policy",
+        settingsTermsOfUse: "Terms of Use",
+        settingsContactSupport: "Contact Support",
+        settingsSectionAbout: "About",
+        settingsVersionLabel: "Version",
+        settingsAppRowLabel: "App",
+        settingsAlertErrorTitle: "Error"
     )
 
     static let chineseSimplified = AppStrings(
@@ -484,7 +520,25 @@ struct AppStrings {
         settingsPermissionDisabled: "未开启",
         settingsPermissionNotificationsFooter: "用于在约定时间发送提醒。",
         settingsPermissionMicrophoneFooter: "用于语音指令。",
-        settingsPermissionSpeechFooter: "用于将语音转为任务。"
+        settingsPermissionSpeechFooter: "用于将语音转为任务。",
+        settingsSectionGeneral: "通用",
+        settingsUILanguageFooter: "仅影响界面按钮与菜单，任务内容保持您输入的语言。",
+        settingsSectionReminders: "提醒",
+        settingsReminderDefaultFooter: "作为新任务与语音指令的默认提前提醒时间。",
+        settingsSectionVoice: "语音与输入",
+        settingsSectionSubscription: "订阅",
+        settingsSubscriptionTitle: "ChatTask Pro",
+        settingsSubscriptionStatusActive: "已订阅",
+        settingsSubscriptionStatusNotSubscribed: "未订阅",
+        settingsRestorePurchases: "恢复购买",
+        settingsSectionSupport: "支持",
+        settingsPrivacyPolicy: "隐私政策",
+        settingsTermsOfUse: "使用条款",
+        settingsContactSupport: "联系支持",
+        settingsSectionAbout: "关于",
+        settingsVersionLabel: "版本",
+        settingsAppRowLabel: "应用",
+        settingsAlertErrorTitle: "错误"
     )
 
     static let spanish = AppStrings(
@@ -617,7 +671,25 @@ struct AppStrings {
         settingsPermissionDisabled: "Desactivado",
         settingsPermissionNotificationsFooter: "Necesarias para que los recordatorios lleguen a tiempo.",
         settingsPermissionMicrophoneFooter: "Se usa para comandos de voz.",
-        settingsPermissionSpeechFooter: "Convierte tu voz en tareas."
+        settingsPermissionSpeechFooter: "Convierte tu voz en tareas.",
+        settingsSectionGeneral: "General",
+        settingsUILanguageFooter: "Afecta a botones y menús. Los títulos de tareas siguen el idioma que escribas.",
+        settingsSectionReminders: "Recordatorios",
+        settingsReminderDefaultFooter: "Tiempo de antelación por defecto para tareas nuevas y comandos de voz.",
+        settingsSectionVoice: "Voz y entrada",
+        settingsSectionSubscription: "Suscripción",
+        settingsSubscriptionTitle: "ChatTask Pro",
+        settingsSubscriptionStatusActive: "Activo",
+        settingsSubscriptionStatusNotSubscribed: "Sin suscripción",
+        settingsRestorePurchases: "Restaurar compras",
+        settingsSectionSupport: "Ayuda",
+        settingsPrivacyPolicy: "Política de privacidad",
+        settingsTermsOfUse: "Términos de uso",
+        settingsContactSupport: "Contactar soporte",
+        settingsSectionAbout: "Acerca de",
+        settingsVersionLabel: "Versión",
+        settingsAppRowLabel: "App",
+        settingsAlertErrorTitle: "Error"
     )
 }
 

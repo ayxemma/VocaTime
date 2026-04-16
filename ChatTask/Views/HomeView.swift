@@ -97,7 +97,6 @@ struct ComposerSession: Identifiable {
 
 struct HomeView: View {
     @Environment(\.modelContext) private var modelContext
-    @Environment(PermissionService.self) private var permissionService
     @Environment(\.appUILanguage) private var appUILanguage
     @AppStorage(AppUILanguage.storageKey) private var languageRaw: String = AppUILanguage.defaultForDevice().rawValue
     @AppStorage(homeSectionOrderKey) private var sectionOrderRaw: String = homeSectionOrderDefault
@@ -179,8 +178,6 @@ struct HomeView: View {
         ZStack(alignment: .bottomTrailing) {
             ScrollView {
                 VStack(spacing: 28) {
-                    statusStrip
-
                     dashboardSection
                 }
                 .padding(.top, 12)
@@ -234,9 +231,6 @@ struct HomeView: View {
         .onChange(of: languageRaw) { _, _ in
             viewModel.uiLanguage = selectedUILanguage
             Task { await viewModel.handleUILanguageChanged() }
-        }
-        .task {
-            await permissionService.refreshAll()
         }
     }
 
@@ -379,29 +373,6 @@ struct HomeView: View {
         return !TaskScheduleFormatting.hasWallClockTime(d, calendar: calendar)
     }
 
-    // MARK: - Status strip
-
-    @ViewBuilder
-    private var statusStrip: some View {
-        let s = strings
-        let denied = PermissionKind.allCases.filter {
-            permissionService.status(for: $0) == .denied
-        }
-        if !denied.isEmpty {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("\(s.permissionsDeniedPrefix) \(denied.map { $0.localizedTitle(strings: s) }.joined(separator: ", "))")
-                    .font(.footnote)
-                Text(s.openPermissionHint)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding()
-            .background(Color.orange.opacity(0.12))
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-            .padding(.horizontal)
-        }
-    }
 }
 
 #Preview {
@@ -409,7 +380,6 @@ struct HomeView: View {
     let container = try! ModelContainer(for: TaskItem.self, configurations: config)
     NavigationStack {
         HomeView()
-            .environment(PermissionService())
             .environment(\.appUILanguage, .en)
     }
     .modelContainer(container)
