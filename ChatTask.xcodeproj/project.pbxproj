@@ -44,6 +44,7 @@
 		A1000000000000000000002C /* SubscriptionConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000002C /* SubscriptionConfig.swift */; };
 		A1000000000000000000002D /* SubscriptionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000002D /* SubscriptionManager.swift */; };
 		A1000000000000000000002E /* PaywallView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000002E /* PaywallView.swift */; };
+		A10000000000000000000030 /* DraggableChatButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000030 /* DraggableChatButton.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -84,6 +85,7 @@
 		A2000000000000000000002C /* SubscriptionConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubscriptionConfig.swift; sourceTree = "<group>"; };
 		A2000000000000000000002D /* SubscriptionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubscriptionManager.swift; sourceTree = "<group>"; };
 		A2000000000000000000002E /* PaywallView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaywallView.swift; sourceTree = "<group>"; };
+		A20000000000000000000030 /* DraggableChatButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DraggableChatButton.swift; sourceTree = "<group>"; };
 		A2000000000000000000002F /* ChatTask.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = "ChatTask.storekit"; sourceTree = "<group>"; };
 		A30000000000000000000001 /* VocaTime.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VocaTime.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -150,6 +152,7 @@
 			isa = PBXGroup;
 			children = (
 				A20000000000000000000002 /* HomeView.swift */,
+				A20000000000000000000030 /* DraggableChatButton.swift */,
 				A2000000000000000000001A /* CalendarView.swift */,
 				A2000000000000000000001B /* RootTabView.swift */,
 				A20000000000000000000019 /* TaskRowView.swift */,
@@ -271,6 +274,7 @@
 			files = (
 				A10000000000000000000001 /* VocaTimeApp.swift in Sources */,
 				A10000000000000000000002 /* HomeView.swift in Sources */,
+				A10000000000000000000030 /* DraggableChatButton.swift in Sources */,
 				A10000000000000000000003 /* RecordButtonView.swift in Sources */,
 				A10000000000000000000004 /* PermissionsView.swift in Sources */,
 				A10000000000000000000005 /* VoiceCommandViewModel.swift in Sources */,

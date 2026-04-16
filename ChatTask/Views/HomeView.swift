@@ -175,7 +175,7 @@ struct HomeView: View {
 
     var body: some View {
         let s = strings
-        ZStack(alignment: .bottomTrailing) {
+        ZStack {
             ScrollView {
                 VStack(spacing: 28) {
                     dashboardSection
@@ -185,18 +185,10 @@ struct HomeView: View {
             }
             .background(Color(.systemGroupedBackground))
 
-            Button { showChat = true } label: {
-                Image(systemName: "message.fill")
-                    .font(.system(size: 22, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 56, height: 56)
-                    .background(Color.accentColor)
-                    .clipShape(Circle())
-                    .shadow(color: .black.opacity(0.2), radius: 6, y: 3)
-            }
-            .accessibilityLabel(s.openCommandChat)
-            .padding(.trailing, 20)
-            .padding(.bottom, 28)
+            DraggableChatButton(
+                onTap: { showChat = true },
+                accessibilityLabel: s.openCommandChat
+            )
         }
         .sheet(isPresented: $showChat) {
             ChatSheetView(viewModel: viewModel)
