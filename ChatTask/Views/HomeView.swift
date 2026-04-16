@@ -182,18 +182,9 @@ struct HomeView: View {
                     statusStrip
 
                     dashboardSection
-
-                    NavigationLink {
-                        PermissionsView()
-                    } label: {
-                        Label(s.permissionStatus, systemImage: "lock.shield")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-                    .padding(.horizontal)
-                    .padding(.bottom, 100)
                 }
                 .padding(.top, 12)
+                .padding(.bottom, 36)
             }
             .background(Color(.systemGroupedBackground))
 

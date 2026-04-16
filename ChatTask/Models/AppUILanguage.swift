@@ -211,6 +211,15 @@ struct AppStrings {
     let reminderDefaultLabel: String
     let appLanguage: String
     let settingsNavigationTitle: String
+    let settingsPermissionsSection: String
+    let settingsPermissionNotificationsTitle: String
+    let settingsPermissionMicrophoneTitle: String
+    let settingsPermissionSpeechTitle: String
+    let settingsPermissionEnabled: String
+    let settingsPermissionDisabled: String
+    let settingsPermissionNotificationsFooter: String
+    let settingsPermissionMicrophoneFooter: String
+    let settingsPermissionSpeechFooter: String
 
     static let english = AppStrings(
         tagline: "Speak → Understand → Schedule → Remind",
@@ -333,7 +342,16 @@ struct AppStrings {
         reminderLabel: "Reminder",
         reminderDefaultLabel: "Default Reminder",
         appLanguage: "App Language",
-        settingsNavigationTitle: "Settings"
+        settingsNavigationTitle: "Settings",
+        settingsPermissionsSection: "Permissions",
+        settingsPermissionNotificationsTitle: "Notifications",
+        settingsPermissionMicrophoneTitle: "Microphone",
+        settingsPermissionSpeechTitle: "Speech Recognition",
+        settingsPermissionEnabled: "Enabled",
+        settingsPermissionDisabled: "Disabled",
+        settingsPermissionNotificationsFooter: "Required for reminders to alert you on time.",
+        settingsPermissionMicrophoneFooter: "Used for voice commands.",
+        settingsPermissionSpeechFooter: "Used to convert your voice into tasks."
     )
 
     static let chineseSimplified = AppStrings(
@@ -457,7 +475,16 @@ struct AppStrings {
         reminderLabel: "提醒",
         reminderDefaultLabel: "默认提醒时间",
         appLanguage: "应用语言",
-        settingsNavigationTitle: "设置"
+        settingsNavigationTitle: "设置",
+        settingsPermissionsSection: "权限",
+        settingsPermissionNotificationsTitle: "通知",
+        settingsPermissionMicrophoneTitle: "麦克风",
+        settingsPermissionSpeechTitle: "语音识别",
+        settingsPermissionEnabled: "已开启",
+        settingsPermissionDisabled: "未开启",
+        settingsPermissionNotificationsFooter: "用于在约定时间发送提醒。",
+        settingsPermissionMicrophoneFooter: "用于语音指令。",
+        settingsPermissionSpeechFooter: "用于将语音转为任务。"
     )
 
     static let spanish = AppStrings(
@@ -581,7 +608,16 @@ struct AppStrings {
         reminderLabel: "Recordatorio",
         reminderDefaultLabel: "Recordatorio predeterminado",
         appLanguage: "Idioma",
-        settingsNavigationTitle: "Ajustes"
+        settingsNavigationTitle: "Ajustes",
+        settingsPermissionsSection: "Permisos",
+        settingsPermissionNotificationsTitle: "Notificaciones",
+        settingsPermissionMicrophoneTitle: "Micrófono",
+        settingsPermissionSpeechTitle: "Reconocimiento de voz",
+        settingsPermissionEnabled: "Activado",
+        settingsPermissionDisabled: "Desactivado",
+        settingsPermissionNotificationsFooter: "Necesarias para que los recordatorios lleguen a tiempo.",
+        settingsPermissionMicrophoneFooter: "Se usa para comandos de voz.",
+        settingsPermissionSpeechFooter: "Convierte tu voz en tareas."
     )
 }
 
