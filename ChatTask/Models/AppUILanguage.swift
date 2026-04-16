@@ -160,7 +160,16 @@ struct AppStrings {
     let voiceStartListening: String
     let voiceStopListening: String
     let chatEmptyTranscript: String
-    let chatTranscriptionFailed: String
+    /// User was offline when the transcription call was made.
+    let chatErrorOffline: String
+    /// Audio file was empty or too short to contain speech.
+    let chatErrorNothingRecorded: String
+    /// Cloud service returned an HTTP error (4xx / 5xx).
+    let chatErrorServiceUnavailable: String
+    /// Decoding or any other unexpected internal failure.
+    let chatErrorSomethingWentWrong: String
+    /// API key is missing / service not configured — never say "API key" to the user.
+    let chatErrorServiceNotAvailable: String
     let chatUnknownSchedule: String
     let chatTryRemind: String
     let chatReminderMinutes: String
@@ -274,7 +283,11 @@ struct AppStrings {
         voiceStartListening: "Start listening",
         voiceStopListening: "Stop listening",
         chatEmptyTranscript: "I didn’t catch that. Try speaking a bit longer.",
-        chatTranscriptionFailed: "Couldn’t transcribe your voice. Check your network and API key, then try again.",
+        chatErrorOffline: "You're offline. Please check your internet connection.",
+        chatErrorNothingRecorded: "Couldn’t hear anything. Please try again.",
+        chatErrorServiceUnavailable: "Service is temporarily unavailable. Please try again.",
+        chatErrorSomethingWentWrong: "Something went wrong. Please try again.",
+        chatErrorServiceNotAvailable: "Service is not available right now.",
         chatUnknownSchedule: """
             I saved %@, but I couldn’t confidently figure out a date or time from what you said.
 
@@ -393,7 +406,11 @@ struct AppStrings {
         voiceStartListening: "开始聆听",
         voiceStopListening: "停止聆听",
         chatEmptyTranscript: "没听清，请再说长一点。",
-        chatTranscriptionFailed: "语音转写失败。请检查网络与 API 密钥后重试。",
+        chatErrorOffline: "您已离线，请检查网络连接。",
+        chatErrorNothingRecorded: "没有听到声音，请重试。",
+        chatErrorServiceUnavailable: "服务暂时不可用，请稍后重试。",
+        chatErrorSomethingWentWrong: "出错了，请重试。",
+        chatErrorServiceNotAvailable: "服务目前不可用。",
         chatUnknownSchedule: """
             已保存 %@，但无法从您的话里确定日期或时间。
 
@@ -512,7 +529,11 @@ struct AppStrings {
         voiceStartListening: "Empezar a escuchar",
         voiceStopListening: "Dejar de escuchar",
         chatEmptyTranscript: "No te he oído bien. Habla un poco más.",
-        chatTranscriptionFailed: "No se pudo transcribir tu voz. Revisa la red y la clave de API e inténtalo de nuevo.",
+        chatErrorOffline: "Estás sin conexión. Comprueba tu acceso a internet.",
+        chatErrorNothingRecorded: "No pude escuchar nada. Por favor, inténtalo de nuevo.",
+        chatErrorServiceUnavailable: "El servicio no está disponible en este momento. Inténtalo más tarde.",
+        chatErrorSomethingWentWrong: "Algo salió mal. Por favor, inténtalo de nuevo.",
+        chatErrorServiceNotAvailable: "El servicio no está disponible ahora mismo.",
         chatUnknownSchedule: """
             Guardé %@, pero no pude deducir con seguridad una fecha u hora de lo que dijiste.
 

@@ -316,7 +316,7 @@ final class VoiceCommandViewModel {
 
         case .fallbackToCloud:
             guard let audioURL = captureResult.audioURL else {
-                chatMessages.append(ChatMessage(role: .assistant, text: strings.chatTranscriptionFailed))
+                chatMessages.append(ChatMessage(role: .assistant, text: strings.chatErrorNothingRecorded))
                 chatFlowState = .error
                 return
             }
@@ -336,25 +336,35 @@ final class VoiceCommandViewModel {
             transcript = try await transcriptionService.transcribe(audioFileURL: audioURL)
             Self.log.info("[VoiceChat] cloudTranscriptionSuccess transcript=\(transcript, privacy: .public)")
         } catch {
+            // Map each error category to a precise log string (for debugging)
+            // and a clean user-facing message (no API / HTTP / internal terms).
             let rootCause: String
+            let userMessage: String
             switch error {
             case MultilingualTranscriptionError.missingAPIKey:
-                rootCause = "missingAPIKey"
+                rootCause = "missingAPIKey — set OPENAI_API_KEY env var or fill in Secrets.openAIAPIKey"
+                userMessage = strings.chatErrorServiceNotAvailable
             case MultilingualTranscriptionError.fileReadFailed(let u):
                 rootCause = "fileReadFailed — \(u.localizedDescription)"
+                userMessage = strings.chatErrorSomethingWentWrong
             case MultilingualTranscriptionError.fileEmpty:
-                rootCause = "fileEmpty"
+                rootCause = "fileEmpty — audio file was empty or contained no speech frames"
+                userMessage = strings.chatErrorNothingRecorded
             case MultilingualTranscriptionError.networkError(let u):
                 rootCause = "networkError — \(u.localizedDescription)"
-            case MultilingualTranscriptionError.httpError(let code, _):
-                rootCause = "http\(code)"
-            case MultilingualTranscriptionError.decodingFailed(let u, _):
-                rootCause = "decodingFailed — \(u.localizedDescription)"
+                userMessage = strings.chatErrorOffline
+            case MultilingualTranscriptionError.httpError(let code, let body):
+                rootCause = "httpError — status=\(code) body=\(body.prefix(200))"
+                userMessage = strings.chatErrorServiceUnavailable
+            case MultilingualTranscriptionError.decodingFailed(let u, let raw):
+                rootCause = "decodingFailed — \(u.localizedDescription) rawBody=\(raw.prefix(200))"
+                userMessage = strings.chatErrorSomethingWentWrong
             default:
                 rootCause = "unknown — \(String(describing: error))"
+                userMessage = strings.chatErrorSomethingWentWrong
             }
             Self.log.error("[VoiceChat] cloudTranscriptionFailure rootCause=\(rootCause, privacy: .public)")
-            chatMessages.append(ChatMessage(role: .assistant, text: strings.chatTranscriptionFailed))
+            chatMessages.append(ChatMessage(role: .assistant, text: userMessage))
             parsedCommand = nil
             chatFlowState = .error
             return
@@ -739,15 +749,17 @@ final class VoiceCommandViewModel {
 
     private func localizedStopFailure(_ error: Error, speechMsgs: SpeechServiceMessages) -> String {
         let ns = error as NSError
+        Self.log.error("[VoiceChat] captureFailure domain=\(ns.domain, privacy: .public) code=\(ns.code, privacy: .public) desc=\(ns.localizedDescription, privacy: .public)")
         if ns.domain == VocaTimeSpeechDomain.name, let code = VocaTimeSpeechErrorCode(rawValue: ns.code) {
             switch code {
-            case .nothingToStop: return speechMsgs.nothingToStop
-            case .interrupted:   return speechMsgs.interrupted
+            case .nothingToStop:   return speechMsgs.nothingToStop
+            case .interrupted:     return speechMsgs.interrupted
             case .recordingFailed: return speechMsgs.recognitionStopped
-            case .generic: break
+            case .generic:         return speechMsgs.recognitionStopped
             }
         }
-        return ns.localizedDescription
+        // Unknown domain / code — log full detail, show generic message to user.
+        return speechMsgs.recognitionStopped
     }
 
     private var shortTimeFormatter: DateFormatter {
