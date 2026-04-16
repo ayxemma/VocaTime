@@ -37,14 +37,24 @@ struct LLMTaskParserService: TaskParsing {
         - "appendToTask"  — user wants to add extra text/note to an existing task
 
         For CREATE commands (reminder / calendarEvent / unknown):
-          - "title": the task name
-          - "notes": any extra details
+          - "title": the core task phrase, concise and natural. Strip filler like "remind me to" / "don't forget to". If the sentence is already short, put everything here.
+          - "notes": ONLY populate when there is clearly extra supporting detail that would make the title too long or cluttered — otherwise null. Common triggers: "and also", "also", "顺便", "另外", multiple separate actions, or a long secondary clause.
           - "scheduled_at": ISO8601 datetime if a time is given, else null
           - "end_at": ISO8601 end time if given, else null
           - "has_specific_time": true if a clock time is mentioned
           - "target_time": null
           - "new_scheduled_at": null
           - "append_text": null
+
+        Title/notes examples:
+          "Call the doctor at 3 about Ari's vaccine records"
+          → {"title":"Call the doctor about Ari's vaccine records","notes":null}
+
+          "Remind me tomorrow at 5 to call the doctor about Ari's vaccine records and also ask whether the follow-up appointment should be next week"
+          → {"title":"Call the doctor about Ari's vaccine records","notes":"Also ask whether the follow-up appointment should be next week"}
+
+          "明天下午五点提醒我给医生打电话问Ari的疫苗记录，然后顺便确认下周要不要复诊"
+          → {"title":"给医生打电话问Ari的疫苗记录","notes":"确认下周要不要复诊"}
 
         For EDIT commands (deleteTask / rescheduleTask / appendToTask):
           - "title": null (or the task title if the user mentions it by name)
