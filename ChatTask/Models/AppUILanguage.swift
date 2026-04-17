@@ -15,7 +15,7 @@ enum AppUILanguage: String, CaseIterable, Identifiable, Hashable {
     case ptBR = "pt-BR"
     case it = "it"
     case nl = "nl"
-    /// Hindi UI option; strings fall back to English until localized copy exists.
+    /// Hindi UI (`AppStrings.hindi`, `SpeechServiceMessages.hindi`).
     case hi = "hi"
 
     var id: String { rawValue }
@@ -108,7 +108,7 @@ enum AppUILanguage: String, CaseIterable, Identifiable, Hashable {
         case .ptBR: return .portugueseBrazil
         case .it: return .italian
         case .nl: return .dutch
-        case .hi: return .english
+        case .hi: return .hindi
         }
     }
 
@@ -125,7 +125,7 @@ enum AppUILanguage: String, CaseIterable, Identifiable, Hashable {
         case .ptBR: return .portugueseBrazil
         case .it: return .italian
         case .nl: return .dutch
-        case .hi: return .english
+        case .hi: return .hindi
         }
     }
 }

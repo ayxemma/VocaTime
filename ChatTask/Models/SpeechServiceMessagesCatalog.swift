@@ -176,4 +176,26 @@ extension SpeechServiceMessages {
         recognitionStopped: "Herkenning gestopt.",
         interrupted: "Onderbroken."
     )
+
+    static let hindi = SpeechServiceMessages(
+        speechNotAvailable: "वाणी पहचान उपलब्ध नहीं है।",
+        micDeniedSettings: "माइक्रोफ़ोन पहुँच अस्वीकृत। सेटिंग्स → गोपनीयता → माइक्रोफ़ोन में सक्षम करें।",
+        micDenied: "माइक्रोफ़ोन पहुँच अस्वीकृत। सेटिंग्स → गोपनीयता → माइक्रोफ़ोन में सक्षम करें।",
+        micUnavailable: "माइक्रोफ़ोन उपलब्ध नहीं है।",
+        unsupportedLocale: "«%@» के लिए वाणी पहचान समर्थित नहीं। दूसरी भाषा आज़माएँ।",
+        localeUnavailable: "अभी इस उपकरण पर «%@» के लिए वाणी पहचान उपलब्ध नहीं। अंग्रेज़ी आज़माएँ, नेटवर्क जाँचें या बाद में पुनः प्रयास करें।",
+        micUseFailed: "माइक्रोफ़ोन उपयोग नहीं हो सका: %@",
+        micInputUnavailable: "इस उपकरण पर माइक्रोफ़ोन इनपुट उपलब्ध नहीं है।",
+        audioStartFailed: "ऑडियो शुरू नहीं हो सका: %@",
+        nothingToStop: "रोकने के लिए कुछ नहीं — पहले सुनना शुरू करें।",
+        speechDeniedSettings: "वाणी पहचान बंद है। सेटिंग्स → गोपनीयता → वाणी पहचान में सक्षम करें।",
+        speechRestricted: "इस उपकरण पर वाणी पहचान प्रतिबंधित है।",
+        speechNotDetermined: "वाणी पहचान अनुमति आवश्यक है।",
+        speechNotAllowed: "वाणी पहचान की अनुमति नहीं है।",
+        noSpeechDetected: "कोई आवाज़ नहीं पहचानी। माइक्रोफ़ोन के पास से पुनः प्रयास करें।",
+        recognitionCanceled: "पहचान रद्द की गई।",
+        recognitionFailedFormat: "वाणी पहचान विफल: %@",
+        recognitionStopped: "पहचान रोक दी गई।",
+        interrupted: "बाधित।"
+    )
 }

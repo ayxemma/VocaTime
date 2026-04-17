@@ -51,6 +51,7 @@
 		A10000000000000000000034 /* SpeechServiceMessagesCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000034 /* SpeechServiceMessagesCatalog.swift */; };
 		A10000000000000000000035 /* BackendConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000035 /* BackendConfig.swift */; };
 		A10000000000000000000036 /* BackendCorrelation.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000036 /* BackendCorrelation.swift */; };
+		A10000000000000000000037 /* AppStringsPackHindi.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000037 /* AppStringsPackHindi.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -98,6 +99,7 @@
 		A20000000000000000000034 /* SpeechServiceMessagesCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechServiceMessagesCatalog.swift; sourceTree = "<group>"; };
 		A20000000000000000000035 /* BackendConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackendConfig.swift; sourceTree = "<group>"; };
 		A20000000000000000000036 /* BackendCorrelation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackendCorrelation.swift; sourceTree = "<group>"; };
+		A20000000000000000000037 /* AppStringsPackHindi.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStringsPackHindi.swift; sourceTree = "<group>"; };
 		A2000000000000000000002F /* ChatTask.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = "ChatTask.storekit"; sourceTree = "<group>"; };
 		A30000000000000000000001 /* VocaTime.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VocaTime.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -144,6 +146,7 @@
 				A20000000000000000000031 /* AppStringsCatalog.swift */,
 				A20000000000000000000032 /* AppStringsPackEU.swift */,
 				A20000000000000000000033 /* AppStringsPackAsiaPTIT.swift */,
+				A20000000000000000000037 /* AppStringsPackHindi.swift */,
 				A20000000000000000000034 /* SpeechServiceMessagesCatalog.swift */,
 				A20000000000000000000010 /* ParsedCommand.swift */,
 				A2000000000000000000001D /* LLMTaskParseResponse.swift */,
@@ -323,6 +326,7 @@
 				A10000000000000000000031 /* AppStringsCatalog.swift in Sources */,
 				A10000000000000000000032 /* AppStringsPackEU.swift in Sources */,
 				A10000000000000000000033 /* AppStringsPackAsiaPTIT.swift in Sources */,
+				A10000000000000000000037 /* AppStringsPackHindi.swift in Sources */,
 				A10000000000000000000034 /* SpeechServiceMessagesCatalog.swift in Sources */,
 				A10000000000000000000026 /* MultilingualTranscriptionService.swift in Sources */,
 				A10000000000000000000027 /* TranscriptionRouter.swift in Sources */,
