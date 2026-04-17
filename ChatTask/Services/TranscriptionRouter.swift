@@ -4,7 +4,7 @@ import os.log
 // MARK: - Quality signal
 
 /// Aggregates all signals used to decide whether a local Apple speech transcript is
-/// trustworthy enough to skip the cloud (OpenAI) transcription fallback.
+/// trustworthy enough to skip the cloud (backend) transcription fallback.
 struct TranscriptionQualitySignal {
     let transcript: String
     let confidence: Float?

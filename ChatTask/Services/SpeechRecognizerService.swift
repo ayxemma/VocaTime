@@ -66,7 +66,7 @@ protocol SpeechManaging: AnyObject {
  Previous behaviour:
    • AVAudioRecorder captured audio to a temp .m4a file.
    • stopRecording() returned the file URL.
-   • VoiceCommandViewModel always uploaded the file to OpenAI Whisper.
+   • VoiceCommandViewModel always uploaded the file to the backend for transcription.
    • No live partial transcript was available during recording.
 
  New behaviour:
@@ -77,7 +77,7 @@ protocol SpeechManaging: AnyObject {
    • stopListening() waits up to 2 s for Apple's "isFinal" transcript, then returns
      both the transcript and the audio URL in LocalSpeechCaptureResult.
    • VoiceCommandViewModel routes: if local transcript passes quality checks, parse
-     immediately. Only if it fails, upload the audio to OpenAI Whisper.
+     immediately. Only if it fails, upload the audio to the backend `/transcribe` endpoint.
 
  Why we keep the audio file even when local recognition succeeds:
    The TranscriptionRouter may upgrade its decision (e.g. mixed-language or low-confidence

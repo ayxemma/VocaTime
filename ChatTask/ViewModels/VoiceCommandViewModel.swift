@@ -341,9 +341,6 @@ final class VoiceCommandViewModel {
             let rootCause: String
             let userMessage: String
             switch error {
-            case MultilingualTranscriptionError.missingAPIKey:
-                rootCause = "missingAPIKey — set OPENAI_API_KEY env var or fill in Secrets.openAIAPIKey"
-                userMessage = strings.chatErrorServiceNotAvailable
             case MultilingualTranscriptionError.fileReadFailed(let u):
                 rootCause = "fileReadFailed — \(u.localizedDescription)"
                 userMessage = strings.chatErrorSomethingWentWrong

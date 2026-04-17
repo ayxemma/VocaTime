@@ -49,6 +49,7 @@
 		A10000000000000000000032 /* AppStringsPackEU.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000032 /* AppStringsPackEU.swift */; };
 		A10000000000000000000033 /* AppStringsPackAsiaPTIT.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000033 /* AppStringsPackAsiaPTIT.swift */; };
 		A10000000000000000000034 /* SpeechServiceMessagesCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000034 /* SpeechServiceMessagesCatalog.swift */; };
+		A10000000000000000000035 /* BackendConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000035 /* BackendConfig.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -94,6 +95,7 @@
 		A20000000000000000000032 /* AppStringsPackEU.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStringsPackEU.swift; sourceTree = "<group>"; };
 		A20000000000000000000033 /* AppStringsPackAsiaPTIT.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStringsPackAsiaPTIT.swift; sourceTree = "<group>"; };
 		A20000000000000000000034 /* SpeechServiceMessagesCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechServiceMessagesCatalog.swift; sourceTree = "<group>"; };
+		A20000000000000000000035 /* BackendConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackendConfig.swift; sourceTree = "<group>"; };
 		A2000000000000000000002F /* ChatTask.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = "ChatTask.storekit"; sourceTree = "<group>"; };
 		A30000000000000000000001 /* VocaTime.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VocaTime.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -190,6 +192,7 @@
 		A50000000000000000000006 /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				A20000000000000000000035 /* BackendConfig.swift */,
 				A20000000000000000000006 /* PermissionService.swift */,
 				A20000000000000000000009 /* SpeechRecognizerService.swift */,
 				A20000000000000000000026 /* MultilingualTranscriptionService.swift */,
@@ -291,6 +294,7 @@
 				A10000000000000000000004 /* PermissionsView.swift in Sources */,
 				A10000000000000000000005 /* VoiceCommandViewModel.swift in Sources */,
 				A10000000000000000000006 /* PermissionService.swift in Sources */,
+				A10000000000000000000035 /* BackendConfig.swift in Sources */,
 				A10000000000000000000007 /* AppError.swift in Sources */,
 				A10000000000000000000009 /* SpeechRecognizerService.swift in Sources */,
 				A10000000000000000000010 /* ParsedCommand.swift in Sources */,

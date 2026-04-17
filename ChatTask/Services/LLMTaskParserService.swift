@@ -1,154 +1,77 @@
-// OpenAI API key lives in `Secrets.swift` (gitignored). Copy `Secrets.swift.example` → `Secrets.swift` if missing.
-
 import Foundation
 import os.log
 
 enum LLMError: Error {
     case invalidResponse
     case decodingFailed
+    case networkError(underlying: Error)
 }
 
+/// Parses natural-language task commands via the ChatTask backend `POST /parse` endpoint.
+/// The server returns JSON matching `LLMTaskParseResponse` (same shape as the former OpenAI inner JSON).
 struct LLMTaskParserService: TaskParsing {
     private static let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "VocaTime", category: "TaskParsing")
 
-    private var apiKey: String { Secrets.openAIAPIKey }
-    private let endpoint = "https://api.openai.com/v1/chat/completions"
-    private let model = "gpt-4o-mini"
-
-    /// Static instructions only — date/time and user text are sent in the user message.
-    private static let systemPrompt = """
-    You are a multilingual task parser.
-    Return ONLY valid JSON.
-
-    Supported action_type:
-    - reminder
-    - calendarEvent
-    - deleteTask
-    - rescheduleTask
-    - appendToTask
-    - unknown
-
-    Rules:
-    - Extract a task from natural language (any language or mixed language).
-    - Keep a concise, natural phrase as the title.
-    - Only use notes if there is clearly extra supporting detail that would make the title too long.
-    - Prefer keeping more content in title rather than splitting incorrectly.
-    - If unsure, set notes = null.
-
-    Time handling:
-    - For new tasks: use scheduled_at (and end_at if applicable).
-    - For edits:
-      - target_time = original task time
-      - new_scheduled_at = updated time
-    - has_specific_time = true only if an exact time is clearly specified.
-
-    Other fields:
-    - append_text only for appendToTask
-    - language_code should reflect the input language
-    - confidence is a number between 0 and 1
-
-    Title/notes examples (omit other keys in your reply; include all schema fields in actual output):
-    "Call the doctor at 3 about Ari's vaccine records" → title: Call the doctor about Ari's vaccine records, notes: null
-    "Remind me tomorrow at 5 to call the doctor about Ari's vaccine records and also ask whether the follow-up appointment should be next week" → title: Call the doctor about Ari's vaccine records, notes: Also ask whether the follow-up appointment should be next week
-    "明天下午五点提醒我给医生打电话问Ari的疫苗记录，然后顺便确认下周要不要复诊" → title: 给医生打电话问Ari的疫苗记录, notes: 确认下周要不要复诊
-
-    Return JSON with fields:
-    title, notes, action_type, scheduled_at, end_at, has_specific_time, language_code, confidence, target_time, new_scheduled_at, append_text
-    """
-
     func parse(text: String, now: Date, localeIdentifier: String, timeZoneIdentifier: String) async throws -> ParsedCommand {
+        let endpoint = BackendConfig.parseURL
+        Self.log.info("[Parse] backendBaseURL=\(BackendConfig.baseURL.absoluteString, privacy: .public) parseURL=\(endpoint.absoluteString, privacy: .public)")
+
         let formatter = ISO8601DateFormatter()
         formatter.timeZone = TimeZone(identifier: timeZoneIdentifier) ?? .current
         let nowString = formatter.string(from: now)
 
-        let userMessage = """
-        Current Date/Time: \(nowString)
-        Timezone: \(timeZoneIdentifier)
-
-        User input:
-        \(text)
-        """
-
-        print("=== LLM REQUEST DEBUG ===")
-        print("SYSTEM PROMPT:\n\(Self.systemPrompt)")
-        print("USER MESSAGE:\n\(userMessage)")
-
         let requestBody: [String: Any] = [
-            "model": model,
-            "messages": [
-                ["role": "system", "content": Self.systemPrompt],
-                ["role": "user", "content": userMessage]
-            ],
-            "response_format": ["type": "json_object"],
-            "temperature": 0.0
+            "text": text,
+            "now": nowString,
+            "timezone": timeZoneIdentifier,
+            "locale": localeIdentifier,
         ]
 
-        var request = URLRequest(url: URL(string: endpoint)!)
+        Self.log.info("[Parse] requestStart textLength=\(text.count, privacy: .public) timezone=\(timeZoneIdentifier, privacy: .public)")
+
+        var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
-        request.addValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
+        request.timeoutInterval = 120
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await URLSession.shared.data(for: request)
+        } catch {
+            Self.log.error("[Parse] networkError error=\(String(describing: error), privacy: .public)")
+            throw LLMError.networkError(underlying: error)
+        }
+
         let http = response as? HTTPURLResponse
         let statusCode = http?.statusCode ?? -1
-        Self.log.info("[LLM] httpStatusCode=\(statusCode, privacy: .public)")
+        Self.log.info("[Parse] httpStatusCode=\(statusCode, privacy: .public) responseBytes=\(data.count, privacy: .public)")
 
         let rawResponseBody = String(data: data, encoding: .utf8) ?? "<non-UTF8 body, \(data.count) bytes>"
-        Self.logLongString(prefix: "[LLM] rawHttpResponseBody", text: rawResponseBody)
+        Self.logLongString(prefix: "[Parse] rawHttpResponseBody", text: rawResponseBody)
 
         if let http, !(200...299).contains(http.statusCode) {
-            Self.log.error("[LLM] request failed httpStatusCode=\(statusCode, privacy: .public)")
-            throw LLMError.invalidResponse
-        }
-
-        struct OpenAIResponse: Decodable {
-            struct Choice: Decodable {
-                struct Message: Decodable {
-                    let content: String
-                }
-                let message: Message
-            }
-            let choices: [Choice]
-        }
-
-        let apiResponse: OpenAIResponse
-        do {
-            apiResponse = try JSONDecoder().decode(OpenAIResponse.self, from: data)
-        } catch {
-            Self.log.error("[LLM] OpenAI envelope decode failed error=\(String(describing: error), privacy: .public)")
-            throw LLMError.decodingFailed
-        }
-
-        guard let jsonString = apiResponse.choices.first?.message.content else {
-            Self.log.error("[LLM] missing choices[0].message.content")
-            throw LLMError.invalidResponse
-        }
-
-        Self.logLongString(prefix: "[LLM] modelMessageContentRaw", text: jsonString)
-
-        guard let jsonData = jsonString.data(using: .utf8) else {
-            Self.log.error("[LLM] model message content is not valid UTF-8")
+            Self.log.error("[Parse] request failed httpStatusCode=\(statusCode, privacy: .public)")
             throw LLMError.invalidResponse
         }
 
         let parsed: LLMTaskParseResponse
         do {
-            parsed = try JSONDecoder().decode(LLMTaskParseResponse.self, from: jsonData)
+            parsed = try JSONDecoder().decode(LLMTaskParseResponse.self, from: data)
         } catch {
-            Self.log.error("[LLM] LLMTaskParseResponse decode failed error=\(String(describing: error), privacy: .public)")
+            Self.log.error("[Parse] LLMTaskParseResponse decode failed error=\(String(describing: error), privacy: .public)")
             throw LLMError.decodingFailed
         }
 
-        Self.logDecodedLLMResponse(parsed)
+        Self.logDecodedResponse(parsed)
 
         let tz = TimeZone(identifier: timeZoneIdentifier) ?? .current
         let (actionType, actionTypeUnmapped) = Self.mapLLMActionType(parsed.actionType)
         if actionTypeUnmapped {
-            Self.log.warning("[LLM] action_type unmapped raw=\(parsed.actionType ?? "nil", privacy: .public)")
+            Self.log.warning("[Parse] action_type unmapped raw=\(parsed.actionType ?? "nil", privacy: .public)")
         }
 
-        // ── Edit command ──────────────────────────────────────────────────────
         if actionType == .deleteTask || actionType == .rescheduleTask || actionType == .appendToTask {
             let targetDate = parsed.targetTime.flatMap { Self.parseISO8601($0, timeZone: tz) }
             let newScheduledDate = parsed.newScheduledAt.flatMap { Self.parseISO8601($0, timeZone: tz) }
@@ -172,14 +95,13 @@ struct LLMTaskParserService: TaskParsing {
             return cmd
         }
 
-        // ── Create command ────────────────────────────────────────────────────
         var scheduledDate: Date?
         if let dateString = parsed.scheduledAt {
             let trimmed = dateString.trimmingCharacters(in: .whitespacesAndNewlines)
             if !trimmed.isEmpty {
                 scheduledDate = Self.parseISO8601(trimmed, timeZone: tz)
                 if scheduledDate == nil {
-                    Self.log.warning("[LLM] scheduled_at unparseable raw=\(dateString, privacy: .public)")
+                    Self.log.warning("[Parse] scheduled_at unparseable raw=\(dateString, privacy: .public)")
                 }
             }
         }
@@ -190,7 +112,7 @@ struct LLMTaskParserService: TaskParsing {
             if !trimmed.isEmpty {
                 endDate = Self.parseISO8601(trimmed, timeZone: tz)
                 if endDate == nil {
-                    Self.log.warning("[LLM] end_at unparseable raw=\(dateString, privacy: .public)")
+                    Self.log.warning("[Parse] end_at unparseable raw=\(dateString, privacy: .public)")
                 }
             }
         }
@@ -214,9 +136,9 @@ struct LLMTaskParserService: TaskParsing {
 
     // MARK: - Logging helpers
 
-    private static func logDecodedLLMResponse(_ p: LLMTaskParseResponse) {
+    private static func logDecodedResponse(_ p: LLMTaskParseResponse) {
         log.info("""
-            [LLM] decoded response action_type=\(p.actionType ?? "nil", privacy: .public) \
+            [Parse] decoded response action_type=\(p.actionType ?? "nil", privacy: .public) \
             title=\(p.title ?? "nil", privacy: .public) \
             scheduled_at=\(p.scheduledAt ?? "nil", privacy: .public) \
             target_time=\(p.targetTime ?? "nil", privacy: .public) \
@@ -230,7 +152,7 @@ struct LLMTaskParserService: TaskParsing {
         let reminder = cmd.reminderDate.map { ISO8601DateFormatter().string(from: $0) } ?? "nil"
         let target = cmd.targetDate.map { ISO8601DateFormatter().string(from: $0) } ?? "nil"
         let newSched = cmd.newScheduledDate.map { ISO8601DateFormatter().string(from: $0) } ?? "nil"
-        log.info("[LLM] final ParsedCommand actionType=\(String(describing: cmd.actionType), privacy: .public) title=\(cmd.title, privacy: .public) startDate=\(start, privacy: .public) reminderDate=\(reminder, privacy: .public) targetDate=\(target, privacy: .public) newScheduledDate=\(newSched, privacy: .public)")
+        log.info("[Parse] final ParsedCommand actionType=\(String(describing: cmd.actionType), privacy: .public) title=\(cmd.title, privacy: .public) startDate=\(start, privacy: .public) reminderDate=\(reminder, privacy: .public) targetDate=\(target, privacy: .public) newScheduledDate=\(newSched, privacy: .public)")
     }
 
     private static func logLongString(prefix: String, text: String, chunkSize: Int = 800) {
