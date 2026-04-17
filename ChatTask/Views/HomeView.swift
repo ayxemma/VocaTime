@@ -98,6 +98,7 @@ struct ComposerSession: Identifiable {
 struct HomeView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.appUILanguage) private var appUILanguage
+    @Environment(\.themePalette) private var themePalette
     @AppStorage(AppUILanguage.storageKey) private var languageRaw: String = AppUILanguage.defaultForDevice().rawValue
     @AppStorage(homeSectionOrderKey) private var sectionOrderRaw: String = homeSectionOrderDefault
     @Query(sort: \TaskItem.updatedAt, order: .reverse) private var allTasks: [TaskItem]
@@ -181,7 +182,8 @@ struct HomeView: View {
                 .padding(.top, 12)
                 .padding(.bottom, 36)
             }
-            .background(Color(.systemGroupedBackground))
+            .background(themePalette.backgroundColor)
+            .animation(.easeInOut(duration: 0.35), value: themePalette.theme)
         }
         .sheet(item: $composerSession) { session in
             NavigationStack {

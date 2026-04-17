@@ -279,6 +279,7 @@ struct AppStrings {
     let settingsPermissionMicrophoneFooter: String
     let settingsPermissionSpeechFooter: String
     let settingsSectionGeneral: String
+    let settingsSectionAppearance: String
     let settingsUILanguageFooter: String
     let settingsSectionReminders: String
     let settingsReminderDefaultFooter: String
@@ -450,6 +451,7 @@ struct AppStrings {
         settingsPermissionMicrophoneFooter: "Used for voice commands.",
         settingsPermissionSpeechFooter: "Used to convert your voice into tasks.",
         settingsSectionGeneral: "General",
+        settingsSectionAppearance: "Appearance",
         settingsUILanguageFooter: "Applies to buttons and menus. Your task titles stay as you enter them.",
         settingsSectionReminders: "Reminders",
         settingsReminderDefaultFooter: "Used as the default lead time for new tasks and voice commands.",
@@ -616,6 +618,7 @@ struct AppStrings {
         settingsPermissionMicrophoneFooter: "用于语音指令。",
         settingsPermissionSpeechFooter: "用于将语音转为任务。",
         settingsSectionGeneral: "通用",
+        settingsSectionAppearance: "外观",
         settingsUILanguageFooter: "仅影响界面按钮与菜单，任务内容保持您输入的语言。",
         settingsSectionReminders: "提醒",
         settingsReminderDefaultFooter: "作为新任务与语音指令的默认提前提醒时间。",
@@ -782,6 +785,7 @@ struct AppStrings {
         settingsPermissionMicrophoneFooter: "Se usa para comandos de voz.",
         settingsPermissionSpeechFooter: "Convierte tu voz en tareas.",
         settingsSectionGeneral: "General",
+        settingsSectionAppearance: "Apariencia",
         settingsUILanguageFooter: "Afecta a botones y menús. Los títulos de tareas siguen el idioma que escribas.",
         settingsSectionReminders: "Recordatorios",
         settingsReminderDefaultFooter: "Tiempo de antelación por defecto para tareas nuevas y comandos de voz.",

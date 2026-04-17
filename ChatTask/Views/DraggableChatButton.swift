@@ -42,6 +42,8 @@ private enum DraggableChatButtonMetrics {
 /// non-blocking (full-screen pass-through except on the circle).
 struct DraggableChatButton: View {
 
+    @Environment(\.themePalette) private var themePalette
+
     /// Persisted horizontal position: 0 = left edge of the safe band, 1 = right.
     @AppStorage("homeChatFABRelX") private var storedRelX: Double = 1.0
     /// Persisted vertical position: 0 = top of the safe band, 1 = bottom.
@@ -82,11 +84,18 @@ struct DraggableChatButton: View {
 
                     Image(systemName: "message.fill")
                         .font(.system(size: 22, weight: .semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(themePalette.isMinimal ? themePalette.accentColor : Color.white)
                         .frame(width: DraggableChatButtonMetrics.size, height: DraggableChatButtonMetrics.size)
-                        .background(Color.accentColor)
+                        .background(
+                            Circle()
+                                .fill(themePalette.primaryGradient)
+                        )
                         .clipShape(Circle())
-                        .shadow(color: .black.opacity(0.2), radius: 6, y: 3)
+                        .shadow(
+                            color: .black.opacity(themePalette.isMinimal ? 0.1 : 0.2),
+                            radius: themePalette.isMinimal ? 4 : 6,
+                            y: 3
+                        )
                         .scaleEffect(isDragging ? 1.06 : 1.0)
                         .opacity(isDragging ? 0.92 : 1.0)
                         .animation(.easeInOut(duration: 0.18), value: isDragging)

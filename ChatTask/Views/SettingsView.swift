@@ -9,11 +9,13 @@ private enum LegalURLs {
 
 struct SettingsView: View {
     @Environment(\.appUILanguage) private var appUILanguage
+    @Environment(\.themePalette) private var themePalette
     @Environment(\.openURL) private var openURL
     @Environment(PermissionService.self) private var permissionService
     @Environment(SubscriptionManager.self) private var subscriptionManager
 
     @AppStorage(AppUILanguage.storageKey) private var languageRaw: String = AppUILanguage.defaultForDevice().rawValue
+    @AppStorage(AppColorTheme.storageKey) private var themeRaw: String = AppColorTheme.purple.rawValue
     @AppStorage(ReminderOffset.defaultsKey) private var reminderDefaultMinutes: Int = 0
 
     @State private var showPaywall = false
@@ -57,6 +59,12 @@ struct SettingsView: View {
                 Text(s.settingsSectionGeneral)
             } footer: {
                 Text(s.settingsUILanguageFooter)
+            }
+
+            Section {
+                themePickerGrid
+            } header: {
+                Text(s.settingsSectionAppearance)
             }
 
             Section {
@@ -181,6 +189,7 @@ struct SettingsView: View {
         .sheet(isPresented: $showPaywall) {
             PaywallView()
                 .environment(\.appUILanguage, appUILanguage)
+                .environment(\.themePalette, themePalette)
                 .environment(\.locale, appUILanguage.locale)
         }
         .task {
@@ -198,6 +207,49 @@ struct SettingsView: View {
             }
         } message: {
             Text(purchaseErrorAlertText)
+        }
+    }
+
+    private var themePickerGrid: some View {
+        let selected = AppColorTheme(storageRaw: themeRaw)
+        return ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 14) {
+                ForEach(AppColorTheme.allCases) { t in
+                    let palette = AppThemePalette.palette(for: t)
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.28)) {
+                            themeRaw = t.rawValue
+                        }
+                    } label: {
+                        ZStack {
+                            if t == .white {
+                                Circle()
+                                    .fill(Color(.systemBackground))
+                                    .frame(width: 40, height: 40)
+                                    .overlay(
+                                        Circle()
+                                            .strokeBorder(Color.secondary.opacity(0.4), lineWidth: 1.5)
+                                    )
+                            } else {
+                                Circle()
+                                    .fill(palette.primaryGradient)
+                                    .frame(width: 40, height: 40)
+                            }
+                            if selected == t {
+                                Circle()
+                                    .strokeBorder(Color.primary, lineWidth: 3)
+                                    .frame(width: 46, height: 46)
+                            }
+                        }
+                        .frame(width: 48, height: 48)
+                        .contentShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(Text(t.displayName))
+                    .accessibilityHint(Text(t.accessibilityDescription))
+                }
+            }
+            .padding(.vertical, 4)
         }
     }
 

@@ -23,6 +23,7 @@ enum TaskRowScheduleContext {
 struct TaskRowCompletionButton: View {
     @Bindable var task: TaskItem
     @Environment(\.appUILanguage) private var appUILanguage
+    @Environment(\.themePalette) private var themePalette
 
     var body: some View {
         let s = appUILanguage.strings
@@ -34,7 +35,7 @@ struct TaskRowCompletionButton: View {
         } label: {
             Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
                 .font(.title3)
-                .foregroundStyle(task.isCompleted ? Color.accentColor : Color(.tertiaryLabel))
+                .foregroundStyle(task.isCompleted ? themePalette.accentColor : Color(.tertiaryLabel))
         }
         .buttonStyle(.plain)
         .accessibilityLabel(task.isCompleted ? s.markIncomplete : s.markComplete)
@@ -147,18 +148,27 @@ struct TaskRowMainContent: View {
 // MARK: - Card wrapper helpers
 
 private struct TaskCardModifier: ViewModifier {
+    @Environment(\.themePalette) private var themePalette
     var dimmed: Bool
 
     func body(content: Content) -> some View {
-        content
+        let shadowOpacity = themePalette.isMinimal ? 0.06 : 0.05
+        return content
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
-            .background(Color(.secondarySystemGroupedBackground))
-            .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
-            .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 1)
+            .background(
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .fill(themePalette.cardBackground)
+            )
+            .shadow(color: Color.black.opacity(shadowOpacity), radius: themePalette.isMinimal ? 2 : 4, x: 0, y: 1)
             .overlay(
                 RoundedRectangle(cornerRadius: 13, style: .continuous)
-                    .strokeBorder(Color(.separator).opacity(0.25), lineWidth: 0.5)
+                    .strokeBorder(
+                        themePalette.isMinimal
+                            ? Color.black.opacity(0.06)
+                            : Color(.separator).opacity(0.25),
+                        lineWidth: themePalette.isMinimal ? 0.75 : 0.5
+                    )
             )
             .opacity(dimmed ? 0.6 : 1)
     }

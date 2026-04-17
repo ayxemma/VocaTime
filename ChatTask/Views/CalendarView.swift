@@ -4,6 +4,7 @@ import SwiftUI
 struct CalendarView: View {
     @Environment(\.locale) private var locale
     @Environment(\.appUILanguage) private var appUILanguage
+    @Environment(\.themePalette) private var themePalette
     @Query(sort: \TaskItem.updatedAt, order: .reverse) private var allTasks: [TaskItem]
 
     @State private var displayedMonth: Date
@@ -49,7 +50,8 @@ struct CalendarView: View {
             }
             .padding()
         }
-        .background(Color(.systemGroupedBackground))
+        .background(themePalette.backgroundColor)
+        .animation(.easeInOut(duration: 0.35), value: themePalette.theme)
         .navigationTitle(s.calendarTitle)
         .navigationBarTitleDisplayMode(.large)
         .toolbar {

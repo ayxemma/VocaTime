@@ -2,6 +2,7 @@ import SwiftUI
 
 struct RootTabView: View {
     @Environment(\.appUILanguage) private var appUILanguage
+    @Environment(\.themePalette) private var themePalette
     @AppStorage(AppUILanguage.storageKey) private var languageRaw: String = AppUILanguage.defaultForDevice().rawValue
 
     @State private var showChat = false
@@ -48,6 +49,7 @@ struct RootTabView: View {
         }
         .sheet(isPresented: $showChat) {
             ChatSheetView(viewModel: chatViewModel)
+                .environment(\.themePalette, themePalette)
                 .presentationDragIndicator(.visible)
         }
         .onAppear {

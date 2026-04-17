@@ -4,6 +4,7 @@ import SwiftUI
 struct ChatSheetView: View {
     @Bindable var viewModel: VoiceCommandViewModel
     @Environment(\.appUILanguage) private var appUILanguage
+    @Environment(\.themePalette) private var themePalette
     @Environment(\.dismiss) private var dismiss
     @Environment(\.locale) private var locale
     @Environment(\.modelContext) private var modelContext
@@ -30,6 +31,7 @@ struct ChatSheetView: View {
                     .padding()
                     .background(Color(.systemBackground))
             }
+            .animation(.easeInOut(duration: 0.32), value: themePalette.theme)
             .navigationTitle(s.commandTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -89,6 +91,7 @@ struct ChatSheetView: View {
                 }
                 .padding()
             }
+            .background(themePalette.backgroundColor)
             .onChange(of: viewModel.chatMessages.count) { _, _ in
                 if let last = viewModel.chatMessages.last {
                     withAnimation(.easeOut(duration: 0.2)) {
@@ -181,11 +184,11 @@ struct ChatSheetView: View {
         } label: {
             ZStack {
                 Circle()
-                    .fill(isListening ? Color.red.opacity(0.15) : Color.accentColor.opacity(0.12))
+                    .fill(isListening ? Color.red.opacity(0.15) : themePalette.accentColor.opacity(0.14))
                     .frame(width: 44, height: 44)
                 Image(systemName: "mic.fill")
                     .font(.system(size: 20, weight: .medium))
-                    .foregroundStyle(isListening ? Color.red : Color.accentColor)
+                    .foregroundStyle(isListening ? Color.red : themePalette.accentColor)
             }
         }
         .buttonStyle(.plain)
@@ -200,11 +203,11 @@ struct ChatSheetView: View {
         Button(action: submitTypedText) {
             ZStack {
                 Circle()
-                    .fill(Color.accentColor)
+                    .fill(themePalette.primaryGradient)
                     .frame(width: 44, height: 44)
                 Image(systemName: "arrow.up")
                     .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(themePalette.isMinimal ? themePalette.accentColor : Color.white)
             }
         }
         .buttonStyle(.plain)
@@ -300,19 +303,38 @@ struct ChatSheetView: View {
 
     private func chatBubble(_ message: ChatMessage) -> some View {
         let isUser = message.role == .user
+        let p = themePalette
         return HStack {
             if isUser { Spacer(minLength: 48) }
             VStack(alignment: isUser ? .trailing : .leading, spacing: 4) {
                 Text(message.text)
                     .font(.body)
-                    .foregroundStyle(isUser ? Color.white : Color.primary)
+                    .foregroundStyle(isUser ? p.userBubbleForeground : p.textPrimary)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
-                    .background(isUser ? Color.accentColor : Color(.secondarySystemGroupedBackground))
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .background {
+                        if isUser {
+                            Group {
+                                if p.isMinimal {
+                                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                        .fill(p.accentColor.opacity(0.12))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                                .strokeBorder(p.accentColor.opacity(0.32), lineWidth: 1)
+                                        )
+                                } else {
+                                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                        .fill(p.primaryGradient)
+                                }
+                            }
+                        } else {
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .fill(p.assistantBubbleBackground)
+                        }
+                    }
                 Text(message.timestamp.formatted(Date.FormatStyle(date: .omitted, time: .shortened).locale(locale)))
                     .font(.caption2)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(p.textSecondary.opacity(0.85))
             }
             if !isUser { Spacer(minLength: 48) }
         }
@@ -322,5 +344,6 @@ struct ChatSheetView: View {
 #Preview {
     ChatSheetView(viewModel: VoiceCommandViewModel())
         .environment(\.appUILanguage, .en)
+        .environment(\.themePalette, .palette(for: .purple))
         .environment(\.locale, Locale(identifier: "en_US"))
 }

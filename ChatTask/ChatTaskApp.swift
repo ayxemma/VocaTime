@@ -34,19 +34,27 @@ struct ChatTaskApp: App {
 
 private struct AppShellView: View {
     @AppStorage(AppUILanguage.storageKey) private var languageRaw: String = AppUILanguage.defaultForDevice().rawValue
+    @AppStorage(AppColorTheme.storageKey) private var themeRaw: String = AppColorTheme.purple.rawValue
     @Environment(SubscriptionManager.self) private var subscriptionManager
     @Query private var allTasks: [TaskItem]
 
     @State private var showPaywall = false
 
+    private var theme: AppColorTheme { AppColorTheme(storageRaw: themeRaw) }
+    private var themePalette: AppThemePalette { AppThemePalette.palette(for: theme) }
+
     var body: some View {
         let uiLang = AppUILanguage(storageRaw: languageRaw)
         RootTabView()
             .environment(\.appUILanguage, uiLang)
+            .environment(\.themePalette, themePalette)
             .environment(\.locale, uiLang.locale)
+            .tint(themePalette.accentColor)
+            .animation(.easeInOut(duration: 0.35), value: themeRaw)
             .sheet(isPresented: $showPaywall) {
                 PaywallView()
                     .environment(\.appUILanguage, uiLang)
+                    .environment(\.themePalette, themePalette)
                     .environment(\.locale, uiLang.locale)
             }
             .onChange(of: allTasks.count) { _, newCount in

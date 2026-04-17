@@ -135,6 +135,7 @@ extension AppStrings {
         settingsPermissionMicrophoneFooter: "आवाज़ कमांड के लिए उपयोग होता है।",
         settingsPermissionSpeechFooter: "आपकी आवाज़ को कार्यों में बदलने के लिए।",
         settingsSectionGeneral: "सामान्य",
+        settingsSectionAppearance: "रूप",
         settingsUILanguageFooter: "बटन और मेनू पर लागू होता है। कार्य शीर्षक आप जैसे दर्ज करें वैसे रहते हैं।",
         settingsSectionReminders: "अनुस्मारक",
         settingsReminderDefaultFooter: "नए कार्यों और आवाज़ कमांड के लिए डिफ़ॉल्ट पूर्व सूचना समय।",
