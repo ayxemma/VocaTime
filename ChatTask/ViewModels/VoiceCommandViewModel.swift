@@ -115,7 +115,10 @@ final class VoiceCommandViewModel {
     private var streamEpoch: UInt = 0
     private var streamRevealTask: Task<Void, Never>?
     /// When set, the next assistant reply should fill this bubble (or append if not found).
+    /// Used only for typed send / parse flow — not for cloud STT (draft stays in the composer).
     private var pendingAssistantSlotId: UUID?
+    /// Voice draft / cloud transcription error shown in the status line; never adds a chat bubble.
+    private var voiceDraftErrorMessage: String?
 
     // MARK: - Init
 
@@ -154,7 +157,7 @@ final class VoiceCommandViewModel {
             return s.voiceProcessing
         case .conflictPending, .deletePending, .disambiguating: return ""
         case .success:    return s.voiceReady
-        case .error:      return s.voiceError
+        case .error:      return voiceDraftErrorMessage ?? s.voiceError
         }
     }
 
@@ -177,6 +180,7 @@ final class VoiceCommandViewModel {
         guard chatFlowState == .idle || chatFlowState == .success || chatFlowState == .error else { return }
 
         Self.log.info("[VoiceChat] typedTextSubmit text=\(trimmed, privacy: .public)")
+        voiceDraftErrorMessage = nil
         // Perception: user bubble + empty assistant row immediately, then non-blocking warm-up, then work.
         chatMessages.append(ChatMessage(role: .user, text: trimmed))
         let slotId = UUID()
@@ -332,10 +336,6 @@ final class VoiceCommandViewModel {
         }
     }
 
-    private func removeChatMessage(id: UUID) {
-        chatMessages.removeAll { $0.id == id }
-    }
-
     /// Inserts or replaces the pending assistant slot, optionally with a streaming “typing” reveal.
     private func emitAssistantResponse(_ text: String, nextState: VoiceFlowState, stream: Bool) {
         if stream, !text.isEmpty {
@@ -364,28 +364,10 @@ final class VoiceCommandViewModel {
         }
     }
 
-    private func streamTranscriptionThenDeliverToField(_ full: String) {
-        guard let slot = pendingAssistantSlotId else {
-            deliverTranscriptToInputField(full)
-            return
-        }
-        if full.isEmpty {
-            removeChatMessage(id: slot)
-            pendingAssistantSlotId = nil
-            deliverTranscriptToInputField(full)
-            return
-        }
-        startStreamingText(into: slot, fullText: full) { [weak self] in
-            guard let self else { return }
-            self.removeChatMessage(id: slot)
-            self.pendingAssistantSlotId = nil
-            self.deliverTranscriptToInputField(full)
-        }
-    }
-
     // MARK: - Begin listening
 
     func chatBeginListening() async {
+        voiceDraftErrorMessage = nil
         cancelMaxRecordingTimer()
 
         let msgs = uiLanguage.speechMessages
@@ -494,7 +476,9 @@ final class VoiceCommandViewModel {
 
         case .fallbackToCloud:
             guard let audioURL = captureResult.audioURL else {
-                emitAssistantResponse(strings.chatErrorNothingRecorded, nextState: .error, stream: false)
+                // Same draft-only UX as other cloud / voice-input failures: status line, not chat bubble.
+                voiceDraftErrorMessage = strings.chatErrorNothingRecorded
+                chatFlowState = .error
                 return
             }
             Self.log.info("[VoiceChat] routingDecision=fallbackToCloud — uploading audio")
@@ -506,10 +490,7 @@ final class VoiceCommandViewModel {
 
     private func handleCloudFallback(audioURL: URL, strings: AppStrings) async {
         defer { deleteAudioFile(audioURL) }
-
-        let cloudSlot = UUID()
-        chatMessages.append(ChatMessage(id: cloudSlot, role: .assistant, text: ""))
-        pendingAssistantSlotId = cloudSlot
+        // Cloud STT is user-typed draft data only: no assistant row, no streaming, no emitAssistantResponse.
 
         let transcript: String
         do {
@@ -549,12 +530,13 @@ final class VoiceCommandViewModel {
                 userMessage = strings.chatErrorSomethingWentWrong
             }
             Self.log.error("[VoiceChat] cloudTranscriptionFailure requestId=\(requestIdForLog, privacy: .public) rootCause=\(rootCause, privacy: .public)")
-            emitAssistantResponse(userMessage, nextState: .error, stream: false)
+            voiceDraftErrorMessage = userMessage
+            chatFlowState = .error
             parsedCommand = nil
             return
         }
 
-        streamTranscriptionThenDeliverToField(transcript)
+        deliverTranscriptToInputField(transcript)
     }
 
     // MARK: - Transcript → input field delivery
@@ -565,10 +547,13 @@ final class VoiceCommandViewModel {
     private func deliverTranscriptToInputField(_ rawTranscript: String) {
         let trimmed = rawTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            emitAssistantResponse(uiLanguage.strings.chatEmptyTranscript, nextState: .error, stream: false)
+            // Transcript is user draft input — surface empty result in status only, not as assistant chat.
+            voiceDraftErrorMessage = uiLanguage.strings.chatEmptyTranscript
+            chatFlowState = .error
             return
         }
         Self.log.info("[VoiceChat] transcriptDeliveredToInputField=\(trimmed, privacy: .public)")
+        voiceDraftErrorMessage = nil
         pendingVoiceTranscript = trimmed
         chatFlowState = .idle
     }
@@ -902,6 +887,7 @@ final class VoiceCommandViewModel {
         cancelAllProcessingStatusHints()
         cancelStreamReveal()
         pendingAssistantSlotId = nil
+        voiceDraftErrorMessage = nil
         showExtendedThinkingStatus = false
         chatFlowState = .idle
         chatDraftText = ""
