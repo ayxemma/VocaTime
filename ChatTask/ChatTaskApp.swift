@@ -6,8 +6,18 @@ struct ChatTaskApp: App {
     @State private var permissionService = PermissionService()
     @State private var subscriptionManager = SubscriptionManager()
 
+    /// Shared with SwiftUI and `TaskReminderService` (notification action handlers use SwiftData).
+    private static let modelContainer: ModelContainer = {
+        do {
+            return try ModelContainer(for: TaskItem.self)
+        } catch {
+            fatalError("ChatTask: failed to create ModelContainer: \(error)")
+        }
+    }()
+
     init() {
         AppUILanguage.migrateLegacyUserDefaultsIfNeeded()
+        TaskReminderService.shared.configure(modelContainer: Self.modelContainer)
         // Register the notification-center delegate immediately so foreground
         // notifications are presented.  Must happen before any notification fires.
         TaskReminderService.shared.setup()
@@ -28,7 +38,7 @@ struct ChatTaskApp: App {
                     _ = await (entitlements, products, notifications)
                 }
         }
-        .modelContainer(for: TaskItem.self)
+        .modelContainer(Self.modelContainer)
     }
 }
 

@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		A10000000000000000000001 /* VocaTimeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000001 /* ChatTaskApp.swift */; };
+		A10000000000000000000001 /* ChatTaskApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000001 /* ChatTaskApp.swift */; };
 		A10000000000000000000002 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000002 /* HomeView.swift */; };
 		A10000000000000000000003 /* RecordButtonView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000003 /* RecordButtonView.swift */; };
 		A10000000000000000000004 /* PermissionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000004 /* PermissionsView.swift */; };
@@ -95,6 +95,7 @@
 		A2000000000000000000002C /* SubscriptionConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubscriptionConfig.swift; sourceTree = "<group>"; };
 		A2000000000000000000002D /* SubscriptionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubscriptionManager.swift; sourceTree = "<group>"; };
 		A2000000000000000000002E /* PaywallView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaywallView.swift; sourceTree = "<group>"; };
+		A2000000000000000000002F /* ChatTask.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = ChatTask.storekit; sourceTree = "<group>"; };
 		A20000000000000000000030 /* DraggableChatButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DraggableChatButton.swift; sourceTree = "<group>"; };
 		A20000000000000000000031 /* AppStringsCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStringsCatalog.swift; sourceTree = "<group>"; };
 		A20000000000000000000032 /* AppStringsPackEU.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStringsPackEU.swift; sourceTree = "<group>"; };
@@ -106,8 +107,7 @@
 		A20000000000000000000038 /* AppColorTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppColorTheme.swift; sourceTree = "<group>"; };
 		A20000000000000000000039 /* BackendWarmup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackendWarmup.swift; sourceTree = "<group>"; };
 		A2000000000000000000003A /* BackendFetchRetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackendFetchRetry.swift; sourceTree = "<group>"; };
-		A2000000000000000000002F /* ChatTask.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = "ChatTask.storekit"; sourceTree = "<group>"; };
-		A30000000000000000000001 /* VocaTime.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VocaTime.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A30000000000000000000001 /* ChatTask.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ChatTask.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -124,12 +124,12 @@
 		A50000000000000000000001 = {
 			isa = PBXGroup;
 			children = (
-				A50000000000000000000002 /* VocaTime */,
+				A50000000000000000000002 /* ChatTask */,
 				A50000000000000000000003 /* Products */,
 			);
 			sourceTree = "<group>";
 		};
-		A50000000000000000000002 /* VocaTime */ = {
+		A50000000000000000000002 /* ChatTask */ = {
 			isa = PBXGroup;
 			children = (
 				A20000000000000000000001 /* ChatTaskApp.swift */,
@@ -145,31 +145,10 @@
 			path = ChatTask;
 			sourceTree = "<group>";
 		};
-		A50000000000000000000008 /* Models */ = {
-			isa = PBXGroup;
-			children = (
-				A20000000000000000000025 /* AppUILanguage.swift */,
-				A20000000000000000000031 /* AppStringsCatalog.swift */,
-				A20000000000000000000032 /* AppStringsPackEU.swift */,
-				A20000000000000000000033 /* AppStringsPackAsiaPTIT.swift */,
-				A20000000000000000000037 /* AppStringsPackHindi.swift */,
-				A20000000000000000000038 /* AppColorTheme.swift */,
-				A20000000000000000000034 /* SpeechServiceMessagesCatalog.swift */,
-				A20000000000000000000010 /* ParsedCommand.swift */,
-				A2000000000000000000001D /* LLMTaskParseResponse.swift */,
-				A20000000000000000000011 /* ReminderItem.swift */,
-				A20000000000000000000012 /* CalendarEventItem.swift */,
-				A20000000000000000000018 /* TaskItem.swift */,
-				A2000000000000000000002A /* ReminderOffset.swift */,
-				A2000000000000000000002C /* SubscriptionConfig.swift */,
-			);
-			path = Models;
-			sourceTree = "<group>";
-		};
 		A50000000000000000000003 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				A30000000000000000000001 /* VocaTime.app */,
+				A30000000000000000000001 /* ChatTask.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -233,12 +212,33 @@
 			path = Utilities;
 			sourceTree = "<group>";
 		};
+		A50000000000000000000008 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000025 /* AppUILanguage.swift */,
+				A20000000000000000000031 /* AppStringsCatalog.swift */,
+				A20000000000000000000032 /* AppStringsPackEU.swift */,
+				A20000000000000000000033 /* AppStringsPackAsiaPTIT.swift */,
+				A20000000000000000000037 /* AppStringsPackHindi.swift */,
+				A20000000000000000000038 /* AppColorTheme.swift */,
+				A20000000000000000000034 /* SpeechServiceMessagesCatalog.swift */,
+				A20000000000000000000010 /* ParsedCommand.swift */,
+				A2000000000000000000001D /* LLMTaskParseResponse.swift */,
+				A20000000000000000000011 /* ReminderItem.swift */,
+				A20000000000000000000012 /* CalendarEventItem.swift */,
+				A20000000000000000000018 /* TaskItem.swift */,
+				A2000000000000000000002A /* ReminderOffset.swift */,
+				A2000000000000000000002C /* SubscriptionConfig.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		A60000000000000000000001 /* VocaTime */ = {
+		A60000000000000000000001 /* ChatTask */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = A80000000000000000000003 /* Build configuration list for PBXNativeTarget "VocaTime" */;
+			buildConfigurationList = A80000000000000000000003 /* Build configuration list for PBXNativeTarget "ChatTask" */;
 			buildPhases = (
 				A70000000000000000000001 /* Sources */,
 				A40000000000000000000001 /* Frameworks */,
@@ -248,9 +248,9 @@
 			);
 			dependencies = (
 			);
-			name = VocaTime;
+			name = ChatTask;
 			productName = VocaTime;
-			productReference = A30000000000000000000001 /* VocaTime.app */;
+			productReference = A30000000000000000000001 /* ChatTask.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -268,7 +268,7 @@
 					};
 				};
 			};
-			buildConfigurationList = A80000000000000000000001 /* Build configuration list for PBXProject "VocaTime" */;
+			buildConfigurationList = A80000000000000000000001 /* Build configuration list for PBXProject "ChatTask" */;
 			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
@@ -281,7 +281,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				A60000000000000000000001 /* VocaTime */,
+				A60000000000000000000001 /* ChatTask */,
 			);
 		};
 /* End PBXProject section */
@@ -302,7 +302,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A10000000000000000000001 /* VocaTimeApp.swift in Sources */,
+				A10000000000000000000001 /* ChatTaskApp.swift in Sources */,
 				A10000000000000000000002 /* HomeView.swift in Sources */,
 				A10000000000000000000030 /* DraggableChatButton.swift in Sources */,
 				A10000000000000000000003 /* RecordButtonView.swift in Sources */,
@@ -482,6 +482,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "";
+				DEVELOPMENT_TEAM = 9V25JPKT2U;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ChatTask/Info.plist;
@@ -515,6 +516,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "";
+				DEVELOPMENT_TEAM = 9V25JPKT2U;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ChatTask/Info.plist;
@@ -543,7 +545,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		A80000000000000000000001 /* Build configuration list for PBXProject "VocaTime" */ = {
+		A80000000000000000000001 /* Build configuration list for PBXProject "ChatTask" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				A90000000000000000000001 /* Debug */,
@@ -552,7 +554,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		A80000000000000000000003 /* Build configuration list for PBXNativeTarget "VocaTime" */ = {
+		A80000000000000000000003 /* Build configuration list for PBXNativeTarget "ChatTask" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				A90000000000000000000003 /* Debug */,
