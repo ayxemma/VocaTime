@@ -4,15 +4,19 @@ import UserNotifications
 /// Schedules, updates, and cancels local notifications for task reminders.
 ///
 /// - Call `schedule(for:)` when a task is created or edited.
-///   It always cancels any existing pending notification first, acting as an upsert.
+///   It cancels any existing pending requests for that task (including legacy
+///   single-id requests), then re-adds the appropriate triggers.
 /// - Call `cancel(taskID:)` when a task is deleted or marked complete.
 ///
-/// Only tasks with a future, wall-clock-specific `scheduledDate` receive a notification.
-/// Date-only tasks (midnight, no specific time) are intentionally skipped.
+/// Only tasks with a future, wall-clock-specific `scheduledDate` are eligible
+/// (date-only / midnight is skipped).
 ///
-/// Lead time: the notification fires `reminderOffsetMinutes` before the task's
-/// scheduled time. The offset is read from `task.reminderOffsetMinutes` if set,
-/// otherwise from the global default (`ReminderOffset.globalDefault`).
+/// For tasks with a specific time, two **non-overlapping** local notifications
+/// may be used:
+/// - **Pre** (`<uuid>_pre`) — `scheduledDate` minus `reminderOffsetMinutes`, only when
+///   the offset is > 0 and the fire time is still in the future.
+/// - **Exact** (`<uuid>_exact`) — always at `scheduledDate` when that moment is
+///   still in the future.
 ///
 /// **Delegate:** This class also acts as `UNUserNotificationCenterDelegate`.
 /// `setup()` must be called once at app launch (from `ChatTaskApp.init`) to
@@ -66,79 +70,105 @@ final class TaskReminderService: NSObject, UNUserNotificationCenterDelegate {
     // MARK: - Public API
 
     func schedule(for task: TaskItem) {
-        let identifier = task.id.uuidString
+        let ids = Self.notificationIdentifiers(for: task.id)
 
-        // Always cancel the existing pending notification for this task first (upsert).
-        center.removePendingNotificationRequests(withIdentifiers: [identifier])
+        // Drop prior requests for this task (legacy single-id and current pre+exact).
+        center.removePendingNotificationRequests(withIdentifiers: [ids.legacy, ids.pre, ids.exact])
 
         print("""
-        [Reminder] schedule() — id=\(identifier) title='\(task.title)' \
+        [Reminder] schedule() — id=\(ids.base) title='\(task.title)' \
         scheduledDate=\(String(describing: task.scheduledDate)) \
         reminderOffsetMinutes=\(String(describing: task.reminderOffsetMinutes))
         """)
 
         guard !task.isCompleted else {
-            print("[Reminder] skip — task is already completed (id=\(identifier))")
+            print("[Reminder] skip — task is already completed (id=\(ids.base))")
             return
         }
 
         guard let scheduledDate = task.scheduledDate else {
-            print("[Reminder] skip — no scheduledDate (id=\(identifier))")
+            print("[Reminder] skip — no scheduledDate (id=\(ids.base))")
             return
         }
 
         guard hasWallClockTime(scheduledDate) else {
-            print("[Reminder] skip — date-only task, no wall-clock time (id=\(identifier), date=\(scheduledDate))")
+            print("[Reminder] skip — date-only task, no wall-clock time (id=\(ids.base), date=\(scheduledDate))")
             return
         }
 
         let offsetMinutes = task.reminderOffsetMinutes ?? ReminderOffset.globalDefault.rawValue
-        let fireDate = scheduledDate.addingTimeInterval(-Double(offsetMinutes) * 60)
+        let now = Date()
 
-        print("""
-        [Reminder] trigger computed — id=\(identifier) \
-        scheduledDate=\(scheduledDate) \
-        offsetMin=\(offsetMinutes) \
-        fireDate=\(fireDate) \
-        now=\(Date()) \
-        isFuture=\(fireDate > Date())
-        """)
-
-        guard fireDate > Date() else {
-            print("[Reminder] skip — triggerDate \(fireDate) is in the past (id=\(identifier))")
-            return
+        // ── Pre-reminder: scheduledDate − offset; only if offset > 0 and not in the past. ──
+        if offsetMinutes > 0 {
+            let preFire = scheduledDate.addingTimeInterval(-Double(offsetMinutes) * 60)
+            if preFire > now {
+                let content = UNMutableNotificationContent()
+                content.title = task.title
+                content.body = Self.preReminderBody
+                content.sound = .default
+                let preComps = Calendar.current.dateComponents(
+                    [.year, .month, .day, .hour, .minute],
+                    from: preFire
+                )
+                let preTrigger = UNCalendarNotificationTrigger(dateMatching: preComps, repeats: false)
+                let preRequest = UNNotificationRequest(
+                    identifier: ids.pre,
+                    content: content,
+                    trigger: preTrigger
+                )
+                center.add(preRequest) { [weak self] error in
+                    if let error {
+                        print("[Reminder] ERROR pre-reminder add — id=\(ids.pre) error=\(error)")
+                    } else {
+                        print("[Reminder] pre-reminder scheduled — id=\(ids.pre) taskId=\(ids.base) fireDate=\(preFire)")
+                        self?.center.getPendingNotificationRequests { requests in
+                            let found = requests.contains { $0.identifier == ids.pre }
+                            print("[Reminder] pendingVerify pre — id=\(ids.pre) foundInQueue=\(found) totalPending=\(requests.count)")
+                        }
+                    }
+                }
+            } else {
+                print("[Reminder] skipped due to past time — kind=pre id=\(ids.pre) taskId=\(ids.base) triggerDate=\(preFire) now=\(now)")
+            }
         }
 
-        let content = UNMutableNotificationContent()
-        content.title = task.title
-        content.body  = formattedBody(scheduledDate: scheduledDate, offsetMinutes: offsetMinutes)
-        content.sound = .default
-
-        let comps = Calendar.current.dateComponents(
-            [.year, .month, .day, .hour, .minute],
-            from: fireDate
-        )
-        let trigger  = UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
-        let request  = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
-
-        center.add(request) { [weak self] error in
-            if let error {
-                print("[Reminder] ERROR adding notification — id=\(identifier) error=\(error)")
-            } else {
-                print("[Reminder] scheduled ✓ — id=\(identifier) fireDate=\(fireDate) offset=\(offsetMinutes)min")
-                // Verify the request actually landed in the pending queue.
-                self?.center.getPendingNotificationRequests { requests in
-                    let found = requests.contains { $0.identifier == identifier }
-                    print("[Reminder] pendingVerify — id=\(identifier) foundInQueue=\(found) totalPending=\(requests.count)")
+        // ── Exact-time: always at scheduledDate when that instant is still in the future. ──
+        if scheduledDate > now {
+            let content = UNMutableNotificationContent()
+            content.title = task.title
+            content.body = Self.exactReminderBody
+            content.sound = .default
+            let exactComps = Calendar.current.dateComponents(
+                [.year, .month, .day, .hour, .minute],
+                from: scheduledDate
+            )
+            let exactTrigger = UNCalendarNotificationTrigger(dateMatching: exactComps, repeats: false)
+            let exactRequest = UNNotificationRequest(
+                identifier: ids.exact,
+                content: content,
+                trigger: exactTrigger
+            )
+            center.add(exactRequest) { [weak self] error in
+                if let error {
+                    print("[Reminder] ERROR exact reminder add — id=\(ids.exact) error=\(error)")
+                } else {
+                    print("[Reminder] exact reminder scheduled — id=\(ids.exact) taskId=\(ids.base) fireDate=\(scheduledDate)")
+                    self?.center.getPendingNotificationRequests { requests in
+                        let found = requests.contains { $0.identifier == ids.exact }
+                        print("[Reminder] pendingVerify exact — id=\(ids.exact) foundInQueue=\(found) totalPending=\(requests.count)")
+                    }
                 }
             }
+        } else {
+            print("[Reminder] skipped due to past time — kind=exact id=\(ids.exact) taskId=\(ids.base) triggerDate=\(scheduledDate) now=\(now)")
         }
     }
 
     func cancel(taskID: UUID) {
-        let identifier = taskID.uuidString
-        print("[Reminder] cancel() — id=\(identifier)")
-        center.removePendingNotificationRequests(withIdentifiers: [identifier])
+        let ids = Self.notificationIdentifiers(for: taskID)
+        print("[Reminder] cancel() — id=\(ids.base) (legacy+pre+exact)")
+        center.removePendingNotificationRequests(withIdentifiers: [ids.legacy, ids.pre, ids.exact])
     }
 
     // MARK: - Debug helper
@@ -171,6 +201,26 @@ final class TaskReminderService: NSObject, UNUserNotificationCenterDelegate {
 
     // MARK: - Private helpers
 
+    private static let preReminderBody = "Starting soon"
+    private static let exactReminderBody = "It's time"
+
+    private struct NotificationIDs {
+        let base: String
+        let legacy: String
+        let pre: String
+        let exact: String
+    }
+
+    private static func notificationIdentifiers(for id: UUID) -> NotificationIDs {
+        let base = id.uuidString
+        return NotificationIDs(
+            base: base,
+            legacy: base,
+            pre: base + "_pre",
+            exact: base + "_exact"
+        )
+    }
+
     private func hasWallClockTime(_ date: Date) -> Bool {
         let cal = Calendar.current
         return !(
@@ -178,22 +228,6 @@ final class TaskReminderService: NSObject, UNUserNotificationCenterDelegate {
             cal.component(.minute, from: date) == 0 &&
             cal.component(.second, from: date) == 0
         )
-    }
-
-    /// Builds the notification body.
-    /// - 0 min offset → "Now · 5:15 PM"
-    /// - N min offset → "In N min · 5:15 PM"  (or "In 1 hr · 5:15 PM" for 60)
-    private func formattedBody(scheduledDate: Date, offsetMinutes: Int) -> String {
-        let f = DateFormatter()
-        f.timeStyle = .short
-        f.dateStyle = .none
-        let timeString = f.string(from: scheduledDate)
-
-        switch offsetMinutes {
-        case 0:  return "Now · \(timeString)"
-        case 60: return "In 1 hr · \(timeString)"
-        default: return "In \(offsetMinutes) min · \(timeString)"
-        }
     }
 
     private func logAuthorizationStatus() {
