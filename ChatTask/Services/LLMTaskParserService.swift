@@ -32,9 +32,7 @@ struct LLMTaskParserService: TaskParsing {
         formatter.timeZone = TimeZone(identifier: timeZoneIdentifier) ?? .current
         let nowString = formatter.string(from: now)
 
-        // If you control the server prompt: a single optional line can help, e.g.
-        // "For short task phrases, keep the full phrase in title and set notes to null."
-        // Client only post-processes (Option B); no extra model call.
+        // Contract matches backend `ParseRequest` / `LLMTaskParseResponse` (snake_case). Parsing rules live on the server only.
         let requestBody: [String: Any] = [
             BackendCorrelation.requestIDJSONKey: requestId.uuidString,
             "text": text,

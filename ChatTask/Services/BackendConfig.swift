@@ -34,7 +34,7 @@ enum BackendConfig {
         baseURL.appendingPathComponent("transcribe")
     }
 
-    /// `POST` JSON body with `text`, `now`, `timezone`, optional `locale` → parsed command JSON
+    /// `POST` JSON: required `text`, `now`, `timezone`; optional `locale`, `request_id`; backend may accept `parse_instructions`, `source`.
     static var parseURL: URL {
         baseURL.appendingPathComponent("parse")
     }
