@@ -1,0 +1,2 @@
+(base) >grep -R "struct ChatActiveTaskContext\|class ChatActiveTaskContext\|typealias ChatActiveTaskContext" -n ChatTask
+ChatTask/Models/ChatActiveTaskContext.swift:4:struct ChatActiveTaskContext: Equatable, Sendable {
