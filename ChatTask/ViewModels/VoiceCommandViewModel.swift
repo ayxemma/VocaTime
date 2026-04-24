@@ -82,6 +82,7 @@ final class VoiceCommandViewModel {
     var disambiguationCandidates: [TaskItem] = []
     /// Most recent task touched in this chat session; sent to backend parse for follow-ups. Cleared on sheet dismiss.
     var lastActiveChatTaskContext: ChatActiveTaskContext?
+    var shouldShowInitialEditHint = false
 
     private var pendingConflictCommand: ParsedCommand?
     private var pendingDeleteTask: TaskItem?
@@ -915,7 +916,7 @@ final class VoiceCommandViewModel {
         try? persistenceContext?.save()
         TaskReminderService.shared.schedule(for: task)
         let timeStr = shortTimeFormatter.string(from: newDate)
-        let msg = assistantSuccessMessage(base: String(format: s.chatRescheduleSuccess, task.title, timeStr))
+        let msg = String(format: s.chatRescheduleSuccess, task.title, timeStr)
         emitAssistantResponse(msg, nextState: .success, stream: true)
         refreshActiveContext(from: task)
     }
@@ -929,7 +930,7 @@ final class VoiceCommandViewModel {
         }
         task.updatedAt = Date()
         try? persistenceContext?.save()
-        emitAssistantResponse(assistantSuccessMessage(base: String(format: s.chatAppendSuccess, task.title)), nextState: .success, stream: true)
+        emitAssistantResponse(String(format: s.chatAppendSuccess, task.title), nextState: .success, stream: true)
         refreshActiveContext(from: task)
     }
 
@@ -938,7 +939,7 @@ final class VoiceCommandViewModel {
         task.title = newTitle
         task.updatedAt = Date()
         try? persistenceContext?.save()
-        emitAssistantResponse(assistantSuccessMessage(base: String(format: s.chatRenameSuccess, newTitle)), nextState: .success, stream: true)
+        emitAssistantResponse(String(format: s.chatRenameSuccess, newTitle), nextState: .success, stream: true)
         refreshActiveContext(from: task)
     }
 
@@ -1096,7 +1097,7 @@ final class VoiceCommandViewModel {
     // MARK: - Helpers (unchanged)
 
     private func commitSave(command: ParsedCommand) {
-        let reply = assistantSuccessMessage(base: confirmationMessage(for: command, userTranscript: command.originalText))
+        let reply = confirmationMessage(for: command, userTranscript: command.originalText)
         if let ctx = persistenceContext {
             let resolvedDate = command.reminderDate ?? command.startDate
             print("""
@@ -1107,6 +1108,7 @@ final class VoiceCommandViewModel {
             """)
             let item = TaskItem.insertFromParsedCommand(command, context: ctx)
             refreshActiveContext(from: item)
+            shouldShowInitialEditHint = true
             Self.log.info("""
                 [VoiceChat] taskSaveSuccess \
                 title=\(command.title, privacy: .public) \
@@ -1115,12 +1117,6 @@ final class VoiceCommandViewModel {
                 """)
         }
         emitAssistantResponse(reply, nextState: .success, stream: true)
-    }
-
-    private func assistantSuccessMessage(base: String) -> String {
-        let hint = uiLanguage.strings.chatFollowUpHint
-        if hint.isEmpty { return base }
-        return base + "\n\n" + hint
     }
 
     private func refreshActiveContext(from task: TaskItem) {
@@ -1194,6 +1190,7 @@ final class VoiceCommandViewModel {
         chatDraftText = ""
         isTextEditing = false
         pendingVoiceTranscript = ""
+        shouldShowInitialEditHint = false
         chatMessages = []
         parsedCommand = nil
         pendingConflictCommand = nil

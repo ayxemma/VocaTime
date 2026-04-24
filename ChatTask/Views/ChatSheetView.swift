@@ -82,8 +82,16 @@ struct ChatSheetView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 12) {
                     ForEach(viewModel.chatMessages) { message in
-                        chatBubble(message)
-                            .id(message.id)
+                        VStack(alignment: .leading, spacing: 4) {
+                            chatBubble(message)
+                            if shouldShowEditHint(after: message) {
+                                Text(strings.chatFollowUpHint)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .padding(.horizontal, 14)
+                            }
+                        }
+                        .id(message.id)
                     }
                 }
                 .padding()
@@ -115,6 +123,18 @@ struct ChatSheetView: View {
                 .padding(.horizontal, 4)
             }
 
+            if let title = viewModel.lastActiveChatTaskContext?.title, !title.isEmpty {
+                HStack(spacing: 6) {
+                    Image(systemName: "pencil")
+                        .font(.caption2.weight(.semibold))
+                    Text("Editing: \(title)")
+                        .font(.caption)
+                        .lineLimit(1)
+                }
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 4)
+            }
+
             // Status label
             if !viewModel.chatStatusDescription.isEmpty, viewModel.chatFlowState != .listening {
                 HStack {
@@ -139,6 +159,14 @@ struct ChatSheetView: View {
                 composerRow(s: s)
             }
         }
+    }
+
+    private func shouldShowEditHint(after message: ChatMessage) -> Bool {
+        guard viewModel.shouldShowInitialEditHint,
+              message.role == .assistant,
+              viewModel.chatMessages.last(where: { $0.role == .assistant })?.id == message.id
+        else { return false }
+        return !strings.chatFollowUpHint.isEmpty
     }
 
     // MARK: - Composer row
