@@ -203,11 +203,22 @@ struct TaskParsingCoordinator {
 
     // MARK: - Helpers
 
-    /// Option B: single-pass LLM result unchanged for scheduling; for short inputs, `title` = user phrase, `notes` = nil.
+    /// Option B: single-pass LLM result unchanged for scheduling; for short inputs, preserve
+    /// the backend title when present and only clear notes / fallback title presentation.
     private static func applyLLMShortInputOptionB(input: String, result: ParsedCommand) -> ParsedCommand {
-        let out = ShortInputLLMPresentation.applyOptionB(userInput: input, command: result)
-        if out.title != result.title || out.notes != result.notes {
-            log.info("[TaskParsing] shortInput Option B — title/notes presentation adjusted (llm) title=\(out.title, privacy: .public)")
+        let outcome = ShortInputLLMPresentation.applyOptionB(userInput: input, command: result)
+        let out = outcome.command
+        log.info("""
+            [TaskParsing] titlePostProcess \
+            backendTitle=\(outcome.backendTitle, privacy: .public) \
+            rawTranscript=\(outcome.rawTranscript, privacy: .public) \
+            finalTitle=\(outcome.finalTitle, privacy: .public) \
+            shortInput=\(outcome.isShortInput, privacy: .public) \
+            titleModified=\(outcome.didModifyTitle, privacy: .public) \
+            reason=\(outcome.reason, privacy: .public)
+            """)
+        if out.notes != result.notes {
+            log.info("[TaskParsing] shortInput Option B — notes presentation adjusted (llm) title=\(out.title, privacy: .public)")
         }
         return out
     }
