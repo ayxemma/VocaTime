@@ -133,6 +133,7 @@ final class VoiceCommandViewModel {
     private var currentSubmitCameFromVoiceDraft = false
     private var currentListeningIsAutoFollowUp = false
     private var voiceFollowUpAutoStartsRemaining = 0
+    private var followUpSpeechDetected = false
     private var lastUnclearFeedbackAt: Date = .distantPast
     private var isChatSheetPresented = false
     private var isAppActive = true
@@ -230,16 +231,20 @@ final class VoiceCommandViewModel {
     /// Cancels the current recording session without processing any audio.
     /// Used when the user taps the text field while listening, signalling they prefer to type.
     func chatCancelListening() async {
+        await cancelActiveListening(reason: "userSwitchedToText", logMessage: "listeningCancelled — user switched to text input")
+    }
+
+    private func cancelActiveListening(reason: String, logMessage: String) async {
         guard chatFlowState == .listening else { return }
-        cancelAutoRelisten(reason: "userSwitchedToText")
+        cancelAutoRelisten(reason: reason)
         cancelMaxRecordingTimer()
-        cancelFollowUpNoSpeechTimer(reason: "userSwitchedToText")
+        _ = cancelFollowUpNoSpeechTimer(reason: reason)
         speechService.onPartialTranscript = nil
         speechService.onSpeechDetected = nil
         await speechService.cancelForReset()
         chatFlowState = .idle
         chatDraftText = ""
-        Self.log.info("[VoiceChat] listeningCancelled — user switched to text input")
+        Self.log.info("[VoiceChat] \(logMessage, privacy: .public)")
     }
 
     func chatTextEditingChanged(isFocused: Bool) {
@@ -341,8 +346,11 @@ final class VoiceCommandViewModel {
         if phase == .background || phase == .inactive {
             isAppActive = false
             cancelAutoRelisten(reason: "sceneInactive")
-            cancelFollowUpNoSpeechTimer(reason: "sceneInactive")
+            _ = cancelFollowUpNoSpeechTimer(reason: "sceneInactive")
             cancelAllProcessingStatusHints()
+            if chatFlowState == .listening {
+                Task { await cancelActiveListening(reason: "sceneInactive", logMessage: "listeningCancelled — scene inactive") }
+            }
         } else if phase == .active {
             isAppActive = true
             if chatFlowState == .processing {
@@ -471,23 +479,33 @@ final class VoiceCommandViewModel {
     }
 
     private func startFollowUpNoSpeechTimerIfNeeded(startReason: String) {
-        cancelFollowUpNoSpeechTimer(reason: "rescheduled")
+        _ = cancelFollowUpNoSpeechTimer(reason: "rescheduled")
         guard startReason == "autoRelisten" else { return }
         Self.log.info("[VoiceChat] followUpWindowStarted timeoutMs=7000")
         followUpNoSpeechTask = Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: Self.followUpNoSpeechNanoseconds)
             guard !Task.isCancelled else { return }
-            guard let self, self.chatFlowState == .listening else { return }
+            guard let self else { return }
+            self.followUpNoSpeechTask = nil
+            if self.chatFlowState == .listening {
+                Self.log.info("[VoiceChat] followUpWindowExpired ignored reason=alreadyListening")
+                return
+            }
+            if self.followUpSpeechDetected {
+                Self.log.info("[VoiceChat] followUpWindowExpired ignored reason=speechAlreadyDetected")
+                return
+            }
             Self.log.info("[VoiceChat] followUpWindowExpired reason=noSpeech")
-            await self.chatCancelListening()
         }
     }
 
-    private func cancelFollowUpNoSpeechTimer(reason: String) {
-        guard followUpNoSpeechTask != nil else { return }
+    @discardableResult
+    private func cancelFollowUpNoSpeechTimer(reason: String) -> Bool {
+        guard followUpNoSpeechTask != nil else { return false }
         followUpNoSpeechTask?.cancel()
         followUpNoSpeechTask = nil
         Self.log.info("[VoiceChat] followUpWindowCancelled reason=\(reason, privacy: .public)")
+        return true
     }
 
     private func autoRelistenSkipReason() -> String? {
@@ -536,8 +554,8 @@ final class VoiceCommandViewModel {
 
         voiceDraftErrorMessage = nil
         cancelMaxRecordingTimer()
-        cancelFollowUpNoSpeechTimer(reason: "listenStart")
         currentListeningIsAutoFollowUp = startReason == "autoRelisten"
+        followUpSpeechDetected = false
 
         let msgs = uiLanguage.speechMessages
         Self.log.info("[VoiceChat] recordingStarted startReason=\(startReason, privacy: .public) appUILanguage=\(self.uiLanguage.rawValue, privacy: .public)")
@@ -545,10 +563,13 @@ final class VoiceCommandViewModel {
         // Keep Apple partials internal only; multilingual chat displays the backend transcript after stop.
         speechService.onPartialTranscript = { [weak self] text in
             guard let self, self.chatFlowState == .listening else { return }
+            self.followUpSpeechDetected = true
+            self.cancelFollowUpNoSpeechTimer(reason: "speechDetected")
             Self.log.info("[VoiceChat] localPartialReceived chars=\(text.count, privacy: .public) hiddenFromUI=true")
         }
         speechService.onSpeechDetected = { [weak self] in
             guard let self else { return }
+            self.followUpSpeechDetected = true
             self.cancelFollowUpNoSpeechTimer(reason: "speechDetected")
         }
 
@@ -579,7 +600,10 @@ final class VoiceCommandViewModel {
 
         chatFlowState = .listening
         startMaxRecordingTimer()
-        startFollowUpNoSpeechTimerIfNeeded(startReason: startReason)
+        let cancelledFollowUpWindow = cancelFollowUpNoSpeechTimer(reason: "recordingStarted")
+        if startReason == "autoRelisten", !cancelledFollowUpWindow {
+            Self.log.info("[VoiceChat] followUpWindowCancelled reason=recordingStarted")
+        }
         Self.log.info("[VoiceChat] listening active — tap-to-stop with auto-silence fallback; max timeout=30s")
     }
 
