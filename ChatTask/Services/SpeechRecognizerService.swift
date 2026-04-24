@@ -31,6 +31,11 @@ enum SpeechState: Equatable {
     case failed(String)
 }
 
+enum SpeechAutoStopBehavior: Equatable {
+    case enabled
+    case disabled
+}
+
 /// Result returned by `stopListening()`. Always includes the audio file URL even when a local
 /// transcript is available — the file is needed for the cloud transcription fallback path.
 struct LocalSpeechCaptureResult {
@@ -39,7 +44,8 @@ struct LocalSpeechCaptureResult {
     /// Average segment confidence from `SFSpeechRecognitionResult`; `nil` when recognition was
     /// unavailable or no segments were produced.
     let confidence: Float?
-    /// URL of the recorded WAV file. Caller is responsible for deleting after use.
+    /// URL of the uploadable recording file (M4A when export succeeds; WAV fallback).
+    /// Caller is responsible for deleting after use.
     let audioURL: URL?
     let duration: TimeInterval
 }
@@ -53,8 +59,13 @@ protocol SpeechManaging: AnyObject {
     var onStateChange: ((SpeechState) -> Void)? { get set }
 
     func requestAuthorizationIfNeeded(messages: SpeechServiceMessages) async -> String?
-    func startListening(locale: Locale, messages: SpeechServiceMessages, onAutoStop: (() -> Void)?) async -> String?
-    func stopListening() async -> Result<LocalSpeechCaptureResult, Error>
+    func startListening(
+        locale: Locale,
+        messages: SpeechServiceMessages,
+        autoStopBehavior: SpeechAutoStopBehavior,
+        onAutoStop: (() -> Void)?
+    ) async -> String?
+    func stopListening(waitForLocalFinal: Bool) async -> Result<LocalSpeechCaptureResult, Error>
     func cancelForReset() async
 }
 
@@ -81,7 +92,8 @@ final class SpeechRecognizerService: SpeechManaging {
     // MARK: - Silence detection tuning (preserved from original service)
     /// Audio level (dBFS) above which input is treated as speech. –40 dB catches normal to quiet speech.
     private static let speechThreshold: Float = -40.0
-    /// Consecutive seconds below `speechThreshold` — after speech has started — before auto-stop fires.
+    /// Consecutive seconds below `speechThreshold` — after speech has started — before auto-stop fires
+    /// in flows that opt in. Chat voice input disables this and uses tap-to-stop.
     private static let silenceDurationToStop: Double = 1.2
     /// Metering poll interval.
     private static let meterPollNanoseconds: UInt64 = 100_000_000  // 100 ms
@@ -146,6 +158,7 @@ final class SpeechRecognizerService: SpeechManaging {
     func startListening(
         locale: Locale,
         messages: SpeechServiceMessages,
+        autoStopBehavior: SpeechAutoStopBehavior = .enabled,
         onAutoStop: (() -> Void)?
     ) async -> String? {
         await cancelOngoingSessionSilently()
@@ -224,19 +237,23 @@ final class SpeechRecognizerService: SpeechManaging {
             return String(format: messages.audioStartFailed, error.localizedDescription)
         }
 
-        autoStopCallback = onAutoStop
+        autoStopCallback = autoStopBehavior == .enabled ? onAutoStop : nil
         currentBestTranscript = ""
         currentBestConfidence = nil
         stopSessionReceivedAppleFinal = false
         lastBufferPowerLevel = -160
 
-        startMeteringTask()
-        Self.log.info("[Speech] listening started fileURL=\(fileURL.path, privacy: .public)")
+        if autoStopBehavior == .enabled {
+            startMeteringTask(autoStopEnabled: true)
+        } else {
+            Self.log.info("[Speech] autoSilenceDisabled — user-controlled stop mode")
+        }
+        Self.log.info("[Speech] listening started fileURL=\(fileURL.path, privacy: .public) autoStop=\(String(describing: autoStopBehavior), privacy: .public)")
         return nil
     }
 
     /// Stops listening and returns the local transcript plus the audio file URL (M4A when export succeeds).
-    func stopListening() async -> Result<LocalSpeechCaptureResult, Error> {
+    func stopListening(waitForLocalFinal: Bool = true) async -> Result<LocalSpeechCaptureResult, Error> {
         guard let engine = audioEngine, let wavURL = recordingFileURL else {
             return .failure(speechRecognitionError(
                 code: .nothingToStop,
@@ -266,8 +283,13 @@ final class SpeechRecognizerService: SpeechManaging {
         let finalTranscript: String
         if speechRecognitionAvailable, let request = recognitionRequest {
             request.endAudio()
-            finalTranscript = await waitForFinalTranscript(maxWait: 2.0)
-            Self.log.info("[Speech] localFinalTranscript=\(finalTranscript, privacy: .public) confidence=\(String(describing: self.currentBestConfidence), privacy: .public) appleFinal=\(self.stopSessionReceivedAppleFinal, privacy: .public)")
+            if waitForLocalFinal {
+                finalTranscript = await waitForFinalTranscript(maxWait: 2.0)
+                Self.log.info("[Speech] localFinalTranscript=\(finalTranscript, privacy: .public) confidence=\(String(describing: self.currentBestConfidence), privacy: .public) appleFinal=\(self.stopSessionReceivedAppleFinal, privacy: .public)")
+            } else {
+                finalTranscript = currentBestTranscript
+                Self.log.info("[Speech] localFinalWaitSkipped — cloud transcription authoritative confidence=\(String(describing: self.currentBestConfidence), privacy: .public) appleFinal=\(self.stopSessionReceivedAppleFinal, privacy: .public)")
+            }
         } else {
             finalTranscript = currentBestTranscript
         }
@@ -494,7 +516,7 @@ final class SpeechRecognizerService: SpeechManaging {
 
     // MARK: - Silence detection (ported from AVAudioRecorder metering to buffer power levels)
 
-    private func startMeteringTask() {
+    private func startMeteringTask(autoStopEnabled: Bool) {
         meteringTask?.cancel()
         meteringTask = Task { @MainActor [weak self] in
             var hasSpeech = false
@@ -531,10 +553,16 @@ final class SpeechRecognizerService: SpeechManaging {
                         lastLoggedState = "silence"
                     } else if let start = silenceStartedAt,
                               Date().timeIntervalSince(start) >= SpeechRecognizerService.silenceDurationToStop {
-                        SpeechRecognizerService.log.info(
-                            "[Speech] silenceThresholdReached duration=\(SpeechRecognizerService.silenceDurationToStop, privacy: .public)s — triggering auto-stop"
-                        )
-                        self.autoStopCallback?()
+                        if autoStopEnabled {
+                            SpeechRecognizerService.log.info(
+                                "[Speech] silenceThresholdReached duration=\(SpeechRecognizerService.silenceDurationToStop, privacy: .public)s — triggering auto-stop"
+                            )
+                            self.autoStopCallback?()
+                        } else {
+                            SpeechRecognizerService.log.info(
+                                "[Speech] silenceThresholdReached duration=\(SpeechRecognizerService.silenceDurationToStop, privacy: .public)s — ignored auto-stop disabled"
+                            )
+                        }
                         break
                     }
                 }

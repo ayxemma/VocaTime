@@ -218,7 +218,7 @@ final class VoiceCommandViewModel {
         case .idle, .success, .error:
             Task { await chatBeginListening() }
         case .listening:
-            Self.log.info("[VoiceChat] stopReason=manual — user tapped mic to stop")
+            Self.log.info("[VoiceChat] userTappedStop stopReason=manual")
             Task { await chatFinalizeListening() }
         case .processing, .conflictPending, .deletePending, .disambiguating:
             break
@@ -378,12 +378,12 @@ final class VoiceCommandViewModel {
         cancelMaxRecordingTimer()
 
         let msgs = uiLanguage.speechMessages
-        Self.log.info("[VoiceChat] localListeningStart appUILanguage=\(self.uiLanguage.rawValue, privacy: .public)")
+        Self.log.info("[VoiceChat] recordingStarted appUILanguage=\(self.uiLanguage.rawValue, privacy: .public)")
 
-        // Attach partial-transcript callback (set here so the callback captures the current ViewModel).
+        // Keep Apple partials internal only; multilingual chat displays the backend transcript after stop.
         speechService.onPartialTranscript = { [weak self] text in
             guard let self, self.chatFlowState == .listening else { return }
-            self.chatDraftText = text
+            Self.log.info("[VoiceChat] localPartialReceived chars=\(text.count, privacy: .public) hiddenFromUI=true")
         }
 
         // Request both microphone + speech recognition permissions.
@@ -398,11 +398,8 @@ final class VoiceCommandViewModel {
         let startError = await speechService.startListening(
             locale: uiLanguage.locale,
             messages: msgs,
-            onAutoStop: { [weak self] in
-                guard let self, self.chatFlowState == .listening else { return }
-                Self.log.info("[VoiceChat] stopReason=autoSilence — silence threshold reached")
-                Task { await self.chatFinalizeListening() }
-            }
+            autoStopBehavior: .disabled,
+            onAutoStop: nil
         )
 
         if let startError {
@@ -412,7 +409,7 @@ final class VoiceCommandViewModel {
 
         chatFlowState = .listening
         startMaxRecordingTimer()
-        Self.log.info("[VoiceChat] listening active — local recognition + audio recording running; max timeout=30s")
+        Self.log.info("[VoiceChat] listening active — tap-to-stop; auto silence disabled; max timeout=30s")
     }
 
     // MARK: - Finalize listening (orchestrator)
@@ -426,7 +423,7 @@ final class VoiceCommandViewModel {
         let pipelineT0 = CFAbsoluteTimeGetCurrent()
         Self.log.info("[VoiceChat] stoppingListening")
         let stopT0 = CFAbsoluteTimeGetCurrent()
-        let captureOutcome = await speechService.stopListening()
+        let captureOutcome = await speechService.stopListening(waitForLocalFinal: false)
         Self.log.info("[VoiceChat] latency stopListening ms=\(latencyMs(since: stopT0), privacy: .public)")
         let strings = uiLanguage.strings
         let speechMsgs = uiLanguage.speechMessages
@@ -438,7 +435,7 @@ final class VoiceCommandViewModel {
 
         case .success(let captureResult):
             Self.log.info("[VoiceChat] captureSuccess localTranscript=\(captureResult.transcript, privacy: .public) confidence=\(String(describing: captureResult.confidence), privacy: .public) duration=\(captureResult.duration, privacy: .public)s audioURL=\(captureResult.audioURL?.path ?? "nil", privacy: .public)")
-            await handleLocalSpeechResult(captureResult, strings: strings)
+            await handleCloudAuthoritativeSpeechResult(captureResult, strings: strings)
             Self.log.info("[VoiceChat] latency chatFinalizeListening totalMs=\(latencyMs(since: pipelineT0), privacy: .public) outcome=success")
         }
     }
@@ -500,6 +497,19 @@ final class VoiceCommandViewModel {
             Self.log.info("[VoiceChat] routingDecision=fallbackToCloud — uploading audio")
             await handleCloudFallback(audioURL: audioURL, strings: strings)
         }
+    }
+
+    private func handleCloudAuthoritativeSpeechResult(
+        _ captureResult: LocalSpeechCaptureResult,
+        strings: AppStrings
+    ) async {
+        guard let audioURL = captureResult.audioURL else {
+            voiceDraftErrorMessage = strings.chatErrorNothingRecorded
+            chatFlowState = .error
+            return
+        }
+        Self.log.info("[VoiceChat] routingDecision=cloudAuthoritative localTranscriptChars=\(captureResult.transcript.count, privacy: .public) confidence=\(String(describing: captureResult.confidence), privacy: .public)")
+        await handleCloudFallback(audioURL: audioURL, strings: strings)
     }
 
     // MARK: - Cloud fallback handler

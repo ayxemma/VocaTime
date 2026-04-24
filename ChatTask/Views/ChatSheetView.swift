@@ -45,8 +45,7 @@ struct ChatSheetView: View {
                 viewModel.attachPersistence(modelContext)
                 viewModel.uiLanguage = appUILanguage
                 BackendWarmup.scheduleSessionWarmup()
-                Self.log.info("[ChatSheet] chatAutoStart — sheet opened, beginning recording")
-                Task { await viewModel.chatBeginListening() }
+                Self.log.info("[ChatSheet] chatReady — tap mic to start recording")
             }
             .onDisappear {
                 Task {
@@ -104,17 +103,19 @@ struct ChatSheetView: View {
     @ViewBuilder
     private func inputArea(s: AppStrings) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            // Live partial transcript (shown while listening)
-            if !viewModel.chatDraftText.isEmpty, viewModel.chatFlowState == .listening {
-                Text(viewModel.chatDraftText)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 4)
+            if viewModel.chatFlowState == .listening {
+                HStack(spacing: 8) {
+                    ChatTypingIndicatorView(foreground: themePalette.accentColor)
+                    Text(s.voiceListening)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                }
+                .padding(.horizontal, 4)
             }
 
             // Status label
-            if !viewModel.chatStatusDescription.isEmpty {
+            if !viewModel.chatStatusDescription.isEmpty, viewModel.chatFlowState != .listening {
                 HStack {
                     Text(viewModel.chatStatusDescription)
                         .font(.caption)
@@ -188,7 +189,7 @@ struct ChatSheetView: View {
                 Circle()
                     .fill(isListening ? Color.red.opacity(0.15) : themePalette.accentColor.opacity(0.14))
                     .frame(width: 44, height: 44)
-                Image(systemName: "mic.fill")
+                Image(systemName: isListening ? "stop.fill" : "mic.fill")
                     .font(.system(size: 20, weight: .medium))
                     .foregroundStyle(isListening ? Color.red : themePalette.accentColor)
             }
