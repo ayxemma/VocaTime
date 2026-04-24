@@ -33,7 +33,7 @@ struct ChatSheetView: View {
                     .padding()
                     .background(Color(.systemBackground))
             }
-            .animation(.easeInOut(duration: 0.32), value: themePalette.theme)
+            .animation(.easeInOut(duration: 0.32), value: themePalette.accent)
             .navigationTitle(s.commandTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -379,6 +379,6 @@ private struct ChatTypingIndicatorView: View {
 #Preview {
     ChatSheetView(viewModel: VoiceCommandViewModel())
         .environment(\.appUILanguage, .en)
-        .environment(\.themePalette, .palette(for: .purple))
+        .environment(\.themePalette, .palette(for: .blue))
         .environment(\.locale, Locale(identifier: "en_US"))
 }

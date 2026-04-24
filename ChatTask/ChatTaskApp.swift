@@ -44,7 +44,8 @@ struct ChatTaskApp: App {
 
 private struct AppShellView: View {
     @AppStorage(AppUILanguage.storageKey) private var languageRaw: String = AppUILanguage.defaultForDevice().rawValue
-    @AppStorage(AppColorTheme.storageKey) private var themeRaw: String = AppColorTheme.purple.rawValue
+    @AppStorage(AppAppearanceMode.storageKey) private var appearanceRaw: String = AppAppearanceMode.system.rawValue
+    @AppStorage(AppAccentColor.storageKey) private var accentRaw: String = AppAccentColor.blue.rawValue
     @Environment(SubscriptionManager.self) private var subscriptionManager
     @Environment(\.scenePhase) private var scenePhase
     @Query private var allTasks: [TaskItem]
@@ -53,8 +54,9 @@ private struct AppShellView: View {
     @State private var didRunRootOnAppearWarmup = false
     @State private var idlePreWarmTask: Task<Void, Never>?
 
-    private var theme: AppColorTheme { AppColorTheme(storageRaw: themeRaw) }
-    private var themePalette: AppThemePalette { AppThemePalette.palette(for: theme) }
+    private var appearance: AppAppearanceMode { AppAppearanceMode(storageRaw: appearanceRaw) }
+    private var accent: AppAccentColor { AppAccentColor(storageRaw: accentRaw) }
+    private var themePalette: AppThemePalette { AppThemePalette.palette(for: accent) }
 
     var body: some View {
         let uiLang = AppUILanguage(storageRaw: languageRaw)
@@ -63,7 +65,9 @@ private struct AppShellView: View {
             .environment(\.themePalette, themePalette)
             .environment(\.locale, uiLang.locale)
             .tint(themePalette.accentColor)
-            .animation(.easeInOut(duration: 0.35), value: themeRaw)
+            .preferredColorScheme(appearance.colorScheme)
+            .animation(.easeInOut(duration: 0.25), value: accentRaw)
+            .animation(.easeInOut(duration: 0.25), value: appearanceRaw)
             .sheet(isPresented: $showPaywall) {
                 PaywallView()
                     .environment(\.appUILanguage, uiLang)

@@ -16,7 +16,8 @@ struct SettingsView: View {
     @Environment(SubscriptionManager.self) private var subscriptionManager
 
     @AppStorage(AppUILanguage.storageKey) private var languageRaw: String = AppUILanguage.defaultForDevice().rawValue
-    @AppStorage(AppColorTheme.storageKey) private var themeRaw: String = AppColorTheme.purple.rawValue
+    @AppStorage(AppAppearanceMode.storageKey) private var appearanceRaw: String = AppAppearanceMode.system.rawValue
+    @AppStorage(AppAccentColor.storageKey) private var accentRaw: String = AppAccentColor.blue.rawValue
     @AppStorage(ReminderOffset.defaultsKey) private var reminderDefaultMinutes: Int = 0
 
     @State private var showPaywall = false
@@ -65,7 +66,22 @@ struct SettingsView: View {
             }
 
             Section {
-                themePickerGrid
+                Picker("Theme", selection: $appearanceRaw) {
+                    ForEach(AppAppearanceMode.allCases) { mode in
+                        Text(mode.displayName).tag(mode.rawValue)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .onChange(of: appearanceRaw) { _, value in
+                    Self.log.info("[Settings] appearanceModeTapped mode=\(value, privacy: .public)")
+                }
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Accent Color")
+                        .font(.subheadline)
+                        .foregroundStyle(.primary)
+                    accentColorPickerGrid
+                }
             } header: {
                 Text(s.settingsSectionAppearance)
             }
@@ -213,33 +229,22 @@ struct SettingsView: View {
         }
     }
 
-    private var themePickerGrid: some View {
-        let selected = AppColorTheme(storageRaw: themeRaw)
+    private var accentColorPickerGrid: some View {
+        let selected = AppAccentColor(storageRaw: accentRaw)
         return ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 14) {
-                ForEach(AppColorTheme.allCases) { t in
-                    let palette = AppThemePalette.palette(for: t)
+                ForEach(AppAccentColor.allCases) { accent in
                     Button {
-                        Self.log.info("[Settings] themeColorTapped color=\(t.rawValue, privacy: .public)")
+                        Self.log.info("[Settings] themeColorTapped color=\(accent.rawValue, privacy: .public)")
                         withAnimation(.easeInOut(duration: 0.28)) {
-                            themeRaw = t.rawValue
+                            accentRaw = accent.rawValue
                         }
                     } label: {
                         ZStack {
-                            if t == .white {
-                                Circle()
-                                    .fill(Color(.systemBackground))
-                                    .frame(width: 40, height: 40)
-                                    .overlay(
-                                        Circle()
-                                            .strokeBorder(Color.secondary.opacity(0.4), lineWidth: 1.5)
-                                    )
-                            } else {
-                                Circle()
-                                    .fill(palette.primaryGradient)
-                                    .frame(width: 40, height: 40)
-                            }
-                            if selected == t {
+                            Circle()
+                                .fill(accent.color)
+                                .frame(width: 40, height: 40)
+                            if selected == accent {
                                 Circle()
                                     .strokeBorder(Color.primary, lineWidth: 3)
                                     .frame(width: 46, height: 46)
@@ -249,8 +254,7 @@ struct SettingsView: View {
                         .contentShape(Circle())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel(Text(t.displayName))
-                    .accessibilityHint(Text(t.accessibilityDescription))
+                    .accessibilityLabel(Text(accent.displayName))
                 }
             }
             .padding(.vertical, 4)

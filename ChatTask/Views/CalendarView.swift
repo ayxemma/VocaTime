@@ -51,7 +51,7 @@ struct CalendarView: View {
             .padding()
         }
         .background(themePalette.backgroundColor)
-        .animation(.easeInOut(duration: 0.35), value: themePalette.theme)
+        .animation(.easeInOut(duration: 0.35), value: themePalette.accent)
         .navigationTitle(s.calendarTitle)
         .navigationBarTitleDisplayMode(.large)
         .toolbar {

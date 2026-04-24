@@ -185,7 +185,7 @@ struct HomeView: View {
                 .padding(.bottom, 36)
             }
             .background(themePalette.backgroundColor)
-            .animation(.easeInOut(duration: 0.35), value: themePalette.theme)
+            .animation(.easeInOut(duration: 0.35), value: themePalette.accent)
 
             DraggableChatButton(
                 onTap: onChatTap,
