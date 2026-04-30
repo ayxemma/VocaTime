@@ -31,7 +31,7 @@ struct RootTabView: View {
             TabView(selection: $selectedTab) {
                 NavigationStack {
                     HomeView(onChatTap: {
-                        Self.log.info("[RootTab] chatFABTapped")
+                        Self.log.info("chatFABTapped rootTabForward=true")
                         requestChatPresentation(source: "FAB")
                     })
                 }

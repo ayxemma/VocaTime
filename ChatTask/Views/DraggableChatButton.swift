@@ -1,4 +1,5 @@
 import SwiftUI
+import os.log
 
 // MARK: - Storage (defaults vs saved position)
 
@@ -42,6 +43,8 @@ private enum DraggableChatButtonMetrics {
 /// non-blocking (full-screen pass-through except on the circle).
 struct DraggableChatButton: View {
 
+    private static let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "ChatTask", category: "ChatFAB")
+
     @Environment(\.themePalette) private var themePalette
 
     /// Persisted horizontal position: 0 = left edge of the safe band, 1 = right.
@@ -72,78 +75,93 @@ struct DraggableChatButton: View {
                     y: base.y + dragTranslation.height
                 )
                 let clampedDrag = clampToSafeBand(rawEnd, layout: layout)
-                let dragOffset = CGSize(
-                    width: clampedDrag.x - base.x,
-                    height: clampedDrag.y - base.y
-                )
+                let half = DraggableChatButtonMetrics.size / 2
+                // Top-leading origin in the same coordinate space as `layoutMetrics` (GeometryReader),
+                // avoiding `.position` + `.offset` which can misalign hit testing from the drawn circle.
+                let topLeading = CGPoint(x: clampedDrag.x - half, y: clampedDrag.y - half)
 
                 Image(systemName: "message.fill")
-                        .font(.system(size: 22, weight: .semibold))
-                        .foregroundStyle(themePalette.isMinimal ? themePalette.accentColor : Color.white)
-                        .frame(width: DraggableChatButtonMetrics.size, height: DraggableChatButtonMetrics.size)
-                        .background(
-                            Circle()
-                                .fill(themePalette.primaryGradient)
-                        )
-                        .clipShape(Circle())
-                        .shadow(
-                            color: .black.opacity(themePalette.isMinimal ? 0.1 : 0.2),
-                            radius: themePalette.isMinimal ? 4 : 6,
-                            y: 3
-                        )
-                        .scaleEffect(isDragging ? 1.06 : 1.0)
-                        .opacity(isDragging ? 0.92 : 1.0)
-                        .animation(.easeInOut(duration: 0.18), value: isDragging)
-                        .position(base)
-                        .offset(dragOffset)
-                        .contentShape(Circle())
-                        .accessibilityLabel(accessibilityLabel)
-                        .accessibilityAddTraits(.isButton)
-                        .accessibilityAction { onTap() }
-                        .gesture(
-                            DragGesture(minimumDistance: 0)
-                                .onChanged { value in
-                                    let d = hypot(value.translation.width, value.translation.height)
-                                    if d > DraggableChatButtonMetrics.tapDistanceThreshold {
-                                        isDragging = true
-                                    }
-                                    dragTranslation = value.translation
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(themePalette.isMinimal ? themePalette.accentColor : Color.white)
+                    .frame(width: DraggableChatButtonMetrics.size, height: DraggableChatButtonMetrics.size)
+                    .background(
+                        Circle()
+                            .fill(themePalette.primaryGradient)
+                    )
+                    .clipShape(Circle())
+                    .shadow(
+                        color: .black.opacity(themePalette.isMinimal ? 0.1 : 0.2),
+                        radius: themePalette.isMinimal ? 4 : 6,
+                        y: 3
+                    )
+                    .scaleEffect(isDragging ? 1.06 : 1.0)
+                    .opacity(isDragging ? 0.92 : 1.0)
+                    .animation(.easeInOut(duration: 0.18), value: isDragging)
+                    .contentShape(Circle())
+                    .offset(x: topLeading.x, y: topLeading.y)
+                    .accessibilityLabel(accessibilityLabel)
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityAction { onTap() }
+                    .highPriorityGesture(
+                        DragGesture(minimumDistance: 0, coordinateSpace: .local)
+                        .onChanged { value in
+                            let d = hypot(value.translation.width, value.translation.height)
+                            if d > DraggableChatButtonMetrics.tapDistanceThreshold {
+                                isDragging = true
+                            }
+                            dragTranslation = value.translation
+                        }
+                            .onEnded { value in
+                                let total = hypot(value.translation.width, value.translation.height)
+                                let layoutNow = layoutMetrics(in: geo)
+                                defer {
+                                    dragTranslation = .zero
+                                    isDragging = false
                                 }
-                                .onEnded { value in
-                                    let total = hypot(value.translation.width, value.translation.height)
-                                    let layoutNow = layoutMetrics(in: geo)
-                                    defer {
-                                        dragTranslation = .zero
-                                        isDragging = false
-                                    }
-                                    guard layoutNow.isValid else { return }
-                                    if total <= DraggableChatButtonMetrics.tapDistanceThreshold {
-                                        onTap()
-                                        return
-                                    }
-                                    let baseNow = storedCenter(in: layoutNow)
-                                    let endRaw = CGPoint(
+                                guard layoutNow.isValid else { return }
+                                let baseNow = storedCenter(in: layoutNow)
+                                let visibleCenter = clampToSafeBand(
+                                    CGPoint(
                                         x: baseNow.x + value.translation.width,
                                         y: baseNow.y + value.translation.height
-                                    )
-                                    let midX = (layoutNow.minCenterX + layoutNow.maxCenterX) / 2
-                                    let snappedX = endRaw.x < midX ? layoutNow.minCenterX : layoutNow.maxCenterX
-                                    let snappedY = min(max(endRaw.y, layoutNow.minCenterY), layoutNow.maxCenterY)
-                                    let snapped = CGPoint(x: snappedX, y: snappedY)
-                                    let denomX = max(layoutNow.maxCenterX - layoutNow.minCenterX, 1)
-                                    let denomY = max(layoutNow.maxCenterY - layoutNow.minCenterY, 1)
-                                    let nx = (snapped.x - layoutNow.minCenterX) / denomX
-                                    let ny = (snapped.y - layoutNow.minCenterY) / denomY
-                                    #if DEBUG
-                                    logLayoutDebug(geo: geo, layout: layoutNow, phase: "drop", droppedCenterY: snapped.y)
-                                    #endif
-                                    withAnimation(.spring(response: 0.38, dampingFraction: 0.84)) {
-                                        hasSavedPosition = true
-                                        storedRelX = Double(nx)
-                                        storedRelY = Double(ny)
-                                    }
+                                    ),
+                                    layout: layoutNow
+                                )
+                                let halfNow = DraggableChatButtonMetrics.size / 2
+                                let frameNow = CGRect(
+                                    x: visibleCenter.x - halfNow,
+                                    y: visibleCenter.y - halfNow,
+                                    width: DraggableChatButtonMetrics.size,
+                                    height: DraggableChatButtonMetrics.size
+                                )
+                                if total <= DraggableChatButtonMetrics.tapDistanceThreshold {
+                                    let loc = value.location
+                                    Self.log.info("chatFABTapped visibleCenter=(\(Double(visibleCenter.x), privacy: .public),\(Double(visibleCenter.y), privacy: .public)) tapLocation=(\(Double(loc.x), privacy: .public),\(Double(loc.y), privacy: .public)) savedRelativePosition=(\(storedRelX, privacy: .public),\(storedRelY, privacy: .public)) hasSavedPosition=\(hasSavedPosition, privacy: .public) computedButtonFrame=(x:\(Double(frameNow.minX), privacy: .public) y:\(Double(frameNow.minY), privacy: .public) w:\(Double(frameNow.width), privacy: .public) h:\(Double(frameNow.height), privacy: .public))")
+                                    onTap()
+                                    return
                                 }
-                        )
+                                let endRaw = CGPoint(
+                                    x: baseNow.x + value.translation.width,
+                                    y: baseNow.y + value.translation.height
+                                )
+                                let midX = (layoutNow.minCenterX + layoutNow.maxCenterX) / 2
+                                let snappedX = endRaw.x < midX ? layoutNow.minCenterX : layoutNow.maxCenterX
+                                let snappedY = min(max(endRaw.y, layoutNow.minCenterY), layoutNow.maxCenterY)
+                                let snapped = CGPoint(x: snappedX, y: snappedY)
+                                let denomX = max(layoutNow.maxCenterX - layoutNow.minCenterX, 1)
+                                let denomY = max(layoutNow.maxCenterY - layoutNow.minCenterY, 1)
+                                let nx = (snapped.x - layoutNow.minCenterX) / denomX
+                                let ny = (snapped.y - layoutNow.minCenterY) / denomY
+                                #if DEBUG
+                                logLayoutDebug(geo: geo, layout: layoutNow, phase: "drop", droppedCenterY: snapped.y)
+                                #endif
+                                withAnimation(.spring(response: 0.38, dampingFraction: 0.84)) {
+                                    hasSavedPosition = true
+                                    storedRelX = Double(nx)
+                                    storedRelY = Double(ny)
+                                }
+                            }
+                    )
                 #if DEBUG
                 .onAppear {
                     if !didLogPlacementMode {
