@@ -6,6 +6,7 @@ ChatTask/Secrets.swift
 xcuserdata/
 *.xcuserstate
 DerivedData/
+.derivedData/
 *.hmap
 *.ipa
 *.dSYM.zip

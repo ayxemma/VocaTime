@@ -68,8 +68,23 @@ struct SettingsView: View {
             }
 
             Section {
-                themePickerGrid
-                textSizePicker
+                VStack(alignment: .leading, spacing: 8) {
+                    appearanceControlHeader(
+                        title: "Theme Color",
+                        helper: "Customize the app accent color."
+                    )
+                    themePickerGrid
+                }
+                .padding(.vertical, 4)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    appearanceControlHeader(
+                        title: "Text Size",
+                        helper: "Adjust task and interface text size."
+                    )
+                    textSizePicker
+                }
+                .padding(.vertical, 4)
             } header: {
                 Text(s.settingsSectionAppearance)
             }
@@ -222,6 +237,18 @@ struct SettingsView: View {
             }
         } message: {
             Text(purchaseErrorAlertText)
+        }
+    }
+
+    private func appearanceControlHeader(title: String, helper: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(typography.caption)
+                .fontWeight(.semibold)
+                .foregroundStyle(.primary)
+            Text(helper)
+                .font(typography.caption)
+                .foregroundStyle(.secondary)
         }
     }
 
