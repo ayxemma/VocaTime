@@ -17,6 +17,7 @@ struct SettingsView: View {
 
     @AppStorage(AppUILanguage.storageKey) private var languageRaw: String = AppUILanguage.defaultForDevice().rawValue
     @AppStorage(AppColorTheme.storageKey) private var themeRaw: String = AppColorTheme.white.rawValue
+    @AppStorage(AppTextSize.storageKey) private var textSizeRaw: String = AppTextSize.default.rawValue
     @AppStorage(ReminderOffset.defaultsKey) private var reminderDefaultMinutes: Int = 0
 
     @State private var showPaywall = false
@@ -26,6 +27,7 @@ struct SettingsView: View {
     private static let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "VocaTime", category: "Settings")
 
     private var strings: AppStrings { appUILanguage.strings }
+    private var typography: AppTypography { AppTypography(textSize: AppTextSize(storageRaw: textSizeRaw)) }
 
     private var selectedReminderOffset: Binding<ReminderOffset> {
         Binding(
@@ -56,6 +58,7 @@ struct SettingsView: View {
                     }
                 } label: {
                     Text(s.appLanguage)
+                        .font(typography.body)
                 }
                 .pickerStyle(.menu)
             } header: {
@@ -66,6 +69,7 @@ struct SettingsView: View {
 
             Section {
                 themePickerGrid
+                textSizePicker
             } header: {
                 Text(s.settingsSectionAppearance)
             }
@@ -77,6 +81,7 @@ struct SettingsView: View {
                     }
                 } label: {
                     Text(s.reminderDefaultLabel)
+                        .font(typography.body)
                 }
                 .pickerStyle(.menu)
 
@@ -100,6 +105,7 @@ struct SettingsView: View {
                 } label: {
                     HStack {
                         Text(s.settingsSubscriptionTitle)
+                            .font(typography.body)
                             .foregroundStyle(.primary)
                         Spacer()
                         Text(
@@ -107,7 +113,7 @@ struct SettingsView: View {
                                 ? s.settingsSubscriptionStatusActive
                                 : s.settingsSubscriptionStatusNotSubscribed
                         )
-                        .font(.subheadline)
+                        .font(typography.caption)
                         .foregroundStyle(.secondary)
                         Image(systemName: "chevron.right")
                             .font(.caption.weight(.semibold))
@@ -125,6 +131,7 @@ struct SettingsView: View {
                                 .padding(.trailing, 6)
                         }
                         Text(s.settingsRestorePurchases)
+                            .font(typography.body)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
@@ -139,6 +146,7 @@ struct SettingsView: View {
                 Link(destination: LegalURLs.privacyPolicy) {
                     HStack {
                         Text(s.settingsPrivacyPolicy)
+                            .font(typography.body)
                         Spacer()
                         Image(systemName: "arrow.up.right.square")
                             .font(.caption)
@@ -149,6 +157,7 @@ struct SettingsView: View {
                 Link(destination: LegalURLs.termsOfUse) {
                     HStack {
                         Text(s.settingsTermsOfUse)
+                            .font(typography.body)
                         Spacer()
                         Image(systemName: "arrow.up.right.square")
                             .font(.caption)
@@ -162,6 +171,7 @@ struct SettingsView: View {
                     } label: {
                         HStack {
                             Text(s.settingsContactSupport)
+                                .font(typography.body)
                                 .foregroundStyle(.primary)
                             Spacer()
                             Image(systemName: "envelope")
@@ -177,10 +187,12 @@ struct SettingsView: View {
             Section {
                 LabeledContent(s.settingsVersionLabel) {
                     Text(versionString)
+                        .font(typography.caption)
                         .foregroundStyle(.secondary)
                 }
                 LabeledContent(s.settingsAppRowLabel) {
                     Text(appDisplayName)
+                        .font(typography.caption)
                         .foregroundStyle(.secondary)
                 }
             } header: {
@@ -251,6 +263,15 @@ struct SettingsView: View {
         .padding(.vertical, 2)
     }
 
+    private var textSizePicker: some View {
+        Picker("Text Size", selection: $textSizeRaw) {
+            ForEach(AppTextSize.allCases) { size in
+                Text(size.displayName).tag(size.rawValue)
+            }
+        }
+        .pickerStyle(.segmented)
+    }
+
     private var isPurchaseBusy: Bool {
         switch subscriptionManager.purchaseState {
         case .purchasing, .restoring: return true
@@ -286,15 +307,16 @@ struct SettingsView: View {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(s.settingsPermissionNotificationsTitle)
+                        .font(typography.body)
                         .foregroundStyle(.primary)
                     Text(s.settingsPermissionNotificationsFooter)
-                        .font(.caption)
+                        .font(typography.caption)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.leading)
                 }
                 Spacer()
                 Text(enabled ? s.settingsPermissionEnabled : s.settingsPermissionDisabled)
-                    .font(.subheadline)
+                    .font(typography.caption)
                     .foregroundStyle(enabled ? Color.green : Color.secondary)
             }
         }
@@ -314,15 +336,16 @@ struct SettingsView: View {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(localizedPermissionTitle(kind))
+                        .font(typography.body)
                         .foregroundStyle(.primary)
                     Text(localizedPermissionFooter(kind))
-                        .font(.caption)
+                        .font(typography.caption)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.leading)
                 }
                 Spacer()
                 Text(enabled ? s.settingsPermissionEnabled : s.settingsPermissionDisabled)
-                    .font(.subheadline)
+                    .font(typography.caption)
                     .foregroundStyle(enabled ? Color.green : Color.secondary)
             }
         }

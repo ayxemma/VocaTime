@@ -865,6 +865,62 @@ extension PermissionKind {
     }
 }
 
+// MARK: - App Typography
+
+enum AppTextSize: String, CaseIterable, Identifiable {
+    case small
+    case `default`
+    case large
+    case extraLarge
+
+    static let storageKey = "appTextSize"
+
+    var id: String { rawValue }
+
+    init(storageRaw: String) {
+        self = AppTextSize(rawValue: storageRaw) ?? .default
+    }
+
+    var displayName: String {
+        switch self {
+        case .small: return "Small"
+        case .default: return "Default"
+        case .large: return "Large"
+        case .extraLarge: return "XL"
+        }
+    }
+
+    var pointDelta: CGFloat {
+        switch self {
+        case .small: return 0
+        case .default: return 1.5
+        case .large: return 3.5
+        case .extraLarge: return 5.5
+        }
+    }
+}
+
+struct AppTypography {
+    let textSize: AppTextSize
+
+    init(textSize: AppTextSize) {
+        self.textSize = textSize
+    }
+
+    var pageTitle: Font { font(size: 22, weight: .semibold) }
+    var sectionHeader: Font { font(size: 12, weight: .semibold) }
+    var taskTitle: Font { font(size: 17, weight: .semibold) }
+    var taskMetadata: Font { font(size: 12, weight: .regular) }
+    var body: Font { font(size: 17, weight: .regular) }
+    var caption: Font { font(size: 12, weight: .regular) }
+    var button: Font { font(size: 16, weight: .semibold) }
+    var tinyBadge: Font { font(size: 11, weight: .bold) }
+
+    func font(size: CGFloat, weight: Font.Weight = .regular) -> Font {
+        .system(size: size + textSize.pointDelta, weight: weight)
+    }
+}
+
 // MARK: - Speech recognizer user messages
 
 struct SpeechServiceMessages: Equatable {

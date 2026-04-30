@@ -50,15 +50,17 @@ struct TaskRowMainContent: View {
 
     @Environment(\.locale) private var locale
     @Environment(\.appUILanguage) private var appUILanguage
+    @AppStorage(AppTextSize.storageKey) private var textSizeRaw: String = AppTextSize.default.rawValue
 
     private var calendar: Calendar { .current }
     private var strings: AppStrings { appUILanguage.strings }
+    private var typography: AppTypography { AppTypography(textSize: AppTextSize(storageRaw: textSizeRaw)) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             // Title — most prominent element
             Text(task.title)
-                .font(.body.weight(.semibold))
+                .font(typography.taskTitle)
                 .foregroundStyle(titleForegroundColor)
                 .strikethrough(task.isCompleted)
                 .fixedSize(horizontal: false, vertical: true)
@@ -66,7 +68,7 @@ struct TaskRowMainContent: View {
             // Time + notes on a single metadata line
             HStack(spacing: 5) {
                 Text(timeText)
-                    .font(.caption)
+                    .font(typography.taskMetadata)
                     .fontWeight(timeFontWeight)
                     .foregroundStyle(timeForegroundStyle)
                     .strikethrough(task.isCompleted)
@@ -74,10 +76,10 @@ struct TaskRowMainContent: View {
 
                 if let notes = task.notes, !notes.isEmpty {
                     Text("·")
-                        .font(.caption)
+                        .font(typography.taskMetadata)
                         .foregroundStyle(Color(.tertiaryLabel))
                     Text(notes)
-                        .font(.caption)
+                        .font(typography.taskMetadata)
                         .foregroundStyle(Color.secondary)
                         .strikethrough(task.isCompleted)
                         .lineLimit(1)
@@ -87,7 +89,7 @@ struct TaskRowMainContent: View {
             // Day label for upcoming or off-today overdue
             if let day = daySubtitleText {
                 Text(day)
-                    .font(.caption2)
+                    .font(typography.caption)
                     .foregroundStyle(Color(.tertiaryLabel))
                     .strikethrough(task.isCompleted)
             }

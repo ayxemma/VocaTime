@@ -5,6 +5,7 @@ struct CalendarView: View {
     @Environment(\.locale) private var locale
     @Environment(\.appUILanguage) private var appUILanguage
     @Environment(\.themePalette) private var themePalette
+    @AppStorage(AppTextSize.storageKey) private var textSizeRaw: String = AppTextSize.default.rawValue
     @Query(sort: \TaskItem.updatedAt, order: .reverse) private var allTasks: [TaskItem]
 
     @State private var displayedMonth: Date
@@ -18,6 +19,7 @@ struct CalendarView: View {
     }
 
     private var strings: AppStrings { appUILanguage.strings }
+    private var typography: AppTypography { AppTypography(textSize: AppTextSize(storageRaw: textSizeRaw)) }
 
     init() {
         let cal = Calendar.current
@@ -88,7 +90,7 @@ struct CalendarView: View {
             Spacer()
 
             Text(displayedMonth, format: Date.FormatStyle().month(.wide).year().locale(locale))
-                .font(.title2.weight(.semibold))
+                .font(typography.pageTitle)
 
             Spacer()
 
@@ -108,7 +110,7 @@ struct CalendarView: View {
         HStack(spacing: 0) {
             ForEach(orderedWeekdaySymbols, id: \.self) { symbol in
                 Text(symbol)
-                    .font(.caption.weight(.semibold))
+                    .font(typography.sectionHeader)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity)
             }
@@ -132,7 +134,7 @@ struct CalendarView: View {
         } label: {
             VStack(spacing: 4) {
                 Text("\(calendar.component(.day, from: date))")
-                    .font(.body.weight(isToday ? .semibold : .regular))
+                    .font(typography.font(size: 17, weight: isToday ? .semibold : .regular))
                     .foregroundStyle(isSelected ? Color.accentColor : Color.primary)
 
                 Group {
@@ -175,12 +177,12 @@ struct CalendarView: View {
         let s = strings
         return VStack(alignment: .leading, spacing: 12) {
             Text(selectedDate, format: Date.FormatStyle().weekday(.wide).month(.abbreviated).day().locale(locale))
-                .font(.headline)
+                .font(typography.sectionHeader)
 
             let items = tasks(on: selectedDate)
             if items.isEmpty {
                 Text(s.noTasksThisDay)
-                    .font(.subheadline)
+                    .font(typography.body)
                     .foregroundStyle(.secondary)
             } else {
                 VStack(spacing: 8) {

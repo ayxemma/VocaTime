@@ -101,6 +101,7 @@ struct HomeView: View {
     @Environment(\.themePalette) private var themePalette
     @AppStorage(AppUILanguage.storageKey) private var languageRaw: String = AppUILanguage.defaultForDevice().rawValue
     @AppStorage(homeSectionOrderKey) private var sectionOrderRaw: String = homeSectionOrderDefault
+    @AppStorage(AppTextSize.storageKey) private var textSizeRaw: String = AppTextSize.default.rawValue
     @Query(sort: \TaskItem.updatedAt, order: .reverse) private var allTasks: [TaskItem]
 
     @State private var composerSession: ComposerSession?   // replaces showTaskComposer: Bool
@@ -127,6 +128,7 @@ struct HomeView: View {
 
     private var calendar: Calendar { .current }
     private var strings: AppStrings { appUILanguage.strings }
+    private var typography: AppTypography { AppTypography(textSize: AppTextSize(storageRaw: textSizeRaw)) }
 
     private var selectedUILanguage: AppUILanguage {
         AppUILanguage(storageRaw: languageRaw)
@@ -264,7 +266,7 @@ struct HomeView: View {
                 } label: {
                     HStack(spacing: 8) {
                         Text(column.title(s).uppercased())
-                            .font(.caption.weight(.semibold))
+                            .font(typography.sectionHeader)
                             .foregroundStyle(Color.secondary)
                             .kerning(0.4)
                         Spacer()
@@ -295,7 +297,7 @@ struct HomeView: View {
             if isExpanded.wrappedValue {
                 if items.isEmpty {
                     Text(s.nothingHereYet)
-                        .font(.subheadline)
+                        .font(typography.body)
                         .foregroundStyle(Color(.tertiaryLabel))
                         .padding(.horizontal)
                         .padding(.top, 2)

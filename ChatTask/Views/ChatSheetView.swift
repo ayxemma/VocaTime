@@ -9,6 +9,7 @@ struct ChatSheetView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.locale) private var locale
     @Environment(\.modelContext) private var modelContext
+    @AppStorage(AppTextSize.storageKey) private var textSizeRaw: String = AppTextSize.default.rawValue
 
     /// Text the user is currently composing in the input field.
     @State private var typedText: String = ""
@@ -18,6 +19,7 @@ struct ChatSheetView: View {
 
     private static let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "VocaTime", category: "ChatSheet")
     private var strings: AppStrings { appUILanguage.strings }
+    private var typography: AppTypography { AppTypography(textSize: AppTextSize(storageRaw: textSizeRaw)) }
 
     // MARK: - Body
 
@@ -108,7 +110,7 @@ struct ChatSheetView: View {
                 HStack(spacing: 8) {
                     ChatTypingIndicatorView(foreground: themePalette.accentColor)
                     Text(s.voiceListening)
-                        .font(.caption)
+                        .font(typography.caption)
                         .foregroundStyle(.secondary)
                     Spacer()
                 }
@@ -126,7 +128,7 @@ struct ChatSheetView: View {
                             .foregroundStyle(.primary)
                             .lineLimit(1)
                     }
-                        .font(.caption)
+                    .font(typography.caption)
                     Spacer(minLength: 8)
                     Button {
                         viewModel.clearActiveChatTaskContext()
@@ -150,7 +152,7 @@ struct ChatSheetView: View {
             if !viewModel.chatStatusDescription.isEmpty, viewModel.chatFlowState != .listening {
                 HStack {
                     Text(viewModel.chatStatusDescription)
-                        .font(.caption)
+                        .font(typography.caption)
                         .foregroundStyle(.secondary)
                         .contentTransition(.opacity)
                         .animation(.easeInOut(duration: 0.35), value: viewModel.chatStatusDescription)
@@ -178,6 +180,7 @@ struct ChatSheetView: View {
         HStack(alignment: .bottom, spacing: 8) {
             // Text field
             TextField(s.chatTextInputPlaceholder, text: $typedText, axis: .vertical)
+                .font(typography.body)
                 .lineLimit(1...5)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 9)
@@ -306,7 +309,7 @@ struct ChatSheetView: View {
                     HStack(spacing: 10) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(task.title)
-                                .font(.subheadline.weight(.medium))
+                                .font(typography.font(size: 15, weight: .medium))
                                 .foregroundStyle(.primary)
                                 .lineLimit(1)
                             if let d = task.scheduledDate,
@@ -314,7 +317,7 @@ struct ChatSheetView: View {
                                 Text(d.formatted(
                                     Date.FormatStyle(date: .omitted, time: .shortened).locale(locale)
                                 ))
-                                .font(.caption)
+                                .font(typography.caption)
                                 .foregroundStyle(.secondary)
                             }
                         }
@@ -348,11 +351,11 @@ struct ChatSheetView: View {
                         ChatTypingIndicatorView(foreground: p.textPrimary.opacity(0.7))
                     } else {
                         Text(message.text)
-                            .font(.body)
+                            .font(typography.body)
                             .foregroundStyle(isUser ? p.userBubbleForeground : p.textPrimary)
                     }
                 }
-                .font(.body)
+                .font(typography.body)
                 .frame(minHeight: 22, alignment: .leading)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
@@ -377,7 +380,7 @@ struct ChatSheetView: View {
                         }
                     }
                 Text(message.timestamp.formatted(Date.FormatStyle(date: .omitted, time: .shortened).locale(locale)))
-                    .font(.caption2)
+                    .font(typography.caption)
                     .foregroundStyle(p.textSecondary.opacity(0.85))
             }
             if !isUser { Spacer(minLength: 48) }
