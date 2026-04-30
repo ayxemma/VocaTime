@@ -68,7 +68,7 @@
               "locale" : "en_US"
             }
           ],
-          "productID" : "com.chattask.pro.yearly",
+          "productID" : "com.chattask.yearly.v1",
           "recurringSubscriptionPeriod" : "P1Y",
           "referenceName" : "ChatTask Pro Yearly",
           "subscriptionGroupID" : "CHATTASKPRO01",

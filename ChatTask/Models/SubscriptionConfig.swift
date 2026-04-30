@@ -10,7 +10,7 @@ enum SubscriptionConfig {
     // MARK: - App Store product identifiers
 
     static let monthlyProductID = "com.chattask.pro.monthly"
-    static let yearlyProductID  = "com.chattask.pro.yearly"
+    static let yearlyProductID  = "com.chattask.yearly.v1"
 
     // MARK: - Trial copy (single source of truth; must match App Store Connect introductory offer)
 
