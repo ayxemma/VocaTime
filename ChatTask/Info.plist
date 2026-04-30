@@ -4,5 +4,9 @@
 <dict>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>ChatTask uses the microphone to capture your voice commands for creating and managing tasks.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>ChatTask converts your speech into text to understand and schedule your tasks.</string>
 </dict>
 </plist>
