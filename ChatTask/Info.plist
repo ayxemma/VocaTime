@@ -4,11 +4,5 @@
 <dict>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
-	<!-- Merged with the generated Info.plist. Allows cleartext HTTP to local hosts (Simulator 127.0.0.1, LAN IPs) without NSAllowsArbitraryLoads. -->
-	<key>NSAppTransportSecurity</key>
-	<dict>
-		<key>NSAllowsLocalNetworking</key>
-		<true/>
-	</dict>
 </dict>
 </plist>
