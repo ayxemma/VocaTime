@@ -164,15 +164,16 @@ extension AppStrings {
         reminderOffset15Min: "15 min avant",
         reminderOffset30Min: "30 min avant",
         reminderOffset1Hour: "1 h avant",
-        paywallTrialHeadline: "Commencez votre essai gratuit de 5 jours",
+        paywallTrialHeadline: "Commencez votre essai gratuit d’une semaine",
         paywallTrialPricingLine: "Puis 2,99 $/mois ou 24,99 $/an",
-        paywallDisclosureLine: "Essai gratuit de 5 jours, puis 2,99 $/mois ou 24,99 $/an.",
+        paywallDisclosureLine: "Essai gratuit d’une semaine, puis 2,99 $/mois ou 24,99 $/an.",
         paywallAutoRenews: "Renouvellement automatique sauf annulation.",
         paywallCancelAnytime: "Annulation possible à tout moment.",
         paywallRestorePurchases: "Restaurer les achats",
         paywallNotNow: "Pas maintenant",
         paywallStartTrial: "Commencer l’essai gratuit",
-        paywallRestoring: "Restauration…"
+        paywallRestoring: "Restauration…",
+        paywallPlanTrialIncluded: "Essai gratuit d’une semaine inclus"
     )
 
     static let german = AppStrings(
@@ -335,15 +336,16 @@ extension AppStrings {
         reminderOffset15Min: "15 Min. vorher",
         reminderOffset30Min: "30 Min. vorher",
         reminderOffset1Hour: "1 Std. vorher",
-        paywallTrialHeadline: "Starten Sie Ihre 5-tägige kostenlose Testversion",
+        paywallTrialHeadline: "Starten Sie Ihre einwöchige kostenlose Testversion",
         paywallTrialPricingLine: "Danach 2,99 $/Monat oder 24,99 $/Jahr",
-        paywallDisclosureLine: "5-tägige kostenlose Testversion, danach 2,99 $/Monat oder 24,99 $/Jahr.",
+        paywallDisclosureLine: "Einwöchige kostenlose Testversion, danach 2,99 $/Monat oder 24,99 $/Jahr.",
         paywallAutoRenews: "Verlängert sich automatisch, sofern nicht gekündigt.",
         paywallCancelAnytime: "Jederzeit kündbar.",
         paywallRestorePurchases: "Käufe wiederherstellen",
         paywallNotNow: "Nicht jetzt",
         paywallStartTrial: "Kostenlose Testversion starten",
-        paywallRestoring: "Wiederherstellen…"
+        paywallRestoring: "Wiederherstellen…",
+        paywallPlanTrialIncluded: "Einwöchige kostenlose Testversion enthalten"
     )
 
     static let dutch = AppStrings(
@@ -506,14 +508,15 @@ extension AppStrings {
         reminderOffset15Min: "15 min ervoor",
         reminderOffset30Min: "30 min ervoor",
         reminderOffset1Hour: "1 u ervoor",
-        paywallTrialHeadline: "Start uw gratis proefperiode van 5 dagen",
+        paywallTrialHeadline: "Start uw gratis proefperiode van 1 week",
         paywallTrialPricingLine: "Daarna $2,99/maand of $24,99/jaar",
-        paywallDisclosureLine: "5 dagen gratis proefperiode, daarna $2,99/maand of $24,99/jaar.",
+        paywallDisclosureLine: "1 week gratis proefperiode, daarna $2,99/maand of $24,99/jaar.",
         paywallAutoRenews: "Wordt automatisch verlengd tenzij opgezegd.",
         paywallCancelAnytime: "Op elk moment opzegbaar.",
         paywallRestorePurchases: "Aankopen herstellen",
         paywallNotNow: "Niet nu",
         paywallStartTrial: "Gratis proefperiode starten",
-        paywallRestoring: "Bezig met herstellen…"
+        paywallRestoring: "Bezig met herstellen…",
+        paywallPlanTrialIncluded: "1 week gratis proefperiode inbegrepen"
     )
 }

@@ -164,15 +164,16 @@ extension AppStrings {
         reminderOffset15Min: "15 分前",
         reminderOffset30Min: "30 分前",
         reminderOffset1Hour: "1 時間前",
-        paywallTrialHeadline: "5 日間の無料トライアルを始める",
+        paywallTrialHeadline: "1 週間の無料トライアルを始める",
         paywallTrialPricingLine: "その後 $2.99/月 または $24.99/年",
-        paywallDisclosureLine: "5 日間の無料トライアル、その後 $2.99/月 または $24.99/年。",
+        paywallDisclosureLine: "1 週間の無料トライアル、その後 $2.99/月 または $24.99/年。",
         paywallAutoRenews: "解約しない限り自動更新されます。",
         paywallCancelAnytime: "いつでも解約できます。",
         paywallRestorePurchases: "購入を復元",
         paywallNotNow: "後で",
         paywallStartTrial: "無料トライアルを開始",
-        paywallRestoring: "復元中…"
+        paywallRestoring: "復元中…",
+        paywallPlanTrialIncluded: "1 週間の無料トライアル付き"
     )
 
     static let korean = AppStrings(
@@ -335,15 +336,16 @@ extension AppStrings {
         reminderOffset15Min: "15분 전",
         reminderOffset30Min: "30분 전",
         reminderOffset1Hour: "1시간 전",
-        paywallTrialHeadline: "5일 무료 체험 시작",
+        paywallTrialHeadline: "1주 무료 체험 시작",
         paywallTrialPricingLine: "이후 월 $2.99 또는 연 $24.99",
-        paywallDisclosureLine: "5일 무료 체험 후 월 $2.99 또는 연 $24.99.",
+        paywallDisclosureLine: "1주 무료 체험 후 월 $2.99 또는 연 $24.99.",
         paywallAutoRenews: "취소하지 않으면 자동 갱신됩니다.",
         paywallCancelAnytime: "언제든지 취소할 수 있습니다.",
         paywallRestorePurchases: "구매 복원",
         paywallNotNow: "나중에",
         paywallStartTrial: "무료 체험 시작",
-        paywallRestoring: "복원 중…"
+        paywallRestoring: "복원 중…",
+        paywallPlanTrialIncluded: "1주 무료 체험 포함"
     )
 
     static let portugueseBrazil = AppStrings(
@@ -506,15 +508,16 @@ extension AppStrings {
         reminderOffset15Min: "15 min antes",
         reminderOffset30Min: "30 min antes",
         reminderOffset1Hour: "1 h antes",
-        paywallTrialHeadline: "Comece seu teste gratuito de 5 dias",
+        paywallTrialHeadline: "Comece seu teste gratuito de 1 semana",
         paywallTrialPricingLine: "Depois US$ 2,99/mês ou US$ 24,99/ano",
-        paywallDisclosureLine: "Teste gratuito de 5 dias, depois US$ 2,99/mês ou US$ 24,99/ano.",
+        paywallDisclosureLine: "Teste gratuito de 1 semana, depois US$ 2,99/mês ou US$ 24,99/ano.",
         paywallAutoRenews: "Renova automaticamente, salvo cancelamento.",
         paywallCancelAnytime: "Cancele quando quiser.",
         paywallRestorePurchases: "Restaurar compras",
         paywallNotNow: "Agora não",
         paywallStartTrial: "Iniciar teste gratuito",
-        paywallRestoring: "Restaurando…"
+        paywallRestoring: "Restaurando…",
+        paywallPlanTrialIncluded: "Teste gratuito de 1 semana incluído"
     )
 
     static let italian = AppStrings(
@@ -677,14 +680,15 @@ extension AppStrings {
         reminderOffset15Min: "15 min prima",
         reminderOffset30Min: "30 min prima",
         reminderOffset1Hour: "1 h prima",
-        paywallTrialHeadline: "Inizia la prova gratuita di 5 giorni",
+        paywallTrialHeadline: "Inizia la prova gratuita di 1 settimana",
         paywallTrialPricingLine: "Poi $2,99/mese o $24,99/anno",
-        paywallDisclosureLine: "Prova gratuita di 5 giorni, poi $2,99/mese o $24,99/anno.",
+        paywallDisclosureLine: "Prova gratuita di 1 settimana, poi $2,99/mese o $24,99/anno.",
         paywallAutoRenews: "Si rinnova automaticamente salvo annullamento.",
         paywallCancelAnytime: "Annulla quando vuoi.",
         paywallRestorePurchases: "Ripristina acquisti",
         paywallNotNow: "Non ora",
         paywallStartTrial: "Inizia prova gratuita",
-        paywallRestoring: "Ripristino…"
+        paywallRestoring: "Ripristino…",
+        paywallPlanTrialIncluded: "Prova gratuita di 1 settimana inclusa"
     )
 }

@@ -28,6 +28,10 @@ struct PaywallView: View {
 
     private var strings: AppStrings { appUILanguage.strings }
 
+    private var referenceProductForTrialCopy: Product? {
+        subscriptionManager.monthlyProduct ?? subscriptionManager.yearlyProduct
+    }
+
     private var selectedProduct: Product? {
         selectedPlan == .monthly
             ? subscriptionManager.monthlyProduct
@@ -39,6 +43,15 @@ struct PaywallView: View {
         case .monthly: return subscriptionManager.monthlyProduct?.displayPrice ?? SubscriptionConfig.Copy.monthlyPrice
         case .yearly:  return subscriptionManager.yearlyProduct?.displayPrice  ?? SubscriptionConfig.Copy.yearlyPrice
         }
+    }
+
+    private func planTrialIncludedLine(for plan: SubscriptionPlan) -> String {
+        if appUILanguage == .en {
+            let product = plan == .monthly ? subscriptionManager.monthlyProduct : subscriptionManager.yearlyProduct
+            let phrase = SubscriptionConfig.resolvedTrialPhrase(for: product)
+            return "\(phrase) included"
+        }
+        return strings.paywallPlanTrialIncluded
     }
 
     // MARK: - Body
@@ -139,7 +152,7 @@ struct PaywallView: View {
                 .foregroundStyle(Color.accentColor)
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(SubscriptionConfig.Copy.trialBadge)
+                Text(SubscriptionConfig.trialBannerBadge(for: referenceProductForTrialCopy))
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(Color.accentColor)
                     .kerning(0.5)
@@ -195,6 +208,7 @@ struct PaywallView: View {
                 label: SubscriptionConfig.Copy.monthlyLabel,
                 price: displayPrice(for: .monthly),
                 per: SubscriptionConfig.Copy.monthlyPer,
+                trialIncludedLine: planTrialIncludedLine(for: .monthly),
                 badge: nil,
                 isSelected: selectedPlan == .monthly
             ) { selectedPlan = .monthly }
@@ -203,6 +217,7 @@ struct PaywallView: View {
                 label: SubscriptionConfig.Copy.yearlyLabel,
                 price: displayPrice(for: .yearly),
                 per: SubscriptionConfig.Copy.yearlyPer,
+                trialIncludedLine: planTrialIncludedLine(for: .yearly),
                 badge: SubscriptionConfig.Copy.yearlyBadge,
                 isSelected: selectedPlan == .yearly
             ) { selectedPlan = .yearly }
@@ -317,6 +332,7 @@ private struct PlanCard: View {
     let label: String
     let price: String
     let per: String
+    let trialIncludedLine: String
     let badge: String?
     let isSelected: Bool
     let action: () -> Void
@@ -355,7 +371,7 @@ private struct PlanCard: View {
                                 .clipShape(Capsule())
                         }
                     }
-                    Text("5-day free trial included")
+                    Text(trialIncludedLine)
                         .font(.system(size: 12))
                         .foregroundStyle(.secondary)
                 }

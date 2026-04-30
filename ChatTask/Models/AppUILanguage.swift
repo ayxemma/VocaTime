@@ -325,6 +325,8 @@ struct AppStrings {
     let paywallNotNow: String
     let paywallStartTrial: String
     let paywallRestoring: String
+    /// Shown on each paywall plan row (trial length + "included").
+    let paywallPlanTrialIncluded: String
 
     static let english = AppStrings(
         tagline: "Speak → Understand → Schedule → Remind",
@@ -486,15 +488,16 @@ struct AppStrings {
         reminderOffset15Min: "15 min before",
         reminderOffset30Min: "30 min before",
         reminderOffset1Hour: "1 hour before",
-        paywallTrialHeadline: "Start your 5-day free trial",
+        paywallTrialHeadline: "Start your 1-week free trial",
         paywallTrialPricingLine: "Then $2.99/month or $24.99/year",
-        paywallDisclosureLine: "5-day free trial, then $2.99/month or $24.99/year.",
+        paywallDisclosureLine: "1-week free trial, then $2.99/month or $24.99/year.",
         paywallAutoRenews: "Auto-renews unless canceled.",
         paywallCancelAnytime: "Cancel anytime.",
         paywallRestorePurchases: "Restore Purchases",
         paywallNotNow: "Not now",
         paywallStartTrial: "Start Free Trial",
-        paywallRestoring: "Restoring…"
+        paywallRestoring: "Restoring…",
+        paywallPlanTrialIncluded: "1-week free trial included"
     )
 
     static let chineseSimplified = AppStrings(
@@ -657,15 +660,16 @@ struct AppStrings {
         reminderOffset15Min: "提前 15 分钟",
         reminderOffset30Min: "提前 30 分钟",
         reminderOffset1Hour: "提前 1 小时",
-        paywallTrialHeadline: "开始 5 天免费试用",
+        paywallTrialHeadline: "开始 1 周免费试用",
         paywallTrialPricingLine: "之后 $2.99/月或 $24.99/年",
-        paywallDisclosureLine: "5 天免费试用，之后 $2.99/月或 $24.99/年。",
+        paywallDisclosureLine: "1 周免费试用，之后 $2.99/月或 $24.99/年。",
         paywallAutoRenews: "除非取消，否则自动续订。",
         paywallCancelAnytime: "随时可取消。",
         paywallRestorePurchases: "恢复购买",
         paywallNotNow: "暂不",
         paywallStartTrial: "开始免费试用",
-        paywallRestoring: "正在恢复…"
+        paywallRestoring: "正在恢复…",
+        paywallPlanTrialIncluded: "包含 1 周免费试用"
     )
 
     static let spanish = AppStrings(
@@ -828,15 +832,16 @@ struct AppStrings {
         reminderOffset15Min: "15 min antes",
         reminderOffset30Min: "30 min antes",
         reminderOffset1Hour: "1 h antes",
-        paywallTrialHeadline: "Empieza tu prueba gratis de 5 días",
+        paywallTrialHeadline: "Empieza tu prueba gratis de 1 semana",
         paywallTrialPricingLine: "Luego $2.99/mes o $24.99/año",
-        paywallDisclosureLine: "Prueba gratis de 5 días, luego $2.99/mes o $24.99/año.",
+        paywallDisclosureLine: "Prueba gratis de 1 semana, luego $2.99/mes o $24.99/año.",
         paywallAutoRenews: "Se renueva automáticamente salvo cancelación.",
         paywallCancelAnytime: "Cancela cuando quieras.",
         paywallRestorePurchases: "Restaurar compras",
         paywallNotNow: "Ahora no",
         paywallStartTrial: "Empezar prueba gratis",
-        paywallRestoring: "Restaurando…"
+        paywallRestoring: "Restaurando…",
+        paywallPlanTrialIncluded: "Incluye prueba gratis de 1 semana"
     )
 }
 

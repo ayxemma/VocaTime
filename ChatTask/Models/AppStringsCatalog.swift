@@ -161,14 +161,15 @@ tagline: "說話 → 理解 → 安排 → 提醒",
         reminderOffset15Min: "提前 15 分鐘",
         reminderOffset30Min: "提前 30 分鐘",
         reminderOffset1Hour: "提前 1 小時",
-        paywallTrialHeadline: "開始 5 天免费試用",
+        paywallTrialHeadline: "開始 1 週免費試用",
         paywallTrialPricingLine: "之后 $2.99/月或 $24.99/年",
-        paywallDisclosureLine: "5 天免费試用，之后 $2.99/月或 $24.99/年。",
+        paywallDisclosureLine: "1 週免費試用，之后 $2.99/月或 $24.99/年。",
         paywallAutoRenews: "除非取消，否则自动续订。",
         paywallCancelAnytime: "隨時可取消。",
         paywallRestorePurchases: "回復購買",
         paywallNotNow: "暂不",
         paywallStartTrial: "開始免费試用",
-        paywallRestoring: "正在恢复…"
+        paywallRestoring: "正在恢复…",
+        paywallPlanTrialIncluded: "包含 1 週免費試用"
     )
 }

@@ -163,14 +163,15 @@ extension AppStrings {
         reminderOffset15Min: "15 मिनट पहले",
         reminderOffset30Min: "30 मिनट पहले",
         reminderOffset1Hour: "1 घंटा पहले",
-        paywallTrialHeadline: "अपना 5-दिन का निःशुल्क परीक्षण शुरू करें",
+        paywallTrialHeadline: "अपना 1-सप्ताह का निःशुल्क परीक्षण शुरू करें",
         paywallTrialPricingLine: "फिर $2.99/माह या $24.99/वर्ष",
-        paywallDisclosureLine: "5-दिन का निःशुल्क परीक्षण, फिर $2.99/माह या $24.99/वर्ष।",
+        paywallDisclosureLine: "1-सप्ताह का निःशुल्क परीक्षण, फिर $2.99/माह या $24.99/वर्ष।",
         paywallAutoRenews: "रद्द न करने पर स्वतः नवीनीकरण।",
         paywallCancelAnytime: "कभी भी रद्द करें।",
         paywallRestorePurchases: "खरीदारी पुनर्स्थापित करें",
         paywallNotNow: "अभी नहीं",
         paywallStartTrial: "निःशुल्क परीक्षण शुरू करें",
-        paywallRestoring: "पुनर्स्थापित कर रहे हैं…"
+        paywallRestoring: "पुनर्स्थापित कर रहे हैं…",
+        paywallPlanTrialIncluded: "1-सप्ताह का निःशुल्क परीक्षण शामिल"
     )
 }

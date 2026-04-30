@@ -26,7 +26,7 @@
           "groupNumber" : 1,
           "internalID" : "MONTHLY_001",
           "introductoryOffer" : {
-            "duration" : "P5D",
+            "duration" : "P1W",
             "identifier" : "TRIAL_MONTHLY",
             "offerMode" : "freeTrial",
             "paymentMode" : "freeTrial",
@@ -54,7 +54,7 @@
           "groupNumber" : 2,
           "internalID" : "YEARLY_001",
           "introductoryOffer" : {
-            "duration" : "P5D",
+            "duration" : "P1W",
             "identifier" : "TRIAL_YEARLY",
             "offerMode" : "freeTrial",
             "paymentMode" : "freeTrial",
