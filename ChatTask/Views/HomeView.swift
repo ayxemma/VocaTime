@@ -202,9 +202,6 @@ struct HomeView: View {
                     .onTapGesture {
                         firstLaunchOnboardingCompleted = true
                     }
-                    .accessibilityLabel(s.paywallCloseA11y)
-                    .accessibilityAddTraits(.isButton)
-                    .accessibilityHint(s.dismissDone)
             }
 
             DraggableChatButton(
@@ -217,19 +214,16 @@ struct HomeView: View {
                 accessibilityLabel: s.openCommandChat,
                 showOnboardingHighlight: showFirstLaunchOnboarding
             )
-
+        }
+        .overlay(alignment: .top) {
             if showFirstLaunchOnboarding {
-                VStack {
-                    FirstLaunchOnboardingCard(
-                        strings: s,
-                        typography: typography,
-                        onDismiss: { firstLaunchOnboardingCompleted = true }
-                    )
-                    .padding(.horizontal, 20)
-                    .padding(.top, 8)
-                    Spacer()
-                }
-                .allowsHitTesting(true)
+                FirstLaunchOnboardingCard(
+                    strings: s,
+                    typography: typography,
+                    onDismiss: { firstLaunchOnboardingCompleted = true }
+                )
+                .padding(.horizontal, 20)
+                .padding(.top, 8)
             }
         }
         .sheet(item: $composerSession) { session in
