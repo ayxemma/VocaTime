@@ -197,6 +197,7 @@ extension AppStrings {
         paywallAlertOK: "ठीक",
         paywallProductUnavailable: "यह उत्पाद अभी उपलब्ध नहीं है। कृपया कनेक्शन जाँचें और पुनः प्रयास करें।",
         paywallCloseA11y: "बंद करें",
+        onboardingTitle: "आवाज़ को कार्यों में बदलें।",
         onboardingVoiceExample: "यह आज़माएँ: मुझे शाम 6:15 पर खाना बनाने की याद दिलाना",
         onboardingTapFabHint: "बोलने के लिए यहाँ टैप करें"
     )

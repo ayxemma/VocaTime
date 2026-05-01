@@ -198,6 +198,7 @@ extension AppStrings {
         paywallAlertOK: "OK",
         paywallProductUnavailable: "この商品は現在利用できません。接続を確認してもう一度お試しください。",
         paywallCloseA11y: "閉じる",
+        onboardingTitle: "声をタスクに。",
         onboardingVoiceExample: "例：「6時15分に夕食の準備をリマインドして」",
         onboardingTapFabHint: "ここをタップして話す"
     )
@@ -396,6 +397,7 @@ extension AppStrings {
         paywallAlertOK: "확인",
         paywallProductUnavailable: "이 제품을 사용할 수 없습니다. 연결을 확인한 뒤 다시 시도하세요.",
         paywallCloseA11y: "닫기",
+        onboardingTitle: "음성을 할 일로 바꾸세요.",
         onboardingVoiceExample: "이렇게 말해 보세요: “저녁 6시 15분에 요리하라고 알려줘”",
         onboardingTapFabHint: "여기를 눌러 말하기"
     )
@@ -594,6 +596,7 @@ extension AppStrings {
         paywallAlertOK: "OK",
         paywallProductUnavailable: "Este produto não está disponível no momento. Verifique sua conexão e tente novamente.",
         paywallCloseA11y: "Fechar",
+        onboardingTitle: "Transforme voz em tarefas.",
         onboardingVoiceExample: "Tente dizer: Lembra-me de cozinhar o jantar às 6:15",
         onboardingTapFabHint: "Toque aqui para falar"
     )
@@ -792,6 +795,7 @@ extension AppStrings {
         paywallAlertOK: "OK",
         paywallProductUnavailable: "Questo prodotto non è disponibile al momento. Controlla la connessione e riprova.",
         paywallCloseA11y: "Chiudi",
+        onboardingTitle: "Trasforma la voce in attività.",
         onboardingVoiceExample: "Prova a dire: Ricordami di cucinare la cena alle 6:15",
         onboardingTapFabHint: "Tocca qui per parlare"
     )

@@ -195,7 +195,8 @@ tagline: "說話 → 理解 → 安排 → 提醒",
         paywallAlertOK: "好",
         paywallProductUnavailable: "此項目目前無法購買。請檢查網路連線後再試。",
         paywallCloseA11y: "關閉",
-        onboardingVoiceExample: "試試說：提醒我晚上 6 點 15 分做飯",
+        onboardingTitle: "一句話變成任務",
+        onboardingVoiceExample: "試試說：20 分鐘後提醒我去散步",
         onboardingTapFabHint: "點這裡說話"
     )
 }

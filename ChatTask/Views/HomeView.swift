@@ -196,7 +196,7 @@ struct HomeView: View {
             .animation(.easeInOut(duration: 0.35), value: themePalette.theme)
 
             if showFirstLaunchOnboarding {
-                Color.black.opacity(0.48)
+                Color.black.opacity(0.30)
                     .ignoresSafeArea()
                     .contentShape(Rectangle())
                     .onTapGesture {
@@ -399,26 +399,20 @@ private struct FirstLaunchOnboardingCard: View {
     let typography: AppTypography
     let onDismiss: () -> Void
 
+    @State private var didAnimateIn = false
+    @State private var revealedCharacterCount = 0
+
     var body: some View {
+        let example = strings.onboardingVoiceExample
         VStack(alignment: .leading, spacing: 14) {
-            Text(strings.paywallHeadline)
-                .font(typography.sectionHeader)
+            Text(strings.onboardingTitle)
+                .font(typography.pageTitle)
+                .fontWeight(.semibold)
                 .foregroundStyle(.primary)
-            Text(strings.onboardingVoiceExample)
+            Text(revealedExample(from: example))
                 .font(typography.body)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            Text(strings.onboardingTapFabHint)
-                .font(typography.caption)
-                .fontWeight(.medium)
-                .foregroundStyle(.secondary)
-            Button(action: onDismiss) {
-                Text(strings.dismissDone)
-                    .font(typography.button)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-            }
-            .buttonStyle(.borderedProminent)
         }
         .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -431,6 +425,32 @@ private struct FirstLaunchOnboardingCard: View {
                 .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
         )
         .shadow(color: .black.opacity(0.12), radius: 12, y: 4)
+        .opacity(didAnimateIn ? 1 : 0)
+        .offset(y: didAnimateIn ? 0 : 8)
+        .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .onTapGesture(perform: onDismiss)
+        .task(id: example) {
+            revealedCharacterCount = 0
+            withAnimation(.easeOut(duration: 0.35)) {
+                didAnimateIn = true
+            }
+            await reveal(example)
+        }
+    }
+
+    private func revealedExample(from example: String) -> String {
+        String(example.prefix(revealedCharacterCount))
+    }
+
+    private func reveal(_ example: String) async {
+        let totalDurationNanos: UInt64 = 850_000_000
+        let count = max(example.count, 1)
+        let delay = max(totalDurationNanos / UInt64(count), 12_000_000)
+        for index in 1...example.count {
+            try? await Task.sleep(nanoseconds: delay)
+            guard !Task.isCancelled else { return }
+            revealedCharacterCount = index
+        }
     }
 }
 

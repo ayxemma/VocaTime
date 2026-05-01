@@ -100,7 +100,7 @@ struct DraggableChatButton: View {
                                     width: DraggableChatButtonMetrics.size + 12,
                                     height: DraggableChatButtonMetrics.size + 12
                                 )
-                                .scaleEffect(onboardingRingPulse ? 1.08 : 1.0)
+                                .scaleEffect(onboardingRingPulse ? 1.06 : 1.0)
                         }
                     }
                     .shadow(
@@ -108,9 +108,10 @@ struct DraggableChatButton: View {
                         radius: themePalette.isMinimal ? 4 : 6,
                         y: 3
                     )
-                    .scaleEffect(isDragging ? 1.06 : 1.0)
+                    .scaleEffect(isDragging ? 1.06 : (showOnboardingHighlight && onboardingRingPulse ? 1.06 : 1.0))
                     .opacity(isDragging ? 0.92 : 1.0)
                     .animation(.easeInOut(duration: 0.18), value: isDragging)
+                    .animation(.easeInOut(duration: 1.2), value: onboardingRingPulse)
                     .contentShape(Circle())
                     .offset(x: topLeading.x, y: topLeading.y)
                     .accessibilityLabel(accessibilityLabel)
@@ -119,7 +120,7 @@ struct DraggableChatButton: View {
                     .onChange(of: showOnboardingHighlight) { _, show in
                         if show {
                             onboardingRingPulse = false
-                            withAnimation(.easeInOut(duration: 0.85).repeatForever(autoreverses: true)) {
+                            withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
                                 onboardingRingPulse = true
                             }
                         } else {
@@ -129,7 +130,7 @@ struct DraggableChatButton: View {
                     .onAppear {
                         guard showOnboardingHighlight else { return }
                         onboardingRingPulse = false
-                        withAnimation(.easeInOut(duration: 0.85).repeatForever(autoreverses: true)) {
+                        withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
                             onboardingRingPulse = true
                         }
                     }

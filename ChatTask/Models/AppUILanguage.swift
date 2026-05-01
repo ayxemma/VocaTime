@@ -355,6 +355,8 @@ struct AppStrings {
     let paywallAlertOK: String
     let paywallProductUnavailable: String
     let paywallCloseA11y: String
+    /// First-launch onboarding title.
+    let onboardingTitle: String
     /// First-launch hint: example phrase (full sentence with “Try saying: …”).
     let onboardingVoiceExample: String
     /// First-launch hint under the chat FAB.
@@ -554,6 +556,7 @@ struct AppStrings {
         paywallAlertOK: "OK",
         paywallProductUnavailable: "This product is currently unavailable. Please check your connection and try again.",
         paywallCloseA11y: "Close",
+        onboardingTitle: "Turn voice into tasks.",
         onboardingVoiceExample: "Try saying: Remind me to cook dinner at 6:15",
         onboardingTapFabHint: "Tap here to speak"
     )
@@ -752,7 +755,8 @@ struct AppStrings {
         paywallAlertOK: "好",
         paywallProductUnavailable: "此项目目前无法购买。请检查网络连接后重试。",
         paywallCloseA11y: "关闭",
-        onboardingVoiceExample: "试试说：提醒我晚上 6 点 15 分做饭",
+        onboardingTitle: "一句话变成任务",
+        onboardingVoiceExample: "试试说：20分钟后提醒我去散步",
         onboardingTapFabHint: "点按此处说话"
     )
 
@@ -950,6 +954,7 @@ struct AppStrings {
         paywallAlertOK: "OK",
         paywallProductUnavailable: "Este producto no está disponible ahora. Comprueba tu conexión e inténtalo de nuevo.",
         paywallCloseA11y: "Cerrar",
+        onboardingTitle: "Convierte la voz en tareas.",
         onboardingVoiceExample: "Prueba a decir: Recuérdame cocinar la cena a las 6:15",
         onboardingTapFabHint: "Toca aquí para hablar"
     )

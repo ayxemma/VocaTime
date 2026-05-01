@@ -198,6 +198,7 @@ extension AppStrings {
         paywallAlertOK: "OK",
         paywallProductUnavailable: "Ce produit n’est pas disponible pour le moment. Vérifiez votre connexion et réessayez.",
         paywallCloseA11y: "Fermer",
+        onboardingTitle: "Transformez la voix en tâches.",
         onboardingVoiceExample: "Essayez : « Rappelle-moi de préparer le dîner à 18 h 15 »",
         onboardingTapFabHint: "Touchez ici pour parler"
     )
@@ -396,6 +397,7 @@ extension AppStrings {
         paywallAlertOK: "OK",
         paywallProductUnavailable: "Dieses Produkt ist derzeit nicht verfügbar. Prüfen Sie Ihre Verbindung und versuchen Sie es erneut.",
         paywallCloseA11y: "Schließen",
+        onboardingTitle: "Stimme wird zur Aufgabe.",
         onboardingVoiceExample: "Versuchen Sie: „Erinner mich um 18:15 ans Kochen fürs Abendessen.“",
         onboardingTapFabHint: "Hier tippen zum Sprechen"
     )
@@ -594,6 +596,7 @@ extension AppStrings {
         paywallAlertOK: "OK",
         paywallProductUnavailable: "Dit product is momenteel niet beschikbaar. Controleer uw verbinding en probeer het opnieuw.",
         paywallCloseA11y: "Sluiten",
+        onboardingTitle: "Zet stem om in taken.",
         onboardingVoiceExample: "Zeg bijvoorbeeld: Herinner me om 18:15 te koken",
         onboardingTapFabHint: "Tik hier om te praten"
     )
