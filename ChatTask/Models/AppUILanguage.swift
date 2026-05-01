@@ -355,6 +355,10 @@ struct AppStrings {
     let paywallAlertOK: String
     let paywallProductUnavailable: String
     let paywallCloseA11y: String
+    /// First-launch hint: example phrase (full sentence with “Try saying: …”).
+    let onboardingVoiceExample: String
+    /// First-launch hint under the chat FAB.
+    let onboardingTapFabHint: String
 
     static let english = AppStrings(
         tagline: "Speak → Understand → Schedule → Remind",
@@ -549,7 +553,9 @@ struct AppStrings {
         paywallPurchaseFailedTitle: "Purchase Failed",
         paywallAlertOK: "OK",
         paywallProductUnavailable: "This product is currently unavailable. Please check your connection and try again.",
-        paywallCloseA11y: "Close"
+        paywallCloseA11y: "Close",
+        onboardingVoiceExample: "Try saying: Remind me to cook dinner at 6:15",
+        onboardingTapFabHint: "Tap here to speak"
     )
 
     static let chineseSimplified = AppStrings(
@@ -745,7 +751,9 @@ struct AppStrings {
         paywallPurchaseFailedTitle: "购买失败",
         paywallAlertOK: "好",
         paywallProductUnavailable: "此项目目前无法购买。请检查网络连接后重试。",
-        paywallCloseA11y: "关闭"
+        paywallCloseA11y: "关闭",
+        onboardingVoiceExample: "试试说：提醒我晚上 6 点 15 分做饭",
+        onboardingTapFabHint: "点按此处说话"
     )
 
     static let spanish = AppStrings(
@@ -941,7 +949,9 @@ struct AppStrings {
         paywallPurchaseFailedTitle: "Error en la compra",
         paywallAlertOK: "OK",
         paywallProductUnavailable: "Este producto no está disponible ahora. Comprueba tu conexión e inténtalo de nuevo.",
-        paywallCloseA11y: "Cerrar"
+        paywallCloseA11y: "Cerrar",
+        onboardingVoiceExample: "Prueba a decir: Recuérdame cocinar la cena a las 6:15",
+        onboardingTapFabHint: "Toca aquí para hablar"
     )
 }
 

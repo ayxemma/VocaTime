@@ -197,7 +197,9 @@ extension AppStrings {
         paywallPurchaseFailedTitle: "購入に失敗しました",
         paywallAlertOK: "OK",
         paywallProductUnavailable: "この商品は現在利用できません。接続を確認してもう一度お試しください。",
-        paywallCloseA11y: "閉じる"
+        paywallCloseA11y: "閉じる",
+        onboardingVoiceExample: "例：「6時15分に夕食の準備をリマインドして」",
+        onboardingTapFabHint: "ここをタップして話す"
     )
 
     static let korean = AppStrings(
@@ -393,7 +395,9 @@ extension AppStrings {
         paywallPurchaseFailedTitle: "구매 실패",
         paywallAlertOK: "확인",
         paywallProductUnavailable: "이 제품을 사용할 수 없습니다. 연결을 확인한 뒤 다시 시도하세요.",
-        paywallCloseA11y: "닫기"
+        paywallCloseA11y: "닫기",
+        onboardingVoiceExample: "이렇게 말해 보세요: “저녁 6시 15분에 요리하라고 알려줘”",
+        onboardingTapFabHint: "여기를 눌러 말하기"
     )
 
     static let portugueseBrazil = AppStrings(
@@ -589,7 +593,9 @@ extension AppStrings {
         paywallPurchaseFailedTitle: "Falha na compra",
         paywallAlertOK: "OK",
         paywallProductUnavailable: "Este produto não está disponível no momento. Verifique sua conexão e tente novamente.",
-        paywallCloseA11y: "Fechar"
+        paywallCloseA11y: "Fechar",
+        onboardingVoiceExample: "Tente dizer: Lembra-me de cozinhar o jantar às 6:15",
+        onboardingTapFabHint: "Toque aqui para falar"
     )
 
     static let italian = AppStrings(
@@ -785,6 +791,8 @@ extension AppStrings {
         paywallPurchaseFailedTitle: "Acquisto non riuscito",
         paywallAlertOK: "OK",
         paywallProductUnavailable: "Questo prodotto non è disponibile al momento. Controlla la connessione e riprova.",
-        paywallCloseA11y: "Chiudi"
+        paywallCloseA11y: "Chiudi",
+        onboardingVoiceExample: "Prova a dire: Ricordami di cucinare la cena alle 6:15",
+        onboardingTapFabHint: "Tocca qui per parlare"
     )
 }

@@ -7,6 +7,10 @@ import UniformTypeIdentifiers
 private let homeSectionOrderKey    = "homeSectionOrder"
 private let homeSectionOrderDefault = "today,upcoming,overdue,done"
 
+private enum FirstLaunchOnboarding {
+    static let completedKey = "firstLaunchOnboardingCompleted"
+}
+
 // MARK: - DashboardColumn
 
 private enum DashboardColumn: String, CaseIterable, Identifiable {
@@ -102,6 +106,7 @@ struct HomeView: View {
     @AppStorage(AppUILanguage.storageKey) private var languageRaw: String = AppUILanguage.defaultForDevice().rawValue
     @AppStorage(homeSectionOrderKey) private var sectionOrderRaw: String = homeSectionOrderDefault
     @AppStorage(AppTextSize.storageKey) private var textSizeRaw: String = AppTextSize.default.rawValue
+    @AppStorage(FirstLaunchOnboarding.completedKey) private var firstLaunchOnboardingCompleted = false
     @Query(sort: \TaskItem.updatedAt, order: .reverse) private var allTasks: [TaskItem]
 
     @State private var composerSession: ComposerSession?   // replaces showTaskComposer: Bool
@@ -178,6 +183,7 @@ struct HomeView: View {
 
     var body: some View {
         let s = strings
+        let showFirstLaunchOnboarding = !firstLaunchOnboardingCompleted
         ZStack {
             ScrollView {
                 VStack(spacing: 28) {
@@ -189,10 +195,42 @@ struct HomeView: View {
             .background(themePalette.backgroundColor)
             .animation(.easeInOut(duration: 0.35), value: themePalette.theme)
 
+            if showFirstLaunchOnboarding {
+                Color.black.opacity(0.48)
+                    .ignoresSafeArea()
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        firstLaunchOnboardingCompleted = true
+                    }
+                    .accessibilityLabel(s.paywallCloseA11y)
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityHint(s.dismissDone)
+            }
+
             DraggableChatButton(
-                onTap: onChatTap,
-                accessibilityLabel: s.openCommandChat
+                onTap: {
+                    if showFirstLaunchOnboarding {
+                        firstLaunchOnboardingCompleted = true
+                    }
+                    onChatTap()
+                },
+                accessibilityLabel: s.openCommandChat,
+                showOnboardingHighlight: showFirstLaunchOnboarding
             )
+
+            if showFirstLaunchOnboarding {
+                VStack {
+                    FirstLaunchOnboardingCard(
+                        strings: s,
+                        typography: typography,
+                        onDismiss: { firstLaunchOnboardingCompleted = true }
+                    )
+                    .padding(.horizontal, 20)
+                    .padding(.top, 8)
+                    Spacer()
+                }
+                .allowsHitTesting(true)
+            }
         }
         .sheet(item: $composerSession) { session in
             NavigationStack {
@@ -358,6 +396,48 @@ struct HomeView: View {
         return !TaskScheduleFormatting.hasWallClockTime(d, calendar: calendar)
     }
 
+}
+
+// MARK: - First launch onboarding card
+
+private struct FirstLaunchOnboardingCard: View {
+    let strings: AppStrings
+    let typography: AppTypography
+    let onDismiss: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(strings.paywallHeadline)
+                .font(typography.sectionHeader)
+                .foregroundStyle(.primary)
+            Text(strings.onboardingVoiceExample)
+                .font(typography.body)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(strings.onboardingTapFabHint)
+                .font(typography.caption)
+                .fontWeight(.medium)
+                .foregroundStyle(.secondary)
+            Button(action: onDismiss) {
+                Text(strings.dismissDone)
+                    .font(typography.button)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+            }
+            .buttonStyle(.borderedProminent)
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(.ultraThinMaterial)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.12), radius: 12, y: 4)
+    }
 }
 
 #Preview {

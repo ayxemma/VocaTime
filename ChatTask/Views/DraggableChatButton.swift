@@ -56,9 +56,12 @@ struct DraggableChatButton: View {
 
     let onTap: () -> Void
     let accessibilityLabel: String
+    /// Pulsing ring for first-launch onboarding (does not block layout).
+    var showOnboardingHighlight: Bool = false
 
     @State private var dragTranslation: CGSize = .zero
     @State private var isDragging = false
+    @State private var onboardingRingPulse = false
     #if DEBUG
     @State private var didLogInitialLayout = false
     @State private var didLogPlacementMode = false
@@ -89,6 +92,17 @@ struct DraggableChatButton: View {
                             .fill(themePalette.primaryGradient)
                     )
                     .clipShape(Circle())
+                    .overlay {
+                        if showOnboardingHighlight {
+                            Circle()
+                                .stroke(themePalette.accentColor, lineWidth: 3)
+                                .frame(
+                                    width: DraggableChatButtonMetrics.size + 12,
+                                    height: DraggableChatButtonMetrics.size + 12
+                                )
+                                .scaleEffect(onboardingRingPulse ? 1.08 : 1.0)
+                        }
+                    }
                     .shadow(
                         color: .black.opacity(themePalette.isMinimal ? 0.1 : 0.2),
                         radius: themePalette.isMinimal ? 4 : 6,
@@ -102,6 +116,23 @@ struct DraggableChatButton: View {
                     .accessibilityLabel(accessibilityLabel)
                     .accessibilityAddTraits(.isButton)
                     .accessibilityAction { onTap() }
+                    .onChange(of: showOnboardingHighlight) { _, show in
+                        if show {
+                            onboardingRingPulse = false
+                            withAnimation(.easeInOut(duration: 0.85).repeatForever(autoreverses: true)) {
+                                onboardingRingPulse = true
+                            }
+                        } else {
+                            onboardingRingPulse = false
+                        }
+                    }
+                    .onAppear {
+                        guard showOnboardingHighlight else { return }
+                        onboardingRingPulse = false
+                        withAnimation(.easeInOut(duration: 0.85).repeatForever(autoreverses: true)) {
+                            onboardingRingPulse = true
+                        }
+                    }
                     .highPriorityGesture(
                         DragGesture(minimumDistance: 0, coordinateSpace: .local)
                         .onChanged { value in

@@ -197,7 +197,9 @@ extension AppStrings {
         paywallPurchaseFailedTitle: "Échec de l’achat",
         paywallAlertOK: "OK",
         paywallProductUnavailable: "Ce produit n’est pas disponible pour le moment. Vérifiez votre connexion et réessayez.",
-        paywallCloseA11y: "Fermer"
+        paywallCloseA11y: "Fermer",
+        onboardingVoiceExample: "Essayez : « Rappelle-moi de préparer le dîner à 18 h 15 »",
+        onboardingTapFabHint: "Touchez ici pour parler"
     )
 
     static let german = AppStrings(
@@ -393,7 +395,9 @@ extension AppStrings {
         paywallPurchaseFailedTitle: "Kauf fehlgeschlagen",
         paywallAlertOK: "OK",
         paywallProductUnavailable: "Dieses Produkt ist derzeit nicht verfügbar. Prüfen Sie Ihre Verbindung und versuchen Sie es erneut.",
-        paywallCloseA11y: "Schließen"
+        paywallCloseA11y: "Schließen",
+        onboardingVoiceExample: "Versuchen Sie: „Erinner mich um 18:15 ans Kochen fürs Abendessen.“",
+        onboardingTapFabHint: "Hier tippen zum Sprechen"
     )
 
     static let dutch = AppStrings(
@@ -589,6 +593,8 @@ extension AppStrings {
         paywallPurchaseFailedTitle: "Aankoop mislukt",
         paywallAlertOK: "OK",
         paywallProductUnavailable: "Dit product is momenteel niet beschikbaar. Controleer uw verbinding en probeer het opnieuw.",
-        paywallCloseA11y: "Sluiten"
+        paywallCloseA11y: "Sluiten",
+        onboardingVoiceExample: "Zeg bijvoorbeeld: Herinner me om 18:15 te koken",
+        onboardingTapFabHint: "Tik hier om te praten"
     )
 }
