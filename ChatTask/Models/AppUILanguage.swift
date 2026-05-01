@@ -289,6 +289,11 @@ struct AppStrings {
     let settingsSectionAppearance: String
     let settingsAppearanceThemeColorLabel: String
     let settingsAppearanceTextSizeLabel: String
+    /// Settings › Appearance › Text Size segmented options.
+    let textSizeSmall: String
+    let textSizeDefault: String
+    let textSizeLarge: String
+    let textSizeXLarge: String
     let settingsUILanguageFooter: String
     let settingsSectionReminders: String
     let settingsReminderDefaultFooter: String
@@ -490,6 +495,10 @@ struct AppStrings {
         settingsSectionAppearance: "Appearance",
         settingsAppearanceThemeColorLabel: "Theme Color",
         settingsAppearanceTextSizeLabel: "Text Size",
+        textSizeSmall: "Small",
+        textSizeDefault: "Default",
+        textSizeLarge: "Large",
+        textSizeXLarge: "XL",
         settingsUILanguageFooter: "Applies to buttons and menus. Your task titles stay as you enter them.",
         settingsSectionReminders: "Reminders",
         settingsReminderDefaultFooter: "Used as the default lead time for new tasks and voice commands.",
@@ -682,6 +691,10 @@ struct AppStrings {
         settingsSectionAppearance: "外观",
         settingsAppearanceThemeColorLabel: "主题颜色",
         settingsAppearanceTextSizeLabel: "文字大小",
+        textSizeSmall: "小",
+        textSizeDefault: "标准",
+        textSizeLarge: "大",
+        textSizeXLarge: "超大",
         settingsUILanguageFooter: "仅影响界面按钮与菜单，任务内容保持您输入的语言。",
         settingsSectionReminders: "提醒",
         settingsReminderDefaultFooter: "作为新任务与语音指令的默认提前提醒时间。",
@@ -874,6 +887,10 @@ struct AppStrings {
         settingsSectionAppearance: "Apariencia",
         settingsAppearanceThemeColorLabel: "Color del tema",
         settingsAppearanceTextSizeLabel: "Tamaño del texto",
+        textSizeSmall: "Pequeño",
+        textSizeDefault: "Predeterminado",
+        textSizeLarge: "Grande",
+        textSizeXLarge: "XL",
         settingsUILanguageFooter: "Afecta a botones y menús. Los títulos de tareas siguen el idioma que escribas.",
         settingsSectionReminders: "Recordatorios",
         settingsReminderDefaultFooter: "Tiempo de antelación por defecto para tareas nuevas y comandos de voz.",
@@ -964,21 +981,23 @@ enum AppTextSize: String, CaseIterable, Identifiable {
         self = AppTextSize(rawValue: storageRaw) ?? .default
     }
 
-    var displayName: String {
-        switch self {
-        case .small: return "Small"
-        case .default: return "Default"
-        case .large: return "Large"
-        case .extraLarge: return "XL"
-        }
-    }
-
     var pointDelta: CGFloat {
         switch self {
         case .small: return 0
         case .default: return 1.5
         case .large: return 3.5
         case .extraLarge: return 5.5
+        }
+    }
+}
+
+extension AppTextSize {
+    func localizedLabel(strings: AppStrings) -> String {
+        switch self {
+        case .small: return strings.textSizeSmall
+        case .default: return strings.textSizeDefault
+        case .large: return strings.textSizeLarge
+        case .extraLarge: return strings.textSizeXLarge
         }
     }
 }

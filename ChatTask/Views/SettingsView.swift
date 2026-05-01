@@ -282,7 +282,7 @@ struct SettingsView: View {
     private func textSizePicker(s: AppStrings) -> some View {
         Picker(selection: $textSizeRaw) {
             ForEach(AppTextSize.allCases) { size in
-                Text(size.displayName).tag(size.rawValue)
+                Text(size.localizedLabel(strings: s)).tag(size.rawValue)
             }
         } label: {
             Text(s.settingsAppearanceTextSizeLabel)
