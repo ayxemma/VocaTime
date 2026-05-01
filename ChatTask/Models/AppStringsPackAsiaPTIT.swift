@@ -200,7 +200,12 @@ extension AppStrings {
         paywallCloseA11y: "閉じる",
         onboardingTitle: "声をタスクに。",
         onboardingVoiceExample: "例：「6時15分に夕食の準備をリマインドして」",
-        onboardingTapFabHint: "ここをタップして話す"
+        onboardingTapFabHint: "ここをタップして話す",
+        onboardingDemoTaskTitle: "散歩する",
+        onboardingSuccessMessage: "✅ 20分後のリマインダーを設定しました",
+        onboardingReminderPreviewIntro: "このようなリマインダーが届きます：",
+        onboardingReminderPreviewBody: "🔔 時間です — 散歩する",
+        onboardingFollowUpHint: "例：「メモも追加して」"
     )
 
     static let korean = AppStrings(
@@ -399,7 +404,12 @@ extension AppStrings {
         paywallCloseA11y: "닫기",
         onboardingTitle: "음성을 할 일로 바꾸세요.",
         onboardingVoiceExample: "이렇게 말해 보세요: “저녁 6시 15분에 요리하라고 알려줘”",
-        onboardingTapFabHint: "여기를 눌러 말하기"
+        onboardingTapFabHint: "여기를 눌러 말하기",
+        onboardingDemoTaskTitle: "산책하기",
+        onboardingSuccessMessage: "✅ 20분 뒤 알림을 설정했어요",
+        onboardingReminderPreviewIntro: "이런 알림을 받게 됩니다:",
+        onboardingReminderPreviewBody: "🔔 시간이 됐어요 — 산책하기",
+        onboardingFollowUpHint: "이렇게 말해 보세요: 메모도 추가해줘"
     )
 
     static let portugueseBrazil = AppStrings(
@@ -598,7 +608,12 @@ extension AppStrings {
         paywallCloseA11y: "Fechar",
         onboardingTitle: "Transforme voz em tarefas.",
         onboardingVoiceExample: "Tente dizer: Lembra-me de cozinhar o jantar às 6:15",
-        onboardingTapFabHint: "Toque aqui para falar"
+        onboardingTapFabHint: "Toque aqui para falar",
+        onboardingDemoTaskTitle: "Fazer uma caminhada",
+        onboardingSuccessMessage: "✅ Lembrete definido para daqui a 20 minutos",
+        onboardingReminderPreviewIntro: "Você receberá um lembrete assim:",
+        onboardingReminderPreviewBody: "🔔 Está na hora — Fazer uma caminhada",
+        onboardingFollowUpHint: "Tente dizer: também adicione uma nota"
     )
 
     static let italian = AppStrings(
@@ -797,6 +812,11 @@ extension AppStrings {
         paywallCloseA11y: "Chiudi",
         onboardingTitle: "Trasforma la voce in attività.",
         onboardingVoiceExample: "Prova a dire: Ricordami di cucinare la cena alle 6:15",
-        onboardingTapFabHint: "Tocca qui per parlare"
+        onboardingTapFabHint: "Tocca qui per parlare",
+        onboardingDemoTaskTitle: "Fare una passeggiata",
+        onboardingSuccessMessage: "✅ Promemoria impostato tra 20 minuti",
+        onboardingReminderPreviewIntro: "Riceverai un promemoria così:",
+        onboardingReminderPreviewBody: "🔔 È il momento — Fare una passeggiata",
+        onboardingFollowUpHint: "Prova a dire: aggiungi anche una nota"
     )
 }

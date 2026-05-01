@@ -199,6 +199,11 @@ extension AppStrings {
         paywallCloseA11y: "बंद करें",
         onboardingTitle: "आवाज़ को कार्यों में बदलें।",
         onboardingVoiceExample: "यह आज़माएँ: मुझे शाम 6:15 पर खाना बनाने की याद दिलाना",
-        onboardingTapFabHint: "बोलने के लिए यहाँ टैप करें"
+        onboardingTapFabHint: "बोलने के लिए यहाँ टैप करें",
+        onboardingDemoTaskTitle: "टहलने जाना",
+        onboardingSuccessMessage: "✅ 20 मिनट बाद का अनुस्मारक सेट हो गया",
+        onboardingReminderPreviewIntro: "आपको ऐसा अनुस्मारक मिलेगा:",
+        onboardingReminderPreviewBody: "🔔 समय हो गया — टहलने जाना",
+        onboardingFollowUpHint: "यह आज़माएँ: एक नोट भी जोड़ें"
     )
 }

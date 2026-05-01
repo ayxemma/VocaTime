@@ -200,7 +200,12 @@ extension AppStrings {
         paywallCloseA11y: "Fermer",
         onboardingTitle: "Transformez la voix en tâches.",
         onboardingVoiceExample: "Essayez : « Rappelle-moi de préparer le dîner à 18 h 15 »",
-        onboardingTapFabHint: "Touchez ici pour parler"
+        onboardingTapFabHint: "Touchez ici pour parler",
+        onboardingDemoTaskTitle: "Faire une promenade",
+        onboardingSuccessMessage: "✅ Rappel défini dans 20 minutes",
+        onboardingReminderPreviewIntro: "Vous recevrez un rappel comme celui-ci :",
+        onboardingReminderPreviewBody: "🔔 C’est l’heure — Faire une promenade",
+        onboardingFollowUpHint: "Essayez : « ajoute aussi une note »"
     )
 
     static let german = AppStrings(
@@ -399,7 +404,12 @@ extension AppStrings {
         paywallCloseA11y: "Schließen",
         onboardingTitle: "Stimme wird zur Aufgabe.",
         onboardingVoiceExample: "Versuchen Sie: „Erinner mich um 18:15 ans Kochen fürs Abendessen.“",
-        onboardingTapFabHint: "Hier tippen zum Sprechen"
+        onboardingTapFabHint: "Hier tippen zum Sprechen",
+        onboardingDemoTaskTitle: "Spazieren gehen",
+        onboardingSuccessMessage: "✅ Erinnerung für in 20 Minuten gesetzt",
+        onboardingReminderPreviewIntro: "Sie erhalten eine Erinnerung wie diese:",
+        onboardingReminderPreviewBody: "🔔 Es ist Zeit — Spazieren gehen",
+        onboardingFollowUpHint: "Versuchen Sie: „auch eine Notiz hinzufügen“"
     )
 
     static let dutch = AppStrings(
@@ -598,6 +608,11 @@ extension AppStrings {
         paywallCloseA11y: "Sluiten",
         onboardingTitle: "Zet stem om in taken.",
         onboardingVoiceExample: "Zeg bijvoorbeeld: Herinner me om 18:15 te koken",
-        onboardingTapFabHint: "Tik hier om te praten"
+        onboardingTapFabHint: "Tik hier om te praten",
+        onboardingDemoTaskTitle: "Een wandeling maken",
+        onboardingSuccessMessage: "✅ Herinnering ingesteld voor over 20 minuten",
+        onboardingReminderPreviewIntro: "U krijgt een herinnering zoals deze:",
+        onboardingReminderPreviewBody: "🔔 Het is tijd — Een wandeling maken",
+        onboardingFollowUpHint: "Zeg bijvoorbeeld: voeg ook een notitie toe"
     )
 }

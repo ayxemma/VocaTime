@@ -361,6 +361,11 @@ struct AppStrings {
     let onboardingVoiceExample: String
     /// First-launch hint under the chat FAB.
     let onboardingTapFabHint: String
+    let onboardingDemoTaskTitle: String
+    let onboardingSuccessMessage: String
+    let onboardingReminderPreviewIntro: String
+    let onboardingReminderPreviewBody: String
+    let onboardingFollowUpHint: String
 
     static let english = AppStrings(
         tagline: "Speak → Understand → Schedule → Remind",
@@ -557,8 +562,13 @@ struct AppStrings {
         paywallProductUnavailable: "This product is currently unavailable. Please check your connection and try again.",
         paywallCloseA11y: "Close",
         onboardingTitle: "Turn voice into tasks.",
-        onboardingVoiceExample: "Try saying: Remind me to cook dinner at 6:15",
-        onboardingTapFabHint: "Tap here to speak"
+        onboardingVoiceExample: "Remind me to take a walk in 20 minutes",
+        onboardingTapFabHint: "Tap here to speak",
+        onboardingDemoTaskTitle: "Take a walk",
+        onboardingSuccessMessage: "✅ Reminder set for 20 minutes from now",
+        onboardingReminderPreviewIntro: "You’ll get a reminder like this:",
+        onboardingReminderPreviewBody: "🔔 It’s time — Take a walk",
+        onboardingFollowUpHint: "Try saying: also add a note"
     )
 
     static let chineseSimplified = AppStrings(
@@ -757,7 +767,12 @@ struct AppStrings {
         paywallCloseA11y: "关闭",
         onboardingTitle: "一句话变成任务",
         onboardingVoiceExample: "试试说：20分钟后提醒我去散步",
-        onboardingTapFabHint: "点按此处说话"
+        onboardingTapFabHint: "点按此处说话",
+        onboardingDemoTaskTitle: "去散步",
+        onboardingSuccessMessage: "✅ 已设置 20 分钟后的提醒",
+        onboardingReminderPreviewIntro: "你会收到这样的提醒：",
+        onboardingReminderPreviewBody: "🔔 时间到了 — 去散步",
+        onboardingFollowUpHint: "试试说：再加一条备注"
     )
 
     static let spanish = AppStrings(
@@ -956,7 +971,12 @@ struct AppStrings {
         paywallCloseA11y: "Cerrar",
         onboardingTitle: "Convierte la voz en tareas.",
         onboardingVoiceExample: "Prueba a decir: Recuérdame cocinar la cena a las 6:15",
-        onboardingTapFabHint: "Toca aquí para hablar"
+        onboardingTapFabHint: "Toca aquí para hablar",
+        onboardingDemoTaskTitle: "Dar un paseo",
+        onboardingSuccessMessage: "✅ Recordatorio programado para dentro de 20 minutos",
+        onboardingReminderPreviewIntro: "Recibirás un recordatorio como este:",
+        onboardingReminderPreviewBody: "🔔 Es hora — Dar un paseo",
+        onboardingFollowUpHint: "Prueba a decir: también añade una nota"
     )
 }
 

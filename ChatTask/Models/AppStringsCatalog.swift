@@ -197,6 +197,11 @@ tagline: "說話 → 理解 → 安排 → 提醒",
         paywallCloseA11y: "關閉",
         onboardingTitle: "一句話變成任務",
         onboardingVoiceExample: "試試說：20 分鐘後提醒我去散步",
-        onboardingTapFabHint: "點這裡說話"
+        onboardingTapFabHint: "點這裡說話",
+        onboardingDemoTaskTitle: "去散步",
+        onboardingSuccessMessage: "✅ 已設定 20 分鐘後的提醒",
+        onboardingReminderPreviewIntro: "你會收到這樣的提醒：",
+        onboardingReminderPreviewBody: "🔔 時間到了 — 去散步",
+        onboardingFollowUpHint: "試試說：再加一條備註"
     )
 }
