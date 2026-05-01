@@ -287,6 +287,10 @@ struct AppStrings {
     let settingsPermissionSpeechFooter: String
     let settingsSectionGeneral: String
     let settingsSectionAppearance: String
+    let settingsAppearanceThemeColorLabel: String
+    let settingsAppearanceThemeColorFooter: String
+    let settingsAppearanceTextSizeLabel: String
+    let settingsAppearanceTextSizeFooter: String
     let settingsUILanguageFooter: String
     let settingsSectionReminders: String
     let settingsReminderDefaultFooter: String
@@ -465,6 +469,10 @@ struct AppStrings {
         settingsPermissionSpeechFooter: "Used to convert your voice into tasks.",
         settingsSectionGeneral: "General",
         settingsSectionAppearance: "Appearance",
+        settingsAppearanceThemeColorLabel: "Theme Color",
+        settingsAppearanceThemeColorFooter: "Customize the app accent color.",
+        settingsAppearanceTextSizeLabel: "Text Size",
+        settingsAppearanceTextSizeFooter: "Adjust task and interface text size.",
         settingsUILanguageFooter: "Applies to buttons and menus. Your task titles stay as you enter them.",
         settingsSectionReminders: "Reminders",
         settingsReminderDefaultFooter: "Used as the default lead time for new tasks and voice commands.",
@@ -637,6 +645,10 @@ struct AppStrings {
         settingsPermissionSpeechFooter: "用于将语音转为任务。",
         settingsSectionGeneral: "通用",
         settingsSectionAppearance: "外观",
+        settingsAppearanceThemeColorLabel: "主题颜色",
+        settingsAppearanceThemeColorFooter: "自定义应用的强调颜色。",
+        settingsAppearanceTextSizeLabel: "文字大小",
+        settingsAppearanceTextSizeFooter: "调整任务和界面的文字大小。",
         settingsUILanguageFooter: "仅影响界面按钮与菜单，任务内容保持您输入的语言。",
         settingsSectionReminders: "提醒",
         settingsReminderDefaultFooter: "作为新任务与语音指令的默认提前提醒时间。",
@@ -809,6 +821,10 @@ struct AppStrings {
         settingsPermissionSpeechFooter: "Convierte tu voz en tareas.",
         settingsSectionGeneral: "General",
         settingsSectionAppearance: "Apariencia",
+        settingsAppearanceThemeColorLabel: "Color del tema",
+        settingsAppearanceThemeColorFooter: "Personaliza el color de acento de la app.",
+        settingsAppearanceTextSizeLabel: "Tamaño del texto",
+        settingsAppearanceTextSizeFooter: "Ajusta el tamaño del texto de tareas e interfaz.",
         settingsUILanguageFooter: "Afecta a botones y menús. Los títulos de tareas siguen el idioma que escribas.",
         settingsSectionReminders: "Recordatorios",
         settingsReminderDefaultFooter: "Tiempo de antelación por defecto para tareas nuevas y comandos de voz.",

@@ -70,8 +70,8 @@ struct SettingsView: View {
             Section {
                 VStack(alignment: .leading, spacing: 8) {
                     appearanceControlHeader(
-                        title: "Theme Color",
-                        helper: "Customize the app accent color."
+                        title: s.settingsAppearanceThemeColorLabel,
+                        helper: s.settingsAppearanceThemeColorFooter
                     )
                     themePickerGrid
                 }
@@ -79,10 +79,10 @@ struct SettingsView: View {
 
                 VStack(alignment: .leading, spacing: 8) {
                     appearanceControlHeader(
-                        title: "Text Size",
-                        helper: "Adjust task and interface text size."
+                        title: s.settingsAppearanceTextSizeLabel,
+                        helper: s.settingsAppearanceTextSizeFooter
                     )
-                    textSizePicker
+                    textSizePicker(s: s)
                 }
                 .padding(.vertical, 4)
             } header: {
@@ -290,13 +290,17 @@ struct SettingsView: View {
         .padding(.vertical, 2)
     }
 
-    private var textSizePicker: some View {
-        Picker("Text Size", selection: $textSizeRaw) {
+    private func textSizePicker(s: AppStrings) -> some View {
+        Picker(selection: $textSizeRaw) {
             ForEach(AppTextSize.allCases) { size in
                 Text(size.displayName).tag(size.rawValue)
             }
+        } label: {
+            Text(s.settingsAppearanceTextSizeLabel)
         }
         .pickerStyle(.segmented)
+        .labelsHidden()
+        .accessibilityLabel(s.settingsAppearanceTextSizeLabel)
     }
 
     private var isPurchaseBusy: Bool {
