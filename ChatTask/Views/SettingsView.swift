@@ -19,6 +19,10 @@ struct SettingsView: View {
     @AppStorage(AppColorTheme.storageKey) private var themeRaw: String = AppColorTheme.white.rawValue
     @AppStorage(AppTextSize.storageKey) private var textSizeRaw: String = AppTextSize.default.rawValue
     @AppStorage(ReminderOffset.defaultsKey) private var reminderDefaultMinutes: Int = 0
+    #if DEBUG
+    @AppStorage(FirstLaunchOnboarding.completedKey) private var firstLaunchOnboardingCompleted = false
+    @AppStorage(FirstLaunchOnboarding.paywallSuppressedUntilTaskCountKey) private var paywallSuppressedUntilTaskCount = 0
+    #endif
 
     @State private var showPaywall = false
     @State private var showPurchaseErrorAlert = false
@@ -193,6 +197,20 @@ struct SettingsView: View {
                 Text(s.settingsSectionSupport)
             }
 
+            #if DEBUG
+            Section {
+                Button("Reset Onboarding") {
+                    resetOnboardingForDebug()
+                }
+                .font(typography.body)
+                .foregroundStyle(.primary)
+            } header: {
+                Text("Debug")
+            } footer: {
+                Text("Shows the first-launch onboarding again on Home.")
+            }
+            #endif
+
             Section {
                 LabeledContent(s.settingsVersionLabel) {
                     Text(versionString)
@@ -314,6 +332,13 @@ struct SettingsView: View {
         ]
         return c.url
     }
+
+    #if DEBUG
+    private func resetOnboardingForDebug() {
+        firstLaunchOnboardingCompleted = false
+        paywallSuppressedUntilTaskCount = 0
+    }
+    #endif
 
     // MARK: - Notifications (Reminders section)
 
