@@ -49,9 +49,16 @@ struct PaywallView: View {
         if appUILanguage == .en {
             let product = plan == .monthly ? subscriptionManager.monthlyProduct : subscriptionManager.yearlyProduct
             let phrase = SubscriptionConfig.resolvedTrialPhrase(for: product)
-            return "\(phrase) included"
+            return String(format: strings.paywallTrialIncludedFormat, phrase)
         }
         return strings.paywallPlanTrialIncluded
+    }
+
+    private var trialBannerBadgeText: String {
+        if appUILanguage == .en {
+            return SubscriptionConfig.trialBannerBadge(for: referenceProductForTrialCopy)
+        }
+        return strings.paywallTrialBannerBadge
     }
 
     // MARK: - Body
@@ -95,8 +102,8 @@ struct PaywallView: View {
                 .padding(.top, 12)
                 .padding(.trailing, 16)
         }
-        .alert("Purchase Failed", isPresented: $showErrorAlert) {
-            Button("OK") { subscriptionManager.clearPurchaseError() }
+        .alert(strings.paywallPurchaseFailedTitle, isPresented: $showErrorAlert) {
+            Button(strings.paywallAlertOK) { subscriptionManager.clearPurchaseError() }
         } message: {
             Text(errorMessage)
         }
@@ -124,17 +131,17 @@ struct PaywallView: View {
                     .foregroundStyle(Color.accentColor)
             }
 
-            Text(SubscriptionConfig.Copy.appName)
+            Text(strings.paywallBrandName)
                 .font(.system(size: 28, weight: .bold, design: .rounded))
                 .foregroundStyle(.primary)
 
-            Text(SubscriptionConfig.Copy.headline)
+            Text(strings.paywallHeadline)
                 .font(.system(size: 22, weight: .semibold))
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.primary)
                 .padding(.horizontal, 24)
 
-            Text(SubscriptionConfig.Copy.subheadline)
+            Text(strings.paywallSubheadline)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -152,7 +159,7 @@ struct PaywallView: View {
                 .foregroundStyle(Color.accentColor)
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(SubscriptionConfig.trialBannerBadge(for: referenceProductForTrialCopy))
+                Text(trialBannerBadgeText)
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(Color.accentColor)
                     .kerning(0.5)
@@ -181,44 +188,51 @@ struct PaywallView: View {
     // MARK: - Benefits
 
     private var benefitsSection: some View {
-        VStack(spacing: 14) {
-            ForEach(SubscriptionConfig.Copy.benefits, id: \.text) { item in
-                HStack(spacing: 14) {
-                    Image(systemName: item.icon)
-                        .font(.system(size: 15, weight: .medium))
-                        .foregroundStyle(Color.accentColor)
-                        .frame(width: 22)
-                    Text(item.text)
-                        .font(.system(size: 15, weight: .medium))
-                        .foregroundStyle(.primary)
-                    Spacer()
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(Color.accentColor)
-                }
-            }
+        let s = strings
+        return VStack(spacing: 14) {
+            benefitRow(icon: "mic.fill", text: s.paywallBenefitUnlimitedVoice)
+            benefitRow(icon: "bell.badge.fill", text: s.paywallBenefitSmartReminders)
+            benefitRow(icon: "globe", text: s.paywallBenefitMultilang)
+            benefitRow(icon: "pencil.and.list.clipboard", text: s.paywallBenefitVoiceTextEditing)
+        }
+    }
+
+    private func benefitRow(icon: String, text: String) -> some View {
+        HStack(spacing: 14) {
+            Image(systemName: icon)
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(Color.accentColor)
+                .frame(width: 22)
+            Text(text)
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(.primary)
+            Spacer()
+            Image(systemName: "checkmark")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(Color.accentColor)
         }
     }
 
     // MARK: - Plan picker
 
     private var planSection: some View {
-        VStack(spacing: 10) {
+        let s = strings
+        return VStack(spacing: 10) {
             PlanCard(
-                label: SubscriptionConfig.Copy.monthlyLabel,
+                label: s.paywallPlanMonthly,
                 price: displayPrice(for: .monthly),
-                per: SubscriptionConfig.Copy.monthlyPer,
+                per: s.paywallPerMonth,
                 trialIncludedLine: planTrialIncludedLine(for: .monthly),
                 badge: nil,
                 isSelected: selectedPlan == .monthly
             ) { selectedPlan = .monthly }
 
             PlanCard(
-                label: SubscriptionConfig.Copy.yearlyLabel,
+                label: s.paywallPlanYearly,
                 price: displayPrice(for: .yearly),
-                per: SubscriptionConfig.Copy.yearlyPer,
+                per: s.paywallPerYear,
                 trialIncludedLine: planTrialIncludedLine(for: .yearly),
-                badge: SubscriptionConfig.Copy.yearlyBadge,
+                badge: s.paywallYearlyBestValue,
                 isSelected: selectedPlan == .yearly
             ) { selectedPlan = .yearly }
         }
@@ -311,14 +325,14 @@ struct PaywallView: View {
                 .background(Color(.secondarySystemFill))
                 .clipShape(Circle())
         }
-        .accessibilityLabel("Close")
+        .accessibilityLabel(strings.paywallCloseA11y)
     }
 
     // MARK: - Purchase action
 
     private func handlePurchase() async {
         guard let product = selectedProduct else {
-            errorMessage = "This product is currently unavailable. Please check your connection and try again."
+            errorMessage = strings.paywallProductUnavailable
             showErrorAlert = true
             return
         }

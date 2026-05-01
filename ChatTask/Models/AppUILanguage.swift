@@ -288,9 +288,7 @@ struct AppStrings {
     let settingsSectionGeneral: String
     let settingsSectionAppearance: String
     let settingsAppearanceThemeColorLabel: String
-    let settingsAppearanceThemeColorFooter: String
     let settingsAppearanceTextSizeLabel: String
-    let settingsAppearanceTextSizeFooter: String
     let settingsUILanguageFooter: String
     let settingsSectionReminders: String
     let settingsReminderDefaultFooter: String
@@ -331,6 +329,27 @@ struct AppStrings {
     let paywallRestoring: String
     /// Shown on each paywall plan row (trial length + "included").
     let paywallPlanTrialIncluded: String
+    /// Paywall header brand (typically the app name).
+    let paywallBrandName: String
+    let paywallHeadline: String
+    let paywallSubheadline: String
+    /// Trial callout in the gift banner (non-English); English uses `SubscriptionConfig.trialBannerBadge` from StoreKit when available.
+    let paywallTrialBannerBadge: String
+    let paywallBenefitUnlimitedVoice: String
+    let paywallBenefitSmartReminders: String
+    let paywallBenefitMultilang: String
+    let paywallBenefitVoiceTextEditing: String
+    let paywallPlanMonthly: String
+    let paywallPlanYearly: String
+    let paywallPerMonth: String
+    let paywallPerYear: String
+    let paywallYearlyBestValue: String
+    /// English plan row: `String(format:, SubscriptionConfig.resolvedTrialPhrase(for:))`; unused for other UI languages.
+    let paywallTrialIncludedFormat: String
+    let paywallPurchaseFailedTitle: String
+    let paywallAlertOK: String
+    let paywallProductUnavailable: String
+    let paywallCloseA11y: String
 
     static let english = AppStrings(
         tagline: "Speak → Understand → Schedule → Remind",
@@ -470,9 +489,7 @@ struct AppStrings {
         settingsSectionGeneral: "General",
         settingsSectionAppearance: "Appearance",
         settingsAppearanceThemeColorLabel: "Theme Color",
-        settingsAppearanceThemeColorFooter: "Customize the app accent color.",
         settingsAppearanceTextSizeLabel: "Text Size",
-        settingsAppearanceTextSizeFooter: "Adjust task and interface text size.",
         settingsUILanguageFooter: "Applies to buttons and menus. Your task titles stay as you enter them.",
         settingsSectionReminders: "Reminders",
         settingsReminderDefaultFooter: "Used as the default lead time for new tasks and voice commands.",
@@ -505,7 +522,25 @@ struct AppStrings {
         paywallNotNow: "Not now",
         paywallStartTrial: "Start Free Trial",
         paywallRestoring: "Restoring…",
-        paywallPlanTrialIncluded: "1-week free trial included"
+        paywallPlanTrialIncluded: "1-week free trial included",
+        paywallBrandName: "ChatTask",
+        paywallHeadline: "Turn voice into tasks instantly",
+        paywallSubheadline: "Create and manage tasks by voice or chat.",
+        paywallTrialBannerBadge: "1-WEEK FREE TRIAL",
+        paywallBenefitUnlimitedVoice: "Unlimited AI voice tasks",
+        paywallBenefitSmartReminders: "Smart reminders",
+        paywallBenefitMultilang: "Multi-language support",
+        paywallBenefitVoiceTextEditing: "Voice and text task editing",
+        paywallPlanMonthly: "Monthly",
+        paywallPlanYearly: "Yearly",
+        paywallPerMonth: "/ month",
+        paywallPerYear: "/ year",
+        paywallYearlyBestValue: "BEST VALUE",
+        paywallTrialIncludedFormat: "%@ included",
+        paywallPurchaseFailedTitle: "Purchase Failed",
+        paywallAlertOK: "OK",
+        paywallProductUnavailable: "This product is currently unavailable. Please check your connection and try again.",
+        paywallCloseA11y: "Close"
     )
 
     static let chineseSimplified = AppStrings(
@@ -646,9 +681,7 @@ struct AppStrings {
         settingsSectionGeneral: "通用",
         settingsSectionAppearance: "外观",
         settingsAppearanceThemeColorLabel: "主题颜色",
-        settingsAppearanceThemeColorFooter: "自定义应用的强调颜色。",
         settingsAppearanceTextSizeLabel: "文字大小",
-        settingsAppearanceTextSizeFooter: "调整任务和界面的文字大小。",
         settingsUILanguageFooter: "仅影响界面按钮与菜单，任务内容保持您输入的语言。",
         settingsSectionReminders: "提醒",
         settingsReminderDefaultFooter: "作为新任务与语音指令的默认提前提醒时间。",
@@ -681,7 +714,25 @@ struct AppStrings {
         paywallNotNow: "暂不",
         paywallStartTrial: "开始免费试用",
         paywallRestoring: "正在恢复…",
-        paywallPlanTrialIncluded: "包含 1 周免费试用"
+        paywallPlanTrialIncluded: "包含 1 周免费试用",
+        paywallBrandName: "ChatTask",
+        paywallHeadline: "即时把语音变成任务",
+        paywallSubheadline: "用语音或聊天创建和管理任务。",
+        paywallTrialBannerBadge: "1 周免费试用",
+        paywallBenefitUnlimitedVoice: "无限 AI 语音任务",
+        paywallBenefitSmartReminders: "智能提醒",
+        paywallBenefitMultilang: "多语言支持",
+        paywallBenefitVoiceTextEditing: "语音与文字编辑任务",
+        paywallPlanMonthly: "月付",
+        paywallPlanYearly: "年付",
+        paywallPerMonth: "/ 月",
+        paywallPerYear: "/ 年",
+        paywallYearlyBestValue: "最超值",
+        paywallTrialIncludedFormat: "包含%@",
+        paywallPurchaseFailedTitle: "购买失败",
+        paywallAlertOK: "好",
+        paywallProductUnavailable: "此项目目前无法购买。请检查网络连接后重试。",
+        paywallCloseA11y: "关闭"
     )
 
     static let spanish = AppStrings(
@@ -822,9 +873,7 @@ struct AppStrings {
         settingsSectionGeneral: "General",
         settingsSectionAppearance: "Apariencia",
         settingsAppearanceThemeColorLabel: "Color del tema",
-        settingsAppearanceThemeColorFooter: "Personaliza el color de acento de la app.",
         settingsAppearanceTextSizeLabel: "Tamaño del texto",
-        settingsAppearanceTextSizeFooter: "Ajusta el tamaño del texto de tareas e interfaz.",
         settingsUILanguageFooter: "Afecta a botones y menús. Los títulos de tareas siguen el idioma que escribas.",
         settingsSectionReminders: "Recordatorios",
         settingsReminderDefaultFooter: "Tiempo de antelación por defecto para tareas nuevas y comandos de voz.",
@@ -857,7 +906,25 @@ struct AppStrings {
         paywallNotNow: "Ahora no",
         paywallStartTrial: "Empezar prueba gratis",
         paywallRestoring: "Restaurando…",
-        paywallPlanTrialIncluded: "Incluye prueba gratis de 1 semana"
+        paywallPlanTrialIncluded: "Incluye prueba gratis de 1 semana",
+        paywallBrandName: "ChatTask",
+        paywallHeadline: "Convierte la voz en tareas al instante",
+        paywallSubheadline: "Crea y gestiona tareas por voz o chat.",
+        paywallTrialBannerBadge: "PRUEBA GRATIS DE 1 SEMANA",
+        paywallBenefitUnlimitedVoice: "Tareas de voz con IA ilimitadas",
+        paywallBenefitSmartReminders: "Recordatorios inteligentes",
+        paywallBenefitMultilang: "Compatibilidad multilingüe",
+        paywallBenefitVoiceTextEditing: "Edición de tareas por voz y texto",
+        paywallPlanMonthly: "Mensual",
+        paywallPlanYearly: "Anual",
+        paywallPerMonth: "/ mes",
+        paywallPerYear: "/ año",
+        paywallYearlyBestValue: "MEJOR PRECIO",
+        paywallTrialIncludedFormat: "%@ incluido",
+        paywallPurchaseFailedTitle: "Error en la compra",
+        paywallAlertOK: "OK",
+        paywallProductUnavailable: "Este producto no está disponible ahora. Comprueba tu conexión e inténtalo de nuevo.",
+        paywallCloseA11y: "Cerrar"
     )
 }
 

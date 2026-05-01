@@ -69,19 +69,13 @@ struct SettingsView: View {
 
             Section {
                 VStack(alignment: .leading, spacing: 8) {
-                    appearanceControlHeader(
-                        title: s.settingsAppearanceThemeColorLabel,
-                        helper: s.settingsAppearanceThemeColorFooter
-                    )
+                    appearanceControlHeader(title: s.settingsAppearanceThemeColorLabel)
                     themePickerGrid
                 }
                 .padding(.vertical, 4)
 
                 VStack(alignment: .leading, spacing: 8) {
-                    appearanceControlHeader(
-                        title: s.settingsAppearanceTextSizeLabel,
-                        helper: s.settingsAppearanceTextSizeFooter
-                    )
+                    appearanceControlHeader(title: s.settingsAppearanceTextSizeLabel)
                     textSizePicker(s: s)
                 }
                 .padding(.vertical, 4)
@@ -240,16 +234,11 @@ struct SettingsView: View {
         }
     }
 
-    private func appearanceControlHeader(title: String, helper: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title)
-                .font(typography.caption)
-                .fontWeight(.semibold)
-                .foregroundStyle(.primary)
-            Text(helper)
-                .font(typography.caption)
-                .foregroundStyle(.secondary)
-        }
+    private func appearanceControlHeader(title: String) -> some View {
+        Text(title)
+            .font(typography.caption)
+            .fontWeight(.semibold)
+            .foregroundStyle(.primary)
     }
 
     private var themePickerGrid: some View {
