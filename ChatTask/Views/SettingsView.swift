@@ -307,7 +307,7 @@ struct SettingsView: View {
     private func contactSupportURL() -> URL? {
         var c = URLComponents()
         c.scheme = "mailto"
-        c.path = "support@chattask.app"
+        c.path = "chattask.help@gmail.com"
         c.queryItems = [
             URLQueryItem(name: "subject", value: "ChatTask support"),
             URLQueryItem(name: "body", value: "")
