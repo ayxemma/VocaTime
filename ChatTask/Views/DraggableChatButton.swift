@@ -30,8 +30,8 @@ private enum DraggableChatFABStorage {
 private enum DraggableChatButtonMetrics {
     static let size: CGFloat = 56
     static let edgeMargin: CGFloat = 16
-    static let onboardingTooltipWidth: CGFloat = 270
-    static let onboardingTooltipBubbleHeight: CGFloat = 96
+    static let onboardingTooltipWidth: CGFloat = 292
+    static let onboardingTooltipBubbleHeight: CGFloat = 132
     static let onboardingTooltipPointerHeight: CGFloat = 10
     static let onboardingTooltipGap: CGFloat = 22
     /// Small gap above the home indicator / bottom safe inset (8–16 pt range; keeps the
@@ -63,6 +63,7 @@ struct DraggableChatButton: View {
     /// Pulsing ring for first-launch onboarding (does not block layout).
     var showOnboardingHighlight: Bool = false
     var onboardingTitle: String = ""
+    var onboardingBody: String = ""
     var onboardingExample: String = ""
     var onboardingDismissA11y: String = "Close"
     var onOnboardingDismiss: () -> Void = {}
@@ -104,6 +105,7 @@ struct DraggableChatButton: View {
                     if showOnboardingHighlight {
                         OnboardingCoachmarkTooltip(
                             title: onboardingTitle,
+                            bodyText: onboardingBody,
                             example: onboardingExample,
                             dismissAccessibilityLabel: onboardingDismissA11y,
                             pointerX: tooltip.pointerX,
@@ -126,14 +128,23 @@ struct DraggableChatButton: View {
                         .clipShape(Circle())
                         .overlay {
                         if showOnboardingHighlight {
-                            Circle()
-                                .stroke(themePalette.accentColor, lineWidth: 3)
-                                .frame(
-                                    width: DraggableChatButtonMetrics.size + 16,
-                                    height: DraggableChatButtonMetrics.size + 16
-                                )
-                                .scaleEffect(onboardingRingPulse ? 1.12 : 1.0)
-                                .opacity(onboardingRingPulse ? 0.35 : 0.85)
+                            ZStack {
+                                Circle()
+                                    .fill(themePalette.accentColor.opacity(onboardingRingPulse ? 0.08 : 0.18))
+                                    .frame(
+                                        width: DraggableChatButtonMetrics.size + 26,
+                                        height: DraggableChatButtonMetrics.size + 26
+                                    )
+                                    .scaleEffect(onboardingRingPulse ? 1.24 : 1.0)
+                                Circle()
+                                    .stroke(themePalette.accentColor, lineWidth: 3)
+                                    .frame(
+                                        width: DraggableChatButtonMetrics.size + 16,
+                                        height: DraggableChatButtonMetrics.size + 16
+                                    )
+                                    .scaleEffect(onboardingRingPulse ? 1.18 : 1.0)
+                                    .opacity(onboardingRingPulse ? 0.28 : 0.90)
+                            }
                         }
                     }
                         .shadow(
@@ -146,7 +157,7 @@ struct DraggableChatButton: View {
                             radius: showOnboardingHighlight ? 12 : 0,
                             y: 0
                         )
-                        .scaleEffect(isDragging ? 1.06 : (showOnboardingHighlight && onboardingRingPulse ? 1.12 : 1.0))
+                        .scaleEffect(isDragging ? 1.06 : (showOnboardingHighlight && onboardingRingPulse ? 1.14 : 1.0))
                         .opacity(isDragging ? 0.92 : 1.0)
                         .animation(.easeInOut(duration: 0.18), value: isDragging)
                         .animation(.easeInOut(duration: 1.2), value: onboardingRingPulse)
@@ -355,6 +366,7 @@ struct DraggableChatButton: View {
 
 private struct OnboardingCoachmarkTooltip: View {
     let title: String
+    let bodyText: String
     let example: String
     let dismissAccessibilityLabel: String
     let pointerX: CGFloat
@@ -375,11 +387,15 @@ private struct OnboardingCoachmarkTooltip: View {
             HStack(alignment: .top, spacing: 10) {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(title)
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(.system(size: 19, weight: .bold))
                         .foregroundStyle(.primary)
-                    Text(revealedExample)
-                        .font(.system(size: 13))
+                    Text(bodyText)
+                        .font(.system(size: 15, weight: .regular))
                         .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(revealedExample)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.primary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 8)

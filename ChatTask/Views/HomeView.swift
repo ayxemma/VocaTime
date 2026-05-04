@@ -197,6 +197,7 @@ struct HomeView: View {
                 accessibilityLabel: s.openCommandChat,
                 showOnboardingHighlight: showFirstLaunchOnboarding,
                 onboardingTitle: s.onboardingTitle,
+                onboardingBody: s.onboardingBody,
                 onboardingExample: s.onboardingVoiceExample,
                 onboardingDismissA11y: s.paywallCloseA11y,
                 onOnboardingDismiss: { firstLaunchOnboardingCompleted = true }

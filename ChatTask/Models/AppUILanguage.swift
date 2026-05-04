@@ -357,9 +357,11 @@ struct AppStrings {
     let paywallCloseA11y: String
     /// First-launch onboarding title.
     let onboardingTitle: String
+    /// First-launch onboarding body.
+    let onboardingBody: String
     /// First-launch hint: example phrase (full sentence with “Try saying: …”).
     let onboardingVoiceExample: String
-    /// First-launch hint under the chat FAB.
+    /// First-launch starter prompt shown inside chat.
     let onboardingTapFabHint: String
     let onboardingDemoTaskTitle: String
     let onboardingSuccessMessage: String
@@ -561,9 +563,10 @@ struct AppStrings {
         paywallAlertOK: "OK",
         paywallProductUnavailable: "This product is currently unavailable. Please check your connection and try again.",
         paywallCloseA11y: "Close",
-        onboardingTitle: "Turn voice into tasks.",
-        onboardingVoiceExample: "Remind me to take a walk in 20 minutes",
-        onboardingTapFabHint: "Tap here to speak",
+        onboardingTitle: "Speak or chat.",
+        onboardingBody: "Turn what you say or type into tasks automatically.",
+        onboardingVoiceExample: "Try: Remind me to take a walk in 20 minutes",
+        onboardingTapFabHint: "Speak or type a task to get started.",
         onboardingDemoTaskTitle: "Take a walk",
         onboardingSuccessMessage: "✅ Reminder set for 20 minutes from now",
         onboardingReminderPreviewIntro: "You’ll get a reminder like this:",
@@ -765,9 +768,10 @@ struct AppStrings {
         paywallAlertOK: "好",
         paywallProductUnavailable: "此项目目前无法购买。请检查网络连接后重试。",
         paywallCloseA11y: "关闭",
-        onboardingTitle: "一句话变成任务",
-        onboardingVoiceExample: "试试说：20分钟后提醒我去散步",
-        onboardingTapFabHint: "点按此处说话",
+        onboardingTitle: "说话或打字",
+        onboardingBody: "自动把你说的或输入的内容变成任务。",
+        onboardingVoiceExample: "试试：20分钟后提醒我去散步",
+        onboardingTapFabHint: "说出或输入一个任务即可开始。",
         onboardingDemoTaskTitle: "去散步",
         onboardingSuccessMessage: "✅ 已设置 20 分钟后的提醒",
         onboardingReminderPreviewIntro: "你会收到这样的提醒：",
@@ -969,9 +973,10 @@ struct AppStrings {
         paywallAlertOK: "OK",
         paywallProductUnavailable: "Este producto no está disponible ahora. Comprueba tu conexión e inténtalo de nuevo.",
         paywallCloseA11y: "Cerrar",
-        onboardingTitle: "Convierte la voz en tareas.",
-        onboardingVoiceExample: "Prueba a decir: Recuérdame cocinar la cena a las 6:15",
-        onboardingTapFabHint: "Toca aquí para hablar",
+        onboardingTitle: "Habla o escribe.",
+        onboardingBody: "Convierte lo que dices o escribes en tareas automáticamente.",
+        onboardingVoiceExample: "Prueba: Recuérdame dar un paseo en 20 minutos",
+        onboardingTapFabHint: "Di o escribe una tarea para empezar.",
         onboardingDemoTaskTitle: "Dar un paseo",
         onboardingSuccessMessage: "✅ Recordatorio programado para dentro de 20 minutos",
         onboardingReminderPreviewIntro: "Recibirás un recordatorio como este:",

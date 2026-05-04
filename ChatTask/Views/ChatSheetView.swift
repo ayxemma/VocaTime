@@ -295,10 +295,16 @@ struct ChatSheetView: View {
             Image(systemName: "sparkles")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(themePalette.accentColor)
-            Text(s.onboardingVoiceExample)
-                .font(typography.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(s.onboardingTapFabHint)
+                    .font(typography.caption)
+                    .foregroundStyle(.secondary)
+                Text(s.onboardingVoiceExample)
+                    .font(typography.caption)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.primary)
+            }
+            .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 8)
             Button {
                 completeOnboardingFromInput()
