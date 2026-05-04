@@ -30,6 +30,10 @@ private enum DraggableChatFABStorage {
 private enum DraggableChatButtonMetrics {
     static let size: CGFloat = 56
     static let edgeMargin: CGFloat = 16
+    static let onboardingTooltipWidth: CGFloat = 270
+    static let onboardingTooltipBubbleHeight: CGFloat = 96
+    static let onboardingTooltipPointerHeight: CGFloat = 10
+    static let onboardingTooltipGap: CGFloat = 22
     /// Small gap above the home indicator / bottom safe inset (8–16 pt range; keeps the
     /// circle fully visible without a large artificial “danger zone”).
     static let bottomSafeMargin: CGFloat = 12
@@ -58,6 +62,10 @@ struct DraggableChatButton: View {
     let accessibilityLabel: String
     /// Pulsing ring for first-launch onboarding (does not block layout).
     var showOnboardingHighlight: Bool = false
+    var onboardingTitle: String = ""
+    var onboardingExample: String = ""
+    var onboardingDismissA11y: String = "Close"
+    var onOnboardingDismiss: () -> Void = {}
 
     @State private var dragTranslation: CGSize = .zero
     @State private var isDragging = false
@@ -82,17 +90,41 @@ struct DraggableChatButton: View {
                 // Top-leading origin in the same coordinate space as `layoutMetrics` (GeometryReader),
                 // avoiding `.position` + `.offset` which can misalign hit testing from the drawn circle.
                 let topLeading = CGPoint(x: clampedDrag.x - half, y: clampedDrag.y - half)
+                let tooltip = onboardingTooltipPlacement(iconCenter: clampedDrag, in: geo)
 
-                Image(systemName: "message.fill")
-                    .font(.system(size: 22, weight: .semibold))
-                    .foregroundStyle(themePalette.isMinimal ? themePalette.accentColor : Color.white)
-                    .frame(width: DraggableChatButtonMetrics.size, height: DraggableChatButtonMetrics.size)
-                    .background(
-                        Circle()
-                            .fill(themePalette.primaryGradient)
-                    )
-                    .clipShape(Circle())
-                    .overlay {
+                ZStack(alignment: .topLeading) {
+                    if showOnboardingHighlight {
+                        Color.black.opacity(0.30)
+                            .frame(width: geo.size.width, height: geo.size.height)
+                            .contentShape(Rectangle())
+                            .onTapGesture { onOnboardingDismiss() }
+                            .zIndex(0)
+                    }
+
+                    if showOnboardingHighlight {
+                        OnboardingCoachmarkTooltip(
+                            title: onboardingTitle,
+                            example: onboardingExample,
+                            dismissAccessibilityLabel: onboardingDismissA11y,
+                            pointerX: tooltip.pointerX,
+                            pointerPointsDown: tooltip.pointerPointsDown,
+                            onDismiss: onOnboardingDismiss
+                        )
+                        .frame(width: DraggableChatButtonMetrics.onboardingTooltipWidth)
+                        .offset(x: tooltip.origin.x, y: tooltip.origin.y)
+                        .zIndex(1)
+                    }
+
+                    Image(systemName: "message.fill")
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundStyle(themePalette.isMinimal ? themePalette.accentColor : Color.white)
+                        .frame(width: DraggableChatButtonMetrics.size, height: DraggableChatButtonMetrics.size)
+                        .background(
+                            Circle()
+                                .fill(themePalette.primaryGradient)
+                        )
+                        .clipShape(Circle())
+                        .overlay {
                         if showOnboardingHighlight {
                             Circle()
                                 .stroke(themePalette.accentColor, lineWidth: 3)
@@ -104,114 +136,116 @@ struct DraggableChatButton: View {
                                 .opacity(onboardingRingPulse ? 0.35 : 0.85)
                         }
                     }
-                    .shadow(
-                        color: .black.opacity(themePalette.isMinimal ? 0.1 : 0.2),
-                        radius: themePalette.isMinimal ? 4 : 6,
-                        y: 3
-                    )
-                    .shadow(
-                        color: showOnboardingHighlight ? themePalette.accentColor.opacity(0.36) : .clear,
-                        radius: showOnboardingHighlight ? 12 : 0,
-                        y: 0
-                    )
-                    .scaleEffect(isDragging ? 1.06 : (showOnboardingHighlight && onboardingRingPulse ? 1.08 : 1.0))
-                    .opacity(isDragging ? 0.92 : 1.0)
-                    .animation(.easeInOut(duration: 0.18), value: isDragging)
-                    .animation(.easeInOut(duration: 1.2), value: onboardingRingPulse)
-                    .contentShape(Circle())
-                    .offset(x: topLeading.x, y: topLeading.y)
-                    .accessibilityLabel(accessibilityLabel)
-                    .accessibilityAddTraits(.isButton)
-                    .accessibilityAction { onTap() }
-                    .onChange(of: showOnboardingHighlight) { _, show in
-                        if show {
+                        .shadow(
+                            color: .black.opacity(themePalette.isMinimal ? 0.1 : 0.2),
+                            radius: themePalette.isMinimal ? 4 : 6,
+                            y: 3
+                        )
+                        .shadow(
+                            color: showOnboardingHighlight ? themePalette.accentColor.opacity(0.36) : .clear,
+                            radius: showOnboardingHighlight ? 12 : 0,
+                            y: 0
+                        )
+                        .scaleEffect(isDragging ? 1.06 : (showOnboardingHighlight && onboardingRingPulse ? 1.12 : 1.0))
+                        .opacity(isDragging ? 0.92 : 1.0)
+                        .animation(.easeInOut(duration: 0.18), value: isDragging)
+                        .animation(.easeInOut(duration: 1.2), value: onboardingRingPulse)
+                        .contentShape(Circle())
+                        .offset(x: topLeading.x, y: topLeading.y)
+                        .accessibilityLabel(accessibilityLabel)
+                        .accessibilityAddTraits(.isButton)
+                        .accessibilityAction { onTap() }
+                        .onChange(of: showOnboardingHighlight) { _, show in
+                            if show {
+                                onboardingRingPulse = false
+                                withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
+                                    onboardingRingPulse = true
+                                }
+                            } else {
+                                onboardingRingPulse = false
+                            }
+                        }
+                        .onAppear {
+                            guard showOnboardingHighlight else { return }
                             onboardingRingPulse = false
                             withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
                                 onboardingRingPulse = true
                             }
-                        } else {
-                            onboardingRingPulse = false
                         }
-                    }
-                    .onAppear {
-                        guard showOnboardingHighlight else { return }
-                        onboardingRingPulse = false
-                        withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
-                            onboardingRingPulse = true
-                        }
-                    }
-                    .highPriorityGesture(
-                        DragGesture(minimumDistance: 0, coordinateSpace: .local)
-                        .onChanged { value in
-                            let d = hypot(value.translation.width, value.translation.height)
-                            if d > DraggableChatButtonMetrics.tapDistanceThreshold {
-                                isDragging = true
-                            }
-                            dragTranslation = value.translation
-                        }
-                            .onEnded { value in
-                                let total = hypot(value.translation.width, value.translation.height)
-                                let layoutNow = layoutMetrics(in: geo)
-                                defer {
-                                    dragTranslation = .zero
-                                    isDragging = false
+                        .highPriorityGesture(
+                            DragGesture(minimumDistance: 0, coordinateSpace: .local)
+                            .onChanged { value in
+                                let d = hypot(value.translation.width, value.translation.height)
+                                if d > DraggableChatButtonMetrics.tapDistanceThreshold {
+                                    isDragging = true
                                 }
-                                guard layoutNow.isValid else { return }
-                                let baseNow = storedCenter(in: layoutNow)
-                                let visibleCenter = clampToSafeBand(
-                                    CGPoint(
+                                dragTranslation = value.translation
+                            }
+                                .onEnded { value in
+                                    let total = hypot(value.translation.width, value.translation.height)
+                                    let layoutNow = layoutMetrics(in: geo)
+                                    defer {
+                                        dragTranslation = .zero
+                                        isDragging = false
+                                    }
+                                    guard layoutNow.isValid else { return }
+                                    let baseNow = storedCenter(in: layoutNow)
+                                    let visibleCenter = clampToSafeBand(
+                                        CGPoint(
+                                            x: baseNow.x + value.translation.width,
+                                            y: baseNow.y + value.translation.height
+                                        ),
+                                        layout: layoutNow
+                                    )
+                                    let halfNow = DraggableChatButtonMetrics.size / 2
+                                    let frameNow = CGRect(
+                                        x: visibleCenter.x - halfNow,
+                                        y: visibleCenter.y - halfNow,
+                                        width: DraggableChatButtonMetrics.size,
+                                        height: DraggableChatButtonMetrics.size
+                                    )
+                                    if total <= DraggableChatButtonMetrics.tapDistanceThreshold {
+                                        let loc = value.location
+                                        Self.log.info("chatFABTapped visibleCenter=(\(Double(visibleCenter.x), privacy: .public),\(Double(visibleCenter.y), privacy: .public)) tapLocation=(\(Double(loc.x), privacy: .public),\(Double(loc.y), privacy: .public)) savedRelativePosition=(\(storedRelX, privacy: .public),\(storedRelY, privacy: .public)) hasSavedPosition=\(hasSavedPosition, privacy: .public) computedButtonFrame=(x:\(Double(frameNow.minX), privacy: .public) y:\(Double(frameNow.minY), privacy: .public) w:\(Double(frameNow.width), privacy: .public) h:\(Double(frameNow.height), privacy: .public))")
+                                        onTap()
+                                        return
+                                    }
+                                    let endRaw = CGPoint(
                                         x: baseNow.x + value.translation.width,
                                         y: baseNow.y + value.translation.height
-                                    ),
-                                    layout: layoutNow
-                                )
-                                let halfNow = DraggableChatButtonMetrics.size / 2
-                                let frameNow = CGRect(
-                                    x: visibleCenter.x - halfNow,
-                                    y: visibleCenter.y - halfNow,
-                                    width: DraggableChatButtonMetrics.size,
-                                    height: DraggableChatButtonMetrics.size
-                                )
-                                if total <= DraggableChatButtonMetrics.tapDistanceThreshold {
-                                    let loc = value.location
-                                    Self.log.info("chatFABTapped visibleCenter=(\(Double(visibleCenter.x), privacy: .public),\(Double(visibleCenter.y), privacy: .public)) tapLocation=(\(Double(loc.x), privacy: .public),\(Double(loc.y), privacy: .public)) savedRelativePosition=(\(storedRelX, privacy: .public),\(storedRelY, privacy: .public)) hasSavedPosition=\(hasSavedPosition, privacy: .public) computedButtonFrame=(x:\(Double(frameNow.minX), privacy: .public) y:\(Double(frameNow.minY), privacy: .public) w:\(Double(frameNow.width), privacy: .public) h:\(Double(frameNow.height), privacy: .public))")
-                                    onTap()
-                                    return
+                                    )
+                                    let midX = (layoutNow.minCenterX + layoutNow.maxCenterX) / 2
+                                    let snappedX = endRaw.x < midX ? layoutNow.minCenterX : layoutNow.maxCenterX
+                                    let snappedY = min(max(endRaw.y, layoutNow.minCenterY), layoutNow.maxCenterY)
+                                    let snapped = CGPoint(x: snappedX, y: snappedY)
+                                    let denomX = max(layoutNow.maxCenterX - layoutNow.minCenterX, 1)
+                                    let denomY = max(layoutNow.maxCenterY - layoutNow.minCenterY, 1)
+                                    let nx = (snapped.x - layoutNow.minCenterX) / denomX
+                                    let ny = (snapped.y - layoutNow.minCenterY) / denomY
+                                    #if DEBUG
+                                    logLayoutDebug(geo: geo, layout: layoutNow, phase: "drop", droppedCenterY: snapped.y)
+                                    #endif
+                                    withAnimation(.spring(response: 0.38, dampingFraction: 0.84)) {
+                                        hasSavedPosition = true
+                                        storedRelX = Double(nx)
+                                        storedRelY = Double(ny)
+                                    }
                                 }
-                                let endRaw = CGPoint(
-                                    x: baseNow.x + value.translation.width,
-                                    y: baseNow.y + value.translation.height
-                                )
-                                let midX = (layoutNow.minCenterX + layoutNow.maxCenterX) / 2
-                                let snappedX = endRaw.x < midX ? layoutNow.minCenterX : layoutNow.maxCenterX
-                                let snappedY = min(max(endRaw.y, layoutNow.minCenterY), layoutNow.maxCenterY)
-                                let snapped = CGPoint(x: snappedX, y: snappedY)
-                                let denomX = max(layoutNow.maxCenterX - layoutNow.minCenterX, 1)
-                                let denomY = max(layoutNow.maxCenterY - layoutNow.minCenterY, 1)
-                                let nx = (snapped.x - layoutNow.minCenterX) / denomX
-                                let ny = (snapped.y - layoutNow.minCenterY) / denomY
-                                #if DEBUG
-                                logLayoutDebug(geo: geo, layout: layoutNow, phase: "drop", droppedCenterY: snapped.y)
-                                #endif
-                                withAnimation(.spring(response: 0.38, dampingFraction: 0.84)) {
-                                    hasSavedPosition = true
-                                    storedRelX = Double(nx)
-                                    storedRelY = Double(ny)
-                                }
-                            }
-                    )
-                #if DEBUG
-                .onAppear {
-                    if !didLogPlacementMode {
-                        didLogPlacementMode = true
-                        let mode = hasSavedPosition ? "saved" : "default_bottom_right"
-                        print("[DraggableChatButton] placement: \(mode) rel=(\(storedRelX),\(storedRelY)) hasSavedPosition=\(hasSavedPosition)")
+                        )
+                        .zIndex(2)
+                    #if DEBUG
+                    .onAppear {
+                        if !didLogPlacementMode {
+                            didLogPlacementMode = true
+                            let mode = hasSavedPosition ? "saved" : "default_bottom_right"
+                            print("[DraggableChatButton] placement: \(mode) rel=(\(storedRelX),\(storedRelY)) hasSavedPosition=\(hasSavedPosition)")
+                        }
+                        guard !didLogInitialLayout else { return }
+                        didLogInitialLayout = true
+                        logLayoutDebug(geo: geo, layout: layout, phase: "initial", droppedCenterY: nil)
                     }
-                    guard !didLogInitialLayout else { return }
-                    didLogInitialLayout = true
-                    logLayoutDebug(geo: geo, layout: layout, phase: "initial", droppedCenterY: nil)
+                    #endif
                 }
-                #endif
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -248,6 +282,12 @@ struct DraggableChatButton: View {
         var isValid: Bool { maxCenterX >= minCenterX && maxCenterY >= minCenterY }
     }
 
+    private struct TooltipPlacement {
+        let origin: CGPoint
+        let pointerX: CGFloat
+        let pointerPointsDown: Bool
+    }
+
     private func layoutMetrics(in geo: GeometryProxy) -> SafeBand {
         let safe = geo.safeAreaInsets
         let w = geo.size.width
@@ -278,10 +318,146 @@ struct DraggableChatButton: View {
         return CGPoint(x: x, y: y)
     }
 
+    private func onboardingTooltipPlacement(iconCenter: CGPoint, in geo: GeometryProxy) -> TooltipPlacement {
+        let safe = geo.safeAreaInsets
+        let edge = DraggableChatButtonMetrics.edgeMargin
+        let width = DraggableChatButtonMetrics.onboardingTooltipWidth
+        let bubbleHeight = DraggableChatButtonMetrics.onboardingTooltipBubbleHeight
+        let pointerHeight = DraggableChatButtonMetrics.onboardingTooltipPointerHeight
+        let totalHeight = bubbleHeight + pointerHeight
+        let half = DraggableChatButtonMetrics.size / 2
+        let gap = DraggableChatButtonMetrics.onboardingTooltipGap
+        let minX = safe.leading + edge
+        let maxX = max(minX, geo.size.width - safe.trailing - edge - width)
+        let minY = safe.top + edge
+        let maxY = max(minY, geo.size.height - safe.bottom - edge - totalHeight)
+
+        let proposedX = iconCenter.x - width + DraggableChatButtonMetrics.size
+        let x = min(max(proposedX, minX), maxX)
+        let aboveY = iconCenter.y - half - gap - totalHeight
+        let canFitAbove = aboveY >= minY
+        let belowY = iconCenter.y + half + gap
+        let y = min(max(canFitAbove ? aboveY : belowY, minY), maxY)
+        let pointerX = min(max(iconCenter.x - x, 24), width - 24)
+        return TooltipPlacement(
+            origin: CGPoint(x: x, y: y),
+            pointerX: pointerX,
+            pointerPointsDown: canFitAbove
+        )
+    }
+
     private func clampToSafeBand(_ p: CGPoint, layout band: SafeBand) -> CGPoint {
         let x = min(max(p.x, band.minCenterX), band.maxCenterX)
         let y = min(max(p.y, band.minCenterY), band.maxCenterY)
         return CGPoint(x: x, y: y)
+    }
+}
+
+private struct OnboardingCoachmarkTooltip: View {
+    let title: String
+    let example: String
+    let dismissAccessibilityLabel: String
+    let pointerX: CGFloat
+    let pointerPointsDown: Bool
+    let onDismiss: () -> Void
+
+    @State private var didAnimateIn = false
+    @State private var revealedCharacterCount = 0
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if !pointerPointsDown {
+                pointer
+                    .rotationEffect(.degrees(180))
+                    .padding(.leading, pointerX - 9)
+            }
+
+            HStack(alignment: .top, spacing: 10) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(title)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(.primary)
+                    Text(revealedExample)
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 8)
+                Button(action: onDismiss) {
+                    Image(systemName: "xmark")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 24, height: 24)
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(dismissAccessibilityLabel)
+            }
+            .padding(14)
+            .frame(
+                width: DraggableChatButtonMetrics.onboardingTooltipWidth,
+                height: DraggableChatButtonMetrics.onboardingTooltipBubbleHeight,
+                alignment: .topLeading
+            )
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(.ultraThinMaterial)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.16), radius: 14, y: 5)
+
+            if pointerPointsDown {
+                pointer
+                    .padding(.leading, pointerX - 9)
+            }
+        }
+        .opacity(didAnimateIn ? 1 : 0)
+        .offset(y: didAnimateIn ? 0 : 8)
+        .task(id: example) {
+            revealedCharacterCount = 0
+            withAnimation(.easeOut(duration: 0.35)) {
+                didAnimateIn = true
+            }
+            await reveal(example)
+        }
+    }
+
+    private var pointer: some View {
+        CoachmarkPointer()
+            .fill(.ultraThinMaterial)
+            .frame(
+                width: 18,
+                height: DraggableChatButtonMetrics.onboardingTooltipPointerHeight
+            )
+    }
+
+    private var revealedExample: String {
+        String(example.prefix(revealedCharacterCount))
+    }
+
+    private func reveal(_ example: String) async {
+        let totalDurationNanos: UInt64 = 850_000_000
+        let count = max(example.count, 1)
+        let delay = max(totalDurationNanos / UInt64(count), 12_000_000)
+        for index in 1...example.count {
+            try? await Task.sleep(nanoseconds: delay)
+            guard !Task.isCancelled else { return }
+            revealedCharacterCount = index
+        }
+    }
+}
+
+private struct CoachmarkPointer: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.midX, y: rect.maxY))
+        path.closeSubpath()
+        return path
     }
 }
 

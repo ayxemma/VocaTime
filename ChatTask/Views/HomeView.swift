@@ -195,19 +195,12 @@ struct HomeView: View {
                     onChatTap()
                 },
                 accessibilityLabel: s.openCommandChat,
-                showOnboardingHighlight: showFirstLaunchOnboarding
+                showOnboardingHighlight: showFirstLaunchOnboarding,
+                onboardingTitle: s.onboardingTitle,
+                onboardingExample: s.onboardingVoiceExample,
+                onboardingDismissA11y: s.paywallCloseA11y,
+                onOnboardingDismiss: { firstLaunchOnboardingCompleted = true }
             )
-        }
-        .overlay(alignment: .bottomTrailing) {
-            if showFirstLaunchOnboarding {
-                FirstLaunchOnboardingTooltip(
-                    strings: s,
-                    typography: typography,
-                    onDismiss: { firstLaunchOnboardingCompleted = true }
-                )
-                .padding(.trailing, 18)
-                .padding(.bottom, 84)
-            }
         }
         .sheet(item: $composerSession) { session in
             NavigationStack {
@@ -373,95 +366,6 @@ struct HomeView: View {
         return !TaskScheduleFormatting.hasWallClockTime(d, calendar: calendar)
     }
 
-}
-
-// MARK: - First launch onboarding tooltip
-
-private struct FirstLaunchOnboardingTooltip: View {
-    let strings: AppStrings
-    let typography: AppTypography
-    let onDismiss: () -> Void
-
-    @State private var didAnimateIn = false
-    @State private var revealedCharacterCount = 0
-
-    var body: some View {
-        let example = strings.onboardingVoiceExample
-        VStack(alignment: .trailing, spacing: 0) {
-            HStack(alignment: .top, spacing: 10) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(strings.onboardingTitle)
-                        .font(typography.body)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.primary)
-                    Text(revealedExample(from: example))
-                        .font(typography.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Button(action: onDismiss) {
-                    Image(systemName: "xmark")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 24, height: 24)
-                        .contentShape(Circle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(strings.paywallCloseA11y)
-            }
-            .padding(14)
-            .frame(width: 270, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(.ultraThinMaterial)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
-            )
-            .shadow(color: .black.opacity(0.16), radius: 14, y: 5)
-
-            TooltipPointer()
-                .fill(.ultraThinMaterial)
-                .frame(width: 18, height: 10)
-                .padding(.trailing, 22)
-        }
-        .opacity(didAnimateIn ? 1 : 0)
-        .offset(y: didAnimateIn ? 0 : 8)
-        .task(id: example) {
-            revealedCharacterCount = 0
-            withAnimation(.easeOut(duration: 0.35)) {
-                didAnimateIn = true
-            }
-            await reveal(example)
-        }
-    }
-
-    private func revealedExample(from example: String) -> String {
-        String(example.prefix(revealedCharacterCount))
-    }
-
-    private func reveal(_ example: String) async {
-        let totalDurationNanos: UInt64 = 850_000_000
-        let count = max(example.count, 1)
-        let delay = max(totalDurationNanos / UInt64(count), 12_000_000)
-        for index in 1...example.count {
-            try? await Task.sleep(nanoseconds: delay)
-            guard !Task.isCancelled else { return }
-            revealedCharacterCount = index
-        }
-    }
-}
-
-private struct TooltipPointer: Shape {
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        path.move(to: CGPoint(x: rect.minX, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
-        path.addLine(to: CGPoint(x: rect.midX, y: rect.maxY))
-        path.closeSubpath()
-        return path
-    }
 }
 
 #Preview {
