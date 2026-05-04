@@ -11,6 +11,7 @@ struct RootTabView: View {
     @Environment(\.themePalette) private var themePalette
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage(AppUILanguage.storageKey) private var languageRaw: String = AppUILanguage.defaultForDevice().rawValue
+    @AppStorage(FirstLaunchOnboarding.completedKey) private var firstLaunchOnboardingCompleted = false
 
     private static let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "VocaTime", category: "RootTab")
 
@@ -54,7 +55,11 @@ struct RootTabView: View {
             Self.log.info("[RootTab] chatSheetDismissed")
             chatSheetSession = nil
         }) { session in
-            ChatSheetView(viewModel: chatViewModel)
+            ChatSheetView(
+                viewModel: chatViewModel,
+                showsStarterPrompt: !firstLaunchOnboardingCompleted,
+                onOnboardingAction: { firstLaunchOnboardingCompleted = true }
+            )
                 .environment(\.themePalette, themePalette)
                 .presentationDragIndicator(.visible)
                 .onAppear {

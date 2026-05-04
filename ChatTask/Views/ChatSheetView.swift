@@ -4,6 +4,9 @@ import UIKit
 
 struct ChatSheetView: View {
     @Bindable var viewModel: VoiceCommandViewModel
+    var showsStarterPrompt: Bool = false
+    var onOnboardingAction: () -> Void = {}
+
     @Environment(\.appUILanguage) private var appUILanguage
     @Environment(\.themePalette) private var themePalette
     @Environment(\.dismiss) private var dismiss
@@ -13,6 +16,7 @@ struct ChatSheetView: View {
 
     /// Text the user is currently composing in the input field.
     @State private var typedText: String = ""
+    @State private var showStarterPrompt = false
     @FocusState private var isTextFieldFocused: Bool
     /// Throttles keyboard-driven warm-up spam when the OS sends many notifications.
     @State private var lastKeyboardWarmUpAt: Date = .distantPast
@@ -48,7 +52,13 @@ struct ChatSheetView: View {
                 viewModel.uiLanguage = appUILanguage
                 BackendWarmup.scheduleSessionWarmup()
                 Self.log.info("[ChatSheet] chatAutoStart — sheet opened, beginning recording")
+                if showsStarterPrompt {
+                    showStarterPrompt = true
+                }
                 viewModel.chatSheetDidAppear()
+                if showsStarterPrompt {
+                    completeOnboardingFromInput()
+                }
             }
             .onDisappear {
                 Task {
@@ -73,6 +83,12 @@ struct ChatSheetView: View {
                 typedText = transcript
                 viewModel.pendingVoiceTranscript = ""
                 isTextFieldFocused = true
+            }
+            .onChange(of: typedText) { _, newValue in
+                if !newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    completeOnboardingFromInput()
+                    showStarterPrompt = false
+                }
             }
         }
     }
@@ -148,6 +164,10 @@ struct ChatSheetView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             }
 
+            if showStarterPrompt {
+                starterPrompt(s: s)
+            }
+
             // Status label
             if !viewModel.chatStatusDescription.isEmpty, viewModel.chatFlowState != .listening {
                 HStack {
@@ -219,6 +239,8 @@ struct ChatSheetView: View {
 
         return Button {
             isTextFieldFocused = false
+            completeOnboardingFromInput()
+            showStarterPrompt = false
             viewModel.chatMicrophoneTapped()
         } label: {
             ZStack {
@@ -261,9 +283,44 @@ struct ChatSheetView: View {
         let trimmed = typedText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         let textToSend = trimmed
+        completeOnboardingFromInput()
+        showStarterPrompt = false
         typedText = ""
         isTextFieldFocused = false
         Task { await viewModel.chatSubmitTypedText(textToSend) }
+    }
+
+    private func starterPrompt(s: AppStrings) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "sparkles")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(themePalette.accentColor)
+            Text(s.onboardingVoiceExample)
+                .font(typography.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 8)
+            Button {
+                completeOnboardingFromInput()
+                showStarterPrompt = false
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 22, height: 22)
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(s.paywallCloseA11y)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(Color(.secondarySystemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func completeOnboardingFromInput() {
+        onOnboardingAction()
     }
 
     // MARK: - Conflict buttons

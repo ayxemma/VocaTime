@@ -10,12 +10,6 @@ private let homeSectionOrderDefault = "today,upcoming,overdue,done"
 enum FirstLaunchOnboarding {
     static let completedKey = "firstLaunchOnboardingCompleted"
     static let paywallSuppressedUntilTaskCountKey = "firstLaunchPaywallSuppressedUntilTaskCount"
-    static let demoDelayMinutes = 20
-}
-
-private struct ActivationTaskSnapshot: Equatable {
-    let title: String
-    let scheduledDate: Date
 }
 
 // MARK: - DashboardColumn
@@ -107,18 +101,14 @@ struct ComposerSession: Identifiable {
 // MARK: - HomeView
 
 struct HomeView: View {
-    @Environment(\.modelContext) private var modelContext
     @Environment(\.appUILanguage) private var appUILanguage
     @Environment(\.themePalette) private var themePalette
-    @AppStorage(AppUILanguage.storageKey) private var languageRaw: String = AppUILanguage.defaultForDevice().rawValue
     @AppStorage(homeSectionOrderKey) private var sectionOrderRaw: String = homeSectionOrderDefault
     @AppStorage(AppTextSize.storageKey) private var textSizeRaw: String = AppTextSize.default.rawValue
     @AppStorage(FirstLaunchOnboarding.completedKey) private var firstLaunchOnboardingCompleted = false
-    @AppStorage(FirstLaunchOnboarding.paywallSuppressedUntilTaskCountKey) private var paywallSuppressedUntilTaskCount = 0
     @Query(sort: \TaskItem.updatedAt, order: .reverse) private var allTasks: [TaskItem]
 
     @State private var composerSession: ComposerSession?   // replaces showTaskComposer: Bool
-    @State private var activationTask: ActivationTaskSnapshot?
     let onChatTap: () -> Void
 
     // Per-section expansion state
@@ -143,10 +133,6 @@ struct HomeView: View {
     private var calendar: Calendar { .current }
     private var strings: AppStrings { appUILanguage.strings }
     private var typography: AppTypography { AppTypography(textSize: AppTextSize(storageRaw: textSizeRaw)) }
-
-    private var selectedUILanguage: AppUILanguage {
-        AppUILanguage(storageRaw: languageRaw)
-    }
 
     private var overdueTaskItems: [TaskItem] {
         let now = Date()
@@ -193,8 +179,6 @@ struct HomeView: View {
     var body: some View {
         let s = strings
         let showFirstLaunchOnboarding = !firstLaunchOnboardingCompleted
-        let showActivationFeedback = activationTask != nil
-        let showActivationOverlay = showFirstLaunchOnboarding || showActivationFeedback
         ZStack {
             ScrollView {
                 VStack(spacing: 28) {
@@ -206,39 +190,23 @@ struct HomeView: View {
             .background(themePalette.backgroundColor)
             .animation(.easeInOut(duration: 0.35), value: themePalette.theme)
 
-            if showActivationOverlay {
-                Color.black.opacity(0.30)
-                    .ignoresSafeArea()
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        firstLaunchOnboardingCompleted = true
-                        activationTask = nil
-                    }
-            }
-
             DraggableChatButton(
                 onTap: {
-                    if showActivationOverlay {
-                        firstLaunchOnboardingCompleted = true
-                        activationTask = nil
-                    }
                     onChatTap()
                 },
                 accessibilityLabel: s.openCommandChat,
-                showOnboardingHighlight: showActivationOverlay
+                showOnboardingHighlight: showFirstLaunchOnboarding
             )
         }
-        .overlay(alignment: .top) {
-            if showActivationOverlay {
-                FirstLaunchOnboardingCard(
+        .overlay(alignment: .bottomTrailing) {
+            if showFirstLaunchOnboarding {
+                FirstLaunchOnboardingTooltip(
                     strings: s,
                     typography: typography,
-                    activationTask: activationTask,
-                    timeText: activationTask.map { activationTimeFormatter.string(from: $0.scheduledDate) } ?? "",
-                    onExampleTap: createActivationReminder
+                    onDismiss: { firstLaunchOnboardingCompleted = true }
                 )
-                .padding(.horizontal, 20)
-                .padding(.top, 8)
+                .padding(.trailing, 18)
+                .padding(.bottom, 84)
             }
         }
         .sheet(item: $composerSession) { session in
@@ -405,148 +373,67 @@ struct HomeView: View {
         return !TaskScheduleFormatting.hasWallClockTime(d, calendar: calendar)
     }
 
-    private var activationTimeFormatter: DateFormatter {
-        let formatter = DateFormatter()
-        formatter.locale = selectedUILanguage.locale
-        formatter.timeStyle = .short
-        formatter.dateStyle = .none
-        return formatter
-    }
-
-    private func createActivationReminder() {
-        guard !firstLaunchOnboardingCompleted, activationTask == nil else { return }
-        let scheduledDate = Calendar.current.date(
-            byAdding: .minute,
-            value: FirstLaunchOnboarding.demoDelayMinutes,
-            to: Date()
-        ) ?? Date().addingTimeInterval(TimeInterval(FirstLaunchOnboarding.demoDelayMinutes * 60))
-        let command = ParsedCommand(
-            originalText: strings.onboardingVoiceExample,
-            actionType: .reminder,
-            title: strings.onboardingDemoTaskTitle,
-            notes: nil,
-            startDate: nil,
-            endDate: nil,
-            reminderDate: scheduledDate,
-            confidence: 1,
-            parserSource: .local,
-            languageCode: selectedUILanguage.rawValue
-        )
-        let item = TaskItem.insertFromParsedCommand(command, context: modelContext)
-        firstLaunchOnboardingCompleted = true
-        paywallSuppressedUntilTaskCount = max(paywallSuppressedUntilTaskCount, allTasks.count + 1)
-        activationTask = ActivationTaskSnapshot(
-            title: item.title,
-            scheduledDate: item.scheduledDate ?? scheduledDate
-        )
-    }
-
 }
 
-// MARK: - First launch onboarding card
+// MARK: - First launch onboarding tooltip
 
-private struct FirstLaunchOnboardingCard: View {
+private struct FirstLaunchOnboardingTooltip: View {
     let strings: AppStrings
     let typography: AppTypography
-    let activationTask: ActivationTaskSnapshot?
-    let timeText: String
-    let onExampleTap: () -> Void
+    let onDismiss: () -> Void
 
     @State private var didAnimateIn = false
     @State private var revealedCharacterCount = 0
 
     var body: some View {
         let example = strings.onboardingVoiceExample
-        VStack(alignment: .leading, spacing: 14) {
-            if let activationTask {
-                successContent(for: activationTask)
-            } else {
-                promptContent(example: example)
+        VStack(alignment: .trailing, spacing: 0) {
+            HStack(alignment: .top, spacing: 10) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(strings.onboardingTitle)
+                        .font(typography.body)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.primary)
+                    Text(revealedExample(from: example))
+                        .font(typography.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Button(action: onDismiss) {
+                    Image(systemName: "xmark")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 24, height: 24)
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(strings.paywallCloseA11y)
             }
-        }
-        .padding(18)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .padding(14)
+            .frame(width: 270, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(.ultraThinMaterial)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.16), radius: 14, y: 5)
+
+            TooltipPointer()
                 .fill(.ultraThinMaterial)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
-        )
-        .shadow(color: .black.opacity(0.12), radius: 12, y: 4)
+                .frame(width: 18, height: 10)
+                .padding(.trailing, 22)
+        }
         .opacity(didAnimateIn ? 1 : 0)
         .offset(y: didAnimateIn ? 0 : 8)
-        .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .task(id: example) {
             revealedCharacterCount = 0
             withAnimation(.easeOut(duration: 0.35)) {
                 didAnimateIn = true
             }
             await reveal(example)
-        }
-    }
-
-    private func promptContent(example: String) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text(strings.onboardingTitle)
-                .font(typography.pageTitle)
-                .fontWeight(.semibold)
-                .foregroundStyle(.primary)
-            Button(action: onExampleTap) {
-                HStack(spacing: 10) {
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 16, weight: .semibold))
-                    Text(revealedExample(from: example))
-                        .font(typography.body)
-                        .multilineTextAlignment(.leading)
-                    Spacer(minLength: 0)
-                }
-                .foregroundStyle(.primary)
-                .padding(12)
-                .background(Color.accentColor.opacity(0.12))
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            }
-            .buttonStyle(.plain)
-            Text(strings.onboardingTapFabHint)
-                .font(typography.caption)
-                .foregroundStyle(.secondary)
-        }
-    }
-
-    private func successContent(for task: ActivationTaskSnapshot) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text(strings.onboardingSuccessMessage)
-                .font(typography.body)
-                .fontWeight(.semibold)
-                .foregroundStyle(.primary)
-            VStack(alignment: .leading, spacing: 6) {
-                Text(task.title)
-                    .font(typography.taskTitle)
-                    .foregroundStyle(.primary)
-                Label(timeText, systemImage: "clock")
-                    .font(typography.caption)
-                    .foregroundStyle(.secondary)
-            }
-            .padding(12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(.secondarySystemBackground))
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            VStack(alignment: .leading, spacing: 6) {
-                Text(strings.onboardingReminderPreviewIntro)
-                    .font(typography.caption)
-                    .foregroundStyle(.secondary)
-                Text(strings.onboardingReminderPreviewBody)
-                    .font(typography.body)
-                    .foregroundStyle(.primary)
-            }
-            .padding(12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.accentColor.opacity(0.10))
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            Text(strings.onboardingFollowUpHint)
-                .font(typography.caption)
-                .foregroundStyle(.secondary)
         }
     }
 
@@ -563,6 +450,17 @@ private struct FirstLaunchOnboardingCard: View {
             guard !Task.isCancelled else { return }
             revealedCharacterCount = index
         }
+    }
+}
+
+private struct TooltipPointer: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.midX, y: rect.maxY))
+        path.closeSubpath()
+        return path
     }
 }
 

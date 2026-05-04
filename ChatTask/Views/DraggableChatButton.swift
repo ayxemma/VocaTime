@@ -97,10 +97,11 @@ struct DraggableChatButton: View {
                             Circle()
                                 .stroke(themePalette.accentColor, lineWidth: 3)
                                 .frame(
-                                    width: DraggableChatButtonMetrics.size + 12,
-                                    height: DraggableChatButtonMetrics.size + 12
+                                    width: DraggableChatButtonMetrics.size + 16,
+                                    height: DraggableChatButtonMetrics.size + 16
                                 )
-                                .scaleEffect(onboardingRingPulse ? 1.06 : 1.0)
+                                .scaleEffect(onboardingRingPulse ? 1.12 : 1.0)
+                                .opacity(onboardingRingPulse ? 0.35 : 0.85)
                         }
                     }
                     .shadow(
@@ -108,7 +109,12 @@ struct DraggableChatButton: View {
                         radius: themePalette.isMinimal ? 4 : 6,
                         y: 3
                     )
-                    .scaleEffect(isDragging ? 1.06 : (showOnboardingHighlight && onboardingRingPulse ? 1.06 : 1.0))
+                    .shadow(
+                        color: showOnboardingHighlight ? themePalette.accentColor.opacity(0.36) : .clear,
+                        radius: showOnboardingHighlight ? 12 : 0,
+                        y: 0
+                    )
+                    .scaleEffect(isDragging ? 1.06 : (showOnboardingHighlight && onboardingRingPulse ? 1.08 : 1.0))
                     .opacity(isDragging ? 0.92 : 1.0)
                     .animation(.easeInOut(duration: 0.18), value: isDragging)
                     .animation(.easeInOut(duration: 1.2), value: onboardingRingPulse)
