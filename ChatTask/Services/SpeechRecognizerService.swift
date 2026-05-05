@@ -95,7 +95,7 @@ final class SpeechRecognizerService: SpeechManaging {
     private static let speechThreshold: Float = -40.0
     /// Consecutive seconds below `speechThreshold` — after speech has started — before auto-stop fires.
     /// Tuned conservatively so natural pauses in longer or multilingual commands are not cut off.
-    private static let silenceDurationToStop: Double = 3.8
+    private static let silenceDurationToStop: Double = 2.0
     /// Minimum recording length before auto-silence may stop capture.
     private static let minimumDurationBeforeAutoStop: Double = 2.0
     /// Metering poll interval.
