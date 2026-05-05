@@ -93,9 +93,11 @@ final class SpeechRecognizerService: SpeechManaging {
     // MARK: - Silence detection tuning (preserved from original service)
     /// Audio level (dBFS) above which input is treated as speech. –40 dB catches normal to quiet speech.
     private static let speechThreshold: Float = -40.0
-    /// Consecutive seconds below `speechThreshold` — after speech has started — before auto-stop fires
-    /// in flows that opt in. Chat voice input disables this and uses tap-to-stop.
-    private static let silenceDurationToStop: Double = 1.2
+    /// Consecutive seconds below `speechThreshold` — after speech has started — before auto-stop fires.
+    /// Tuned conservatively so natural pauses in longer or multilingual commands are not cut off.
+    private static let silenceDurationToStop: Double = 3.8
+    /// Minimum recording length before auto-silence may stop capture.
+    private static let minimumDurationBeforeAutoStop: Double = 2.0
     /// Metering poll interval.
     private static let meterPollNanoseconds: UInt64 = 100_000_000  // 100 ms
 
@@ -246,12 +248,12 @@ final class SpeechRecognizerService: SpeechManaging {
         lastBufferPowerLevel = -160
 
         if autoStopBehavior == .enabled {
-            Self.log.info("[Speech] autoSilenceEnabled threshold=\(Self.silenceDurationToStop, privacy: .public)s")
+            Self.log.info("[Speech] autoSilenceEnabled silenceThreshold=\(Self.silenceDurationToStop, privacy: .public)s minimumRecording=\(Self.minimumDurationBeforeAutoStop, privacy: .public)s")
             startMeteringTask(autoStopEnabled: true)
         } else {
             Self.log.info("[Speech] autoSilenceDisabled — user-controlled stop mode")
         }
-        Self.log.info("[Speech] listening started fileURL=\(fileURL.path, privacy: .public) autoStop=\(String(describing: autoStopBehavior), privacy: .public)")
+        Self.log.info("[Speech] recordingStarted fileURL=\(fileURL.path, privacy: .public) autoStop=\(String(describing: autoStopBehavior), privacy: .public)")
         return nil
     }
 
@@ -337,6 +339,7 @@ final class SpeechRecognizerService: SpeechManaging {
             ))
         }
 
+        Self.log.info("[Speech] finalAudioDuration duration=\(duration, privacy: .public)s")
         Self.log.info("[Speech] latency stopListening totalMs=\(Self.latencyMs(since: stopT0), privacy: .public)")
         return .success(LocalSpeechCaptureResult(
             transcript: finalTranscript,
@@ -525,6 +528,7 @@ final class SpeechRecognizerService: SpeechManaging {
             var hasSpeech = false
             var silenceStartedAt: Date? = nil
             var lastLoggedState = "pre-speech"
+            var lastLoggedSilenceSecond = 0
 
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: SpeechRecognizerService.meterPollNanoseconds)
@@ -543,6 +547,7 @@ final class SpeechRecognizerService: SpeechManaging {
                     }
                     if silenceStartedAt != nil {
                         silenceStartedAt = nil
+                        lastLoggedSilenceSecond = 0
                         if lastLoggedState != "speaking" {
                             SpeechRecognizerService.log.info("[Speech] speechResumed level=\(level, privacy: .public)dB — silence timer reset")
                             lastLoggedState = "speaking"
@@ -555,16 +560,29 @@ final class SpeechRecognizerService: SpeechManaging {
                         silenceStartedAt = Date()
                         SpeechRecognizerService.log.info("[Speech] silenceStarted level=\(level, privacy: .public)dB")
                         lastLoggedState = "silence"
-                    } else if let start = silenceStartedAt,
-                              Date().timeIntervalSince(start) >= SpeechRecognizerService.silenceDurationToStop {
+                    } else if let start = silenceStartedAt {
+                        let silenceDuration = Date().timeIntervalSince(start)
+                        let silenceSecond = Int(silenceDuration.rounded(.down))
+                        if silenceSecond > lastLoggedSilenceSecond {
+                            lastLoggedSilenceSecond = silenceSecond
+                            SpeechRecognizerService.log.info("[Speech] silenceDetected duration=\(silenceDuration, privacy: .public)s level=\(level, privacy: .public)dB")
+                        }
+                        guard silenceDuration >= SpeechRecognizerService.silenceDurationToStop else { continue }
+                        let recordingDuration = Date().timeIntervalSince(self.recordingStartTime ?? Date())
+                        guard recordingDuration >= SpeechRecognizerService.minimumDurationBeforeAutoStop else {
+                            SpeechRecognizerService.log.info(
+                                "[Speech] autoStopSuppressed reason=minimumRecording duration=\(recordingDuration, privacy: .public)s minimum=\(SpeechRecognizerService.minimumDurationBeforeAutoStop, privacy: .public)s silence=\(silenceDuration, privacy: .public)s"
+                            )
+                            continue
+                        }
                         if autoStopEnabled {
                             SpeechRecognizerService.log.info(
-                                "[Speech] silenceThresholdReached duration=\(SpeechRecognizerService.silenceDurationToStop, privacy: .public)s — triggering auto-stop"
+                                "[Speech] autoStopTriggered reason=silence silenceDuration=\(silenceDuration, privacy: .public)s recordingDuration=\(recordingDuration, privacy: .public)s"
                             )
                             self.autoStopCallback?()
                         } else {
                             SpeechRecognizerService.log.info(
-                                "[Speech] silenceThresholdReached duration=\(SpeechRecognizerService.silenceDurationToStop, privacy: .public)s — ignored auto-stop disabled"
+                                "[Speech] silenceThresholdReached duration=\(silenceDuration, privacy: .public)s — ignored auto-stop disabled"
                             )
                         }
                         break

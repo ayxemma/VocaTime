@@ -262,16 +262,16 @@ final class VoiceCommandViewModel {
         case .idle, .success, .error:
             Task { await chatBeginListening(startReason: "manual") }
         case .listening:
-            Self.log.info("[VoiceChat] stopReason=manual")
+            Self.log.info("[VoiceChat] manualStopTriggered")
             Task { await chatFinalizeListening(stopReason: .manual) }
         case .processing, .conflictPending, .deletePending, .disambiguating:
             break
         }
     }
 
-    // MARK: - Max-duration safety net (unchanged)
+    // MARK: - Max-duration safety net
 
-    private static let maxRecordingNanoseconds: UInt64 = 30_000_000_000
+    private static let maxRecordingNanoseconds: UInt64 = 50_000_000_000
 
     private func startMaxRecordingTimer() {
         silenceTimerTask?.cancel()
@@ -279,7 +279,7 @@ final class VoiceCommandViewModel {
             try? await Task.sleep(nanoseconds: Self.maxRecordingNanoseconds)
             guard !Task.isCancelled else { return }
             guard let self, self.chatFlowState == .listening else { return }
-            Self.log.info("[VoiceChat] stopReason=maxTimeout — safety net fired after 30 s")
+            Self.log.info("[VoiceChat] autoStopTriggered reason=maxTimeout duration=50s")
             await self.chatFinalizeListening(stopReason: .maxTimeout)
         }
     }
@@ -588,7 +588,7 @@ final class VoiceCommandViewModel {
             autoStopBehavior: .enabled,
             onAutoStop: { [weak self] in
                 guard let self, self.chatFlowState == .listening else { return }
-                Self.log.info("[VoiceChat] stopReason=autoSilence")
+                Self.log.info("[VoiceChat] autoStopTriggered reason=autoSilence")
                 Task { await self.chatFinalizeListening(stopReason: .autoSilence) }
             }
         )
@@ -604,7 +604,7 @@ final class VoiceCommandViewModel {
         if startReason == "autoRelisten", !cancelledFollowUpWindow {
             Self.log.info("[VoiceChat] followUpWindowCancelled reason=recordingStarted")
         }
-        Self.log.info("[VoiceChat] listening active — tap-to-stop with auto-silence fallback; max timeout=30s")
+        Self.log.info("[VoiceChat] listening active — tap-to-stop with conservative auto-silence fallback; max timeout=50s")
     }
 
     // MARK: - Finalize listening (orchestrator)
