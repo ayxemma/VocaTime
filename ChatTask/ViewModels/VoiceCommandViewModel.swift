@@ -271,7 +271,7 @@ final class VoiceCommandViewModel {
 
     // MARK: - Max-duration safety net
 
-    private static let maxRecordingNanoseconds: UInt64 = 50_000_000_000
+    private static let maxRecordingNanoseconds: UInt64 = 55_000_000_000
 
     private func startMaxRecordingTimer() {
         silenceTimerTask?.cancel()
@@ -279,7 +279,7 @@ final class VoiceCommandViewModel {
             try? await Task.sleep(nanoseconds: Self.maxRecordingNanoseconds)
             guard !Task.isCancelled else { return }
             guard let self, self.chatFlowState == .listening else { return }
-            Self.log.info("[VoiceChat] autoStopTriggered reason=maxTimeout duration=50s")
+            Self.log.info("[VoiceChat] maxDurationStopTriggered maxSeconds=55")
             await self.chatFinalizeListening(stopReason: .maxTimeout)
         }
     }
@@ -558,7 +558,8 @@ final class VoiceCommandViewModel {
         followUpSpeechDetected = false
 
         let msgs = uiLanguage.speechMessages
-        Self.log.info("[VoiceChat] recordingStarted startReason=\(startReason, privacy: .public) appUILanguage=\(self.uiLanguage.rawValue, privacy: .public)")
+        let wallStart = Date().timeIntervalSince1970
+        Self.log.info("[VoiceChat] recordingStarted recordingStartTime=\(wallStart, privacy: .public) startReason=\(startReason, privacy: .public) appUILanguage=\(self.uiLanguage.rawValue, privacy: .public)")
 
         // Keep Apple partials internal only; multilingual chat displays the backend transcript after stop.
         speechService.onPartialTranscript = { [weak self] text in
@@ -604,7 +605,7 @@ final class VoiceCommandViewModel {
         if startReason == "autoRelisten", !cancelledFollowUpWindow {
             Self.log.info("[VoiceChat] followUpWindowCancelled reason=recordingStarted")
         }
-        Self.log.info("[VoiceChat] listening active — tap-to-stop with conservative auto-silence fallback; max timeout=50s")
+        Self.log.info("[VoiceChat] listening active — auto-silence after sustained pause; maxDurationStop=55s; manual stop immediate")
     }
 
     // MARK: - Finalize listening (orchestrator)
@@ -631,6 +632,7 @@ final class VoiceCommandViewModel {
 
         case .success(let captureResult):
             Self.log.info("[VoiceChat] captureSuccess localTranscript=\(captureResult.transcript, privacy: .public) confidence=\(String(describing: captureResult.confidence), privacy: .public) duration=\(captureResult.duration, privacy: .public)s audioURL=\(captureResult.audioURL?.path ?? "nil", privacy: .public)")
+            Self.log.info("[VoiceChat] finalAudioDuration=\(captureResult.duration, privacy: .public)s stopReason=\(stopReason.rawValue, privacy: .public)")
             await handleCloudAuthoritativeSpeechResult(captureResult, strings: strings)
             Self.log.info("[VoiceChat] latency chatFinalizeListening totalMs=\(latencyMs(since: pipelineT0), privacy: .public) outcome=success")
         }

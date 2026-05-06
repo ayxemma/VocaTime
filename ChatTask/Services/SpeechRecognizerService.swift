@@ -90,13 +90,18 @@ final class SpeechRecognizerService: SpeechManaging {
 
     private static let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "VocaTime", category: "Speech")
 
-    // MARK: - Silence detection tuning (preserved from original service)
-    /// Audio level (dBFS) above which input is treated as speech. –40 dB catches normal to quiet speech.
-    private static let speechThreshold: Float = -40.0
-    /// Consecutive seconds below `speechThreshold` — after speech has started — before auto-stop fires.
-    /// Tuned conservatively so natural pauses in longer or multilingual commands are not cut off.
-    private static let silenceDurationToStop: Double = 2.0
-    /// Minimum recording length before auto-silence may stop capture.
+    // MARK: - Silence detection tuning
+    /// Smoothed dBFS above this is treated as “speech” (less sensitive than raw –40 to reduce ambient chatter).
+    private static let speechThresholdDb: Float = -38.0
+    /// EMA smoothing per 100 ms tick (`smoothed = (1-α)*smoothed + α*raw`) to ignore single-buffer noise spikes.
+    private static let levelSmoothingAlpha: Float = 0.28
+    /// Consecutive 100 ms samples above `speechThresholdDb` required to count as speech / break silence.
+    private static let loudSamplesForSpeech: Int = 3
+    /// Consecutive quiet samples before we **start** the post-speech silence window (≈300–400 ms; avoids word gaps).
+    private static let quietSamplesToStartSilence: Int = 3
+    /// Sustained silence (after speech) required before auto-stop.
+    private static let silenceDurationToStop: Double = 3.75
+    /// Minimum session length before auto-silence may fire.
     private static let minimumDurationBeforeAutoStop: Double = 2.0
     /// Metering poll interval.
     private static let meterPollNanoseconds: UInt64 = 100_000_000  // 100 ms
@@ -248,7 +253,8 @@ final class SpeechRecognizerService: SpeechManaging {
         lastBufferPowerLevel = -160
 
         if autoStopBehavior == .enabled {
-            Self.log.info("[Speech] autoSilenceEnabled silenceThreshold=\(Self.silenceDurationToStop, privacy: .public)s minimumRecording=\(Self.minimumDurationBeforeAutoStop, privacy: .public)s")
+            let t0 = recordingStartTime?.timeIntervalSince1970 ?? 0
+            Self.log.info("[Speech] autoSilenceEnabled recordingStartTime=\(t0, privacy: .public) silenceRequired=\(Self.silenceDurationToStop, privacy: .public)s minRecording=\(Self.minimumDurationBeforeAutoStop, privacy: .public)s speechThresholdDb=\(Self.speechThresholdDb, privacy: .public) smoothingAlpha=\(Self.levelSmoothingAlpha, privacy: .public)")
             startMeteringTask(autoStopEnabled: true)
         } else {
             Self.log.info("[Speech] autoSilenceDisabled — user-controlled stop mode")
@@ -268,6 +274,7 @@ final class SpeechRecognizerService: SpeechManaging {
 
         let stopT0 = CFAbsoluteTimeGetCurrent()
         let duration = Date().timeIntervalSince(recordingStartTime ?? Date())
+        let recordingStartUnix = (recordingStartTime ?? Date()).timeIntervalSince1970
         stopMeteringTask()
         autoStopCallback = nil
 
@@ -339,7 +346,7 @@ final class SpeechRecognizerService: SpeechManaging {
             ))
         }
 
-        Self.log.info("[Speech] finalAudioDuration duration=\(duration, privacy: .public)s")
+        Self.log.info("[Speech] finalAudioDuration=\(duration, privacy: .public)s recordingStartTime=\(recordingStartUnix, privacy: .public)")
         Self.log.info("[Speech] latency stopListening totalMs=\(Self.latencyMs(since: stopT0), privacy: .public)")
         return .success(LocalSpeechCaptureResult(
             transcript: finalTranscript,
@@ -527,66 +534,92 @@ final class SpeechRecognizerService: SpeechManaging {
         meteringTask = Task { @MainActor [weak self] in
             var hasSpeech = false
             var silenceStartedAt: Date? = nil
-            var lastLoggedState = "pre-speech"
             var lastLoggedSilenceSecond = 0
+            var smoothedDb: Float = -80
+            var loudStreak = 0
+            var quietStreak = 0
+            var lastDiagnosticWallTime = CFAbsoluteTimeGetCurrent()
 
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: SpeechRecognizerService.meterPollNanoseconds)
                 guard !Task.isCancelled else { break }
                 guard let self else { break }
 
-                let level = self.lastBufferPowerLevel
-                let isSpeaking = level > SpeechRecognizerService.speechThreshold
+                let rawDb = self.lastBufferPowerLevel
+                let alpha = SpeechRecognizerService.levelSmoothingAlpha
+                smoothedDb = smoothedDb * (1 - alpha) + rawDb * alpha
 
-                if isSpeaking {
+                if smoothedDb > SpeechRecognizerService.speechThresholdDb {
+                    loudStreak += 1
+                    quietStreak = 0
+                } else {
+                    quietStreak += 1
+                    loudStreak = 0
+                }
+
+                let speechNow = loudStreak >= SpeechRecognizerService.loudSamplesForSpeech
+                let quietGate = quietStreak >= SpeechRecognizerService.quietSamplesToStartSilence
+
+                let wallNow = CFAbsoluteTimeGetCurrent()
+                if wallNow - lastDiagnosticWallTime >= 1.0 {
+                    lastDiagnosticWallTime = wallNow
+                    let recSec = Date().timeIntervalSince(self.recordingStartTime ?? Date())
+                    let sd: Double = {
+                        guard let s = silenceStartedAt else { return 0 }
+                        return Date().timeIntervalSince(s)
+                    }()
+                    SpeechRecognizerService.log.info("[Speech] metering rawDb=\(rawDb, privacy: .public) smoothedDb=\(smoothedDb, privacy: .public) loudStreak=\(loudStreak, privacy: .public) quietStreak=\(quietStreak, privacy: .public) recordingDuration=\(recSec, privacy: .public)s silenceDuration=\(sd, privacy: .public)s hasSpeech=\(hasSpeech, privacy: .public)")
+                }
+
+                if speechNow {
                     if !hasSpeech {
                         hasSpeech = true
-                        SpeechRecognizerService.log.info("[Speech] speechDetected level=\(level, privacy: .public)dB")
+                        SpeechRecognizerService.log.info("[Speech] speechDetected rawDb=\(rawDb, privacy: .public)dB smoothedDb=\(smoothedDb, privacy: .public)dB")
                         self.onSpeechDetected?()
-                        lastLoggedState = "speaking"
                     }
                     if silenceStartedAt != nil {
                         silenceStartedAt = nil
                         lastLoggedSilenceSecond = 0
-                        if lastLoggedState != "speaking" {
-                            SpeechRecognizerService.log.info("[Speech] speechResumed level=\(level, privacy: .public)dB — silence timer reset")
-                            lastLoggedState = "speaking"
-                        }
+                        SpeechRecognizerService.log.info("[Speech] speechResumed smoothedDb=\(smoothedDb, privacy: .public)dB silenceStartedAt=nil")
                     }
-                } else {
-                    guard hasSpeech else { continue }
-
+                } else if hasSpeech {
                     if silenceStartedAt == nil {
+                        guard quietGate else { continue }
                         silenceStartedAt = Date()
-                        SpeechRecognizerService.log.info("[Speech] silenceStarted level=\(level, privacy: .public)dB")
-                        lastLoggedState = "silence"
-                    } else if let start = silenceStartedAt {
-                        let silenceDuration = Date().timeIntervalSince(start)
-                        let silenceSecond = Int(silenceDuration.rounded(.down))
-                        if silenceSecond > lastLoggedSilenceSecond {
-                            lastLoggedSilenceSecond = silenceSecond
-                            SpeechRecognizerService.log.info("[Speech] silenceDetected duration=\(silenceDuration, privacy: .public)s level=\(level, privacy: .public)dB")
-                        }
-                        guard silenceDuration >= SpeechRecognizerService.silenceDurationToStop else { continue }
-                        let recordingDuration = Date().timeIntervalSince(self.recordingStartTime ?? Date())
-                        guard recordingDuration >= SpeechRecognizerService.minimumDurationBeforeAutoStop else {
-                            SpeechRecognizerService.log.info(
-                                "[Speech] autoStopSuppressed reason=minimumRecording duration=\(recordingDuration, privacy: .public)s minimum=\(SpeechRecognizerService.minimumDurationBeforeAutoStop, privacy: .public)s silence=\(silenceDuration, privacy: .public)s"
-                            )
-                            continue
-                        }
-                        if autoStopEnabled {
-                            SpeechRecognizerService.log.info(
-                                "[Speech] autoStopTriggered reason=silence silenceDuration=\(silenceDuration, privacy: .public)s recordingDuration=\(recordingDuration, privacy: .public)s"
-                            )
-                            self.autoStopCallback?()
-                        } else {
-                            SpeechRecognizerService.log.info(
-                                "[Speech] silenceThresholdReached duration=\(silenceDuration, privacy: .public)s — ignored auto-stop disabled"
-                            )
-                        }
-                        break
+                        SpeechRecognizerService.log.info("[Speech] silenceStarted silenceStartedAtUnix=\(silenceStartedAt!.timeIntervalSince1970, privacy: .public) smoothedDb=\(smoothedDb, privacy: .public)dB quietStreak=\(quietStreak, privacy: .public)")
+                        lastLoggedSilenceSecond = 0
                     }
+
+                    guard let start = silenceStartedAt else { continue }
+
+                    let silenceDuration = Date().timeIntervalSince(start)
+                    let silenceSecond = Int(silenceDuration.rounded(.down))
+                    if silenceSecond > lastLoggedSilenceSecond {
+                        lastLoggedSilenceSecond = silenceSecond
+                        SpeechRecognizerService.log.info("[Speech] silenceDuration=\(silenceDuration, privacy: .public)s smoothedDb=\(smoothedDb, privacy: .public)dB rawDb=\(rawDb, privacy: .public)dB")
+                    }
+
+                    guard silenceDuration >= SpeechRecognizerService.silenceDurationToStop else { continue }
+
+                    let recordingDuration = Date().timeIntervalSince(self.recordingStartTime ?? Date())
+                    guard recordingDuration >= SpeechRecognizerService.minimumDurationBeforeAutoStop else {
+                        SpeechRecognizerService.log.info(
+                            "[Speech] autoStopSuppressed reason=minimumRecording recordingDuration=\(recordingDuration, privacy: .public)s minimum=\(SpeechRecognizerService.minimumDurationBeforeAutoStop, privacy: .public)s silenceDuration=\(silenceDuration, privacy: .public)s"
+                        )
+                        continue
+                    }
+
+                    if autoStopEnabled {
+                        SpeechRecognizerService.log.info(
+                            "[Speech] autoStopTriggered reason=silence silenceDuration=\(silenceDuration, privacy: .public)s recordingDuration=\(recordingDuration, privacy: .public)s smoothedDb=\(smoothedDb, privacy: .public)dB"
+                        )
+                        self.autoStopCallback?()
+                    } else {
+                        SpeechRecognizerService.log.info(
+                            "[Speech] silenceThresholdReached silenceDuration=\(silenceDuration, privacy: .public)s — auto-stop disabled"
+                        )
+                    }
+                    break
                 }
             }
         }
