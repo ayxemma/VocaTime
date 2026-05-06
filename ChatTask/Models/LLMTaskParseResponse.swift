@@ -20,6 +20,10 @@ struct LLMTaskParseResponse: Decodable {
     let appendText: String?
     /// New title (updateTaskTitle only).
     let newTitle: String?
+    /// Edit target reference source: task_id, recent_task, time, title, or null.
+    let targetReferenceType: String?
+    /// Explicit task UUID when targetReferenceType is task_id or recent_task.
+    let targetTaskID: String?
 
     enum CodingKeys: String, CodingKey {
         case title, notes, confidence
@@ -32,5 +36,7 @@ struct LLMTaskParseResponse: Decodable {
         case newScheduledAt = "new_scheduled_at"
         case appendText     = "append_text"
         case newTitle       = "new_title"
+        case targetReferenceType = "target_reference_type"
+        case targetTaskID    = "target_task_id"
     }
 }

@@ -234,7 +234,7 @@ struct TaskParsingCoordinator {
     private static func logParsedCommand(_ cmd: ParsedCommand, label: String) {
         let start = cmd.startDate.map { ISO8601DateFormatter().string(from: $0) } ?? "nil"
         let reminder = cmd.reminderDate.map { ISO8601DateFormatter().string(from: $0) } ?? "nil"
-        log.info("[TaskParsing] \(label, privacy: .public) actionType=\(String(describing: cmd.actionType), privacy: .public) title=\(cmd.title, privacy: .public) startDate=\(start, privacy: .public) reminderDate=\(reminder, privacy: .public) parserSource=\(String(describing: cmd.parserSource), privacy: .public)")
+        log.info("[TaskParsing] \(label, privacy: .public) actionType=\(String(describing: cmd.actionType), privacy: .public) title=\(cmd.title, privacy: .public) startDate=\(start, privacy: .public) reminderDate=\(reminder, privacy: .public) parserSource=\(String(describing: cmd.parserSource), privacy: .public) targetReferenceType=\(String(describing: cmd.targetReferenceType), privacy: .public) targetTaskID=\(cmd.targetTaskID?.uuidString ?? "nil", privacy: .public)")
     }
 
     private static func logLongString(prefix: String, text: String, chunkSize: Int = 800) {

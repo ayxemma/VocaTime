@@ -18,6 +18,14 @@ enum ParserSource: String, Codable, Equatable {
     case unknown
 }
 
+enum TargetReferenceType: String, Codable, Equatable {
+    case taskID = "task_id"
+    case recentTask = "recent_task"
+    case time
+    case title
+    case unknown
+}
+
 struct ParsedCommand: Equatable {
     // Core fields (create and edit)
     var originalText: String
@@ -42,4 +50,8 @@ struct ParsedCommand: Equatable {
     var appendText: String? = nil
     /// New title for updateTaskTitle (LLM / backend `new_title`).
     var newTitle: String? = nil
+    /// How the backend resolved the edit target.
+    var targetReferenceType: TargetReferenceType? = nil
+    /// Explicit task id target returned by the backend.
+    var targetTaskID: UUID? = nil
 }

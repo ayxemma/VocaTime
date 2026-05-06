@@ -49,6 +49,14 @@ struct LLMTaskParserService: TaskParsing {
         if let ctx = activeTaskContext {
             requestBody["last_active_task_id"] = ctx.taskID.uuidString
             requestBody["active_task_title"] = ctx.title
+            requestBody["parse_instructions"] = """
+            Active task context is present. If the user text is a follow-up/edit continuation
+            (for example "also...", "after that...", "after waking up...", "add a note...",
+            "change it...", "睡醒之后...", "之后...", "也...", "再..."), prefer an edit action such
+            as appendToTask instead of creating a new task. When doing so, return
+            target_reference_type="recent_task" and target_task_id="\(ctx.taskID.uuidString)".
+            Only return reminder/calendarEvent when the text is clearly a standalone new task.
+            """
             if let sd = ctx.scheduledDate {
                 requestBody["active_task_scheduled_at"] = formatter.string(from: sd)
             }
@@ -58,7 +66,7 @@ struct LLMTaskParserService: TaskParsing {
             }
         }
 
-        Self.log.info("[Parse] requestId=\(requestId.uuidString, privacy: .public) bodyReady textLength=\(text.count, privacy: .public) timezone=\(timeZoneIdentifier, privacy: .public) activeTask=\(activeTaskContext != nil, privacy: .public)")
+        Self.log.info("[Parse] requestId=\(requestId.uuidString, privacy: .public) bodyReady text=\(text, privacy: .public) textLength=\(text.count, privacy: .public) timezone=\(timeZoneIdentifier, privacy: .public) activeTaskID=\(activeTaskContext?.taskID.uuidString ?? "nil", privacy: .public)")
 
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
@@ -105,9 +113,12 @@ struct LLMTaskParserService: TaskParsing {
 
         let tz = TimeZone(identifier: timeZoneIdentifier) ?? .current
         let (actionType, actionTypeUnmapped) = Self.mapLLMActionType(parsed.actionType)
+        let targetReferenceType = Self.mapTargetReferenceType(parsed.targetReferenceType)
+        let targetTaskID = parsed.targetTaskID.flatMap(UUID.init(uuidString:))
         if actionTypeUnmapped {
             Self.log.warning("[Parse] action_type unmapped raw=\(parsed.actionType ?? "nil", privacy: .public)")
         }
+        Self.log.info("[Parse] backend intent_type=\(parsed.actionType ?? "nil", privacy: .public) target.reference_type=\(parsed.targetReferenceType ?? "nil", privacy: .public) target.task_id=\(parsed.targetTaskID ?? "nil", privacy: .public)")
 
         if actionType == .deleteTask || actionType == .rescheduleTask || actionType == .appendToTask || actionType == .updateTaskTitle {
             let targetDate = parsed.targetTime.flatMap { Self.parseISO8601($0, timeZone: tz) }
@@ -127,7 +138,9 @@ struct LLMTaskParserService: TaskParsing {
                 targetDate: targetDate,
                 newScheduledDate: newScheduledDate,
                 appendText: parsed.appendText,
-                newTitle: parsed.newTitle
+                newTitle: parsed.newTitle,
+                targetReferenceType: targetReferenceType,
+                targetTaskID: targetTaskID
             )
             Self.logFinalParsedCommand(cmd)
             return cmd
@@ -165,7 +178,9 @@ struct LLMTaskParserService: TaskParsing {
             reminderDate: actionType == .reminder ? scheduledDate : nil,
             confidence: parsed.confidence,
             parserSource: .llm,
-            languageCode: parsed.languageCode
+            languageCode: parsed.languageCode,
+            targetReferenceType: targetReferenceType,
+            targetTaskID: targetTaskID
         )
 
         Self.logFinalParsedCommand(cmd)
@@ -183,6 +198,8 @@ struct LLMTaskParserService: TaskParsing {
             new_scheduled_at=\(p.newScheduledAt ?? "nil", privacy: .public) \
             append_text=\(p.appendText ?? "nil", privacy: .public) \
             new_title=\(p.newTitle ?? "nil", privacy: .public)
+            target_reference_type=\(p.targetReferenceType ?? "nil", privacy: .public) \
+            target_task_id=\(p.targetTaskID ?? "nil", privacy: .public)
             """)
     }
 
@@ -191,7 +208,7 @@ struct LLMTaskParserService: TaskParsing {
         let reminder = cmd.reminderDate.map { ISO8601DateFormatter().string(from: $0) } ?? "nil"
         let target = cmd.targetDate.map { ISO8601DateFormatter().string(from: $0) } ?? "nil"
         let newSched = cmd.newScheduledDate.map { ISO8601DateFormatter().string(from: $0) } ?? "nil"
-        log.info("[Parse] final ParsedCommand actionType=\(String(describing: cmd.actionType), privacy: .public) title=\(cmd.title, privacy: .public) startDate=\(start, privacy: .public) reminderDate=\(reminder, privacy: .public) targetDate=\(target, privacy: .public) newScheduledDate=\(newSched, privacy: .public)")
+        log.info("[Parse] final ParsedCommand actionType=\(String(describing: cmd.actionType), privacy: .public) title=\(cmd.title, privacy: .public) startDate=\(start, privacy: .public) reminderDate=\(reminder, privacy: .public) targetDate=\(target, privacy: .public) newScheduledDate=\(newSched, privacy: .public) targetReferenceType=\(String(describing: cmd.targetReferenceType), privacy: .public) targetTaskID=\(cmd.targetTaskID?.uuidString ?? "nil", privacy: .public)")
     }
 
     private static func logLongString(prefix: String, text: String, chunkSize: Int = 800) {
@@ -228,6 +245,25 @@ struct LLMTaskParserService: TaskParsing {
         default:
             if let t = ActionType(rawValue: raw) { return (t, false) }
             return (.unknown, true)
+        }
+    }
+
+    private static func mapTargetReferenceType(_ raw: String?) -> TargetReferenceType? {
+        guard let raw = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
+            return nil
+        }
+        let normalized = raw.replacingOccurrences(of: "-", with: "_").lowercased()
+        switch normalized {
+        case "task_id", "taskid":
+            return .taskID
+        case "recent_task", "recenttask", "active_task", "activetask":
+            return .recentTask
+        case "time":
+            return .time
+        case "title":
+            return .title
+        default:
+            return .unknown
         }
     }
 

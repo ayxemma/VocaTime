@@ -818,7 +818,7 @@ final class VoiceCommandViewModel {
     // MARK: - Parse + route to task actions (largely unchanged)
 
     func applyChatParse(transcript: String) async {
-        Self.log.info("[VoiceChat] parse input appUILanguage=\(self.uiLanguage.rawValue, privacy: .public) transcript=\(transcript, privacy: .public)")
+        Self.log.info("[VoiceChat] parse input appUILanguage=\(self.uiLanguage.rawValue, privacy: .public) activeTaskID=\(lastActiveChatTaskContext?.taskID.uuidString ?? "nil", privacy: .public) transcript=\(transcript, privacy: .public)")
         let command = await parsingCoordinator.parse(
             text: transcript,
             now: Date(),
@@ -826,7 +826,7 @@ final class VoiceCommandViewModel {
             timeZoneIdentifier: TimeZone.current.identifier,
             activeTaskContext: lastActiveChatTaskContext
         )
-        Self.log.info("[VoiceChat] parse outcome actionType=\(String(describing: command.actionType), privacy: .public) parserSource=\(String(describing: command.parserSource), privacy: .public) title=\(command.title, privacy: .public)")
+        Self.log.info("[VoiceChat] parse outcome backendIntentType=\(String(describing: command.actionType), privacy: .public) target.reference_type=\(String(describing: command.targetReferenceType), privacy: .public) target.task_id=\(command.targetTaskID?.uuidString ?? "nil", privacy: .public) parserSource=\(String(describing: command.parserSource), privacy: .public) title=\(command.title, privacy: .public)")
         parsedCommand = command
 
         if shouldRejectParsedCommand(command) {
@@ -852,7 +852,26 @@ final class VoiceCommandViewModel {
             break
         }
 
+        if let activeFollowUpTask = resolveActiveContextCreateFollowUp(command) {
+            let trimmedNotes = command.notes?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let trimmedTitle = command.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            let text = !(trimmedNotes?.isEmpty ?? true)
+                ? (trimmedNotes ?? "")
+                : (!trimmedTitle.isEmpty ? trimmedTitle : command.originalText.trimmingCharacters(in: .whitespacesAndNewlines))
+            Self.log.info("[VoiceChat] conflictDetectionSkipped reason=activeContextFollowUpCreate targetTaskID=\(activeFollowUpTask.id.uuidString, privacy: .public) backendIntentType=\(String(describing: command.actionType), privacy: .public)")
+            applyAppend(task: activeFollowUpTask, text: text, strings: uiLanguage.strings)
+            return
+        }
+
         // ── Create: conflict check then save ─────────────────────────────────
+        guard command.actionType == .reminder || command.actionType == .calendarEvent else {
+            Self.log.info("[VoiceChat] conflictDetectionSkipped reason=nonCreateIntent actionType=\(String(describing: command.actionType), privacy: .public)")
+            handleUnclearParsedCommand(command)
+            return
+        }
+        if lastActiveChatTaskContext != nil {
+            Self.log.info("[VoiceChat] createIntentWithActiveContext backendMayHaveMissedFollowUp actionType=\(String(describing: command.actionType), privacy: .public) target.reference_type=\(String(describing: command.targetReferenceType), privacy: .public) text=\(transcript, privacy: .public)")
+        }
         let scheduledDate = command.reminderDate ?? command.startDate
         print("""
         [VoiceChat] conflictCheckInput
@@ -1149,10 +1168,49 @@ final class VoiceCommandViewModel {
         case notFound
     }
 
+    private func resolveActiveContextCreateFollowUp(_ command: ParsedCommand) -> TaskItem? {
+        guard command.actionType == .reminder || command.actionType == .calendarEvent else { return nil }
+        switch command.targetReferenceType {
+        case .taskID:
+            guard let id = command.targetTaskID, let task = fetchIncompleteTask(id: id) else {
+                Self.log.info("[VoiceChat] activeContextCreateFollowUp targetTaskIDMissingOrNotFound target.task_id=\(command.targetTaskID?.uuidString ?? "nil", privacy: .public)")
+                return nil
+            }
+            Self.log.info("[VoiceChat] activeContextCreateFollowUp source=backendTaskID finalTargetTaskID=\(task.id.uuidString, privacy: .public)")
+            return task
+        case .recentTask:
+            guard let active = lastActiveChatTaskContext,
+                  let task = fetchIncompleteTask(id: active.taskID) else {
+                Self.log.info("[VoiceChat] activeContextCreateFollowUp recentTaskMissing")
+                return nil
+            }
+            Self.log.info("[VoiceChat] activeContextCreateFollowUp source=backendRecentTask finalTargetTaskID=\(task.id.uuidString, privacy: .public)")
+            return task
+        default:
+            return nil
+        }
+    }
+
     private func resolveEditTarget(for command: ParsedCommand) -> TaskResolution {
         let implicitActive = isImplicitActiveTaskReference(command.originalText)
         let explicitDifferent = isExplicitDifferentTarget(command)
         logActiveTaskContext(command: command, implicitActive: implicitActive, explicitDifferent: explicitDifferent)
+
+        if command.targetReferenceType == .taskID, let id = command.targetTaskID {
+            if let task = fetchIncompleteTask(id: id) {
+                Self.log.info("[VoiceChat] editTargetResolution source=backendTaskID target.reference_type=task_id finalTargetTaskID=\(task.id.uuidString, privacy: .public) skipGlobalMatching=true")
+                return .found(task)
+            }
+            Self.log.info("[VoiceChat] editTargetResolution source=backendTaskID result=notFound target.task_id=\(id.uuidString, privacy: .public) fallback=activeContext")
+        }
+
+        if command.targetReferenceType == .recentTask, let active = lastActiveChatTaskContext {
+            if let task = fetchIncompleteTask(id: active.taskID) {
+                Self.log.info("[VoiceChat] editTargetResolution source=backendRecentTask target.reference_type=recent_task finalTargetTaskID=\(task.id.uuidString, privacy: .public) skipGlobalMatching=true")
+                return .found(task)
+            }
+            Self.log.info("[VoiceChat] editTargetResolution source=backendRecentTask result=activeTaskMissing taskID=\(active.taskID.uuidString, privacy: .public)")
+        }
 
         if !explicitDifferent, let active = lastActiveChatTaskContext {
             if let task = fetchIncompleteTask(id: active.taskID) {
