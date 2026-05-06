@@ -138,6 +138,7 @@ final class VoiceCommandViewModel {
     private var isChatSheetPresented = false
     private var isAppActive = true
     private var isTextEditing = false
+    private var isStoppingListening = false
     /// When set, the next assistant reply should fill this bubble (or append if not found).
     /// Used only for typed send / parse flow — not for cloud STT (draft stays in the composer).
     private var pendingAssistantSlotId: UUID?
@@ -188,6 +189,7 @@ final class VoiceCommandViewModel {
     func handleUILanguageChanged() async {
         cancelAutoRelisten(reason: "languageChanged")
         await speechService.cancelForReset()
+        isStoppingListening = false
         cancelMaxRecordingTimer()
         if chatFlowState == .listening {
             chatFlowState = .idle
@@ -242,6 +244,7 @@ final class VoiceCommandViewModel {
         speechService.onPartialTranscript = nil
         speechService.onSpeechDetected = nil
         await speechService.cancelForReset()
+        isStoppingListening = false
         chatFlowState = .idle
         chatDraftText = ""
         Self.log.info("[VoiceChat] \(logMessage, privacy: .public)")
@@ -271,7 +274,7 @@ final class VoiceCommandViewModel {
 
     // MARK: - Max-duration safety net
 
-    private static let maxRecordingNanoseconds: UInt64 = 55_000_000_000
+    private static let maxRecordingNanoseconds: UInt64 = 60_000_000_000
 
     private func startMaxRecordingTimer() {
         silenceTimerTask?.cancel()
@@ -279,7 +282,7 @@ final class VoiceCommandViewModel {
             try? await Task.sleep(nanoseconds: Self.maxRecordingNanoseconds)
             guard !Task.isCancelled else { return }
             guard let self, self.chatFlowState == .listening else { return }
-            Self.log.info("[VoiceChat] maxDurationStopTriggered maxSeconds=55")
+            Self.log.info("[VoiceChat] maxDurationStopTriggered maxSeconds=60")
             await self.chatFinalizeListening(stopReason: .maxTimeout)
         }
     }
@@ -553,6 +556,7 @@ final class VoiceCommandViewModel {
         }
 
         voiceDraftErrorMessage = nil
+        isStoppingListening = false
         cancelMaxRecordingTimer()
         currentListeningIsAutoFollowUp = startReason == "autoRelisten"
         followUpSpeechDetected = false
@@ -605,13 +609,21 @@ final class VoiceCommandViewModel {
         if startReason == "autoRelisten", !cancelledFollowUpWindow {
             Self.log.info("[VoiceChat] followUpWindowCancelled reason=recordingStarted")
         }
-        Self.log.info("[VoiceChat] listening active — auto-silence after sustained pause; maxDurationStop=55s; manual stop immediate")
+        Self.log.info("[VoiceChat] listening active — auto-silence after sustained pause; maxDurationStop=60s; manual stop immediate")
     }
 
     // MARK: - Finalize listening (orchestrator)
 
     func chatFinalizeListening(stopReason: VoiceStopReason = .manual) async {
-        guard chatFlowState == .listening else { return }
+        guard !isStoppingListening else {
+            Self.log.info("[VoiceChat] stopIgnored reason=alreadyStopping stopReason=\(stopReason.rawValue, privacy: .public)")
+            return
+        }
+        guard chatFlowState == .listening else {
+            Self.log.info("[VoiceChat] stopIgnored reason=stateNotListening state=\(String(describing: self.chatFlowState), privacy: .public) stopReason=\(stopReason.rawValue, privacy: .public)")
+            return
+        }
+        isStoppingListening = true
         cancelMaxRecordingTimer()
         cancelFollowUpNoSpeechTimer(reason: "finalizeListening")
         chatFlowState = .processing
@@ -622,6 +634,7 @@ final class VoiceCommandViewModel {
         let stopT0 = CFAbsoluteTimeGetCurrent()
         let captureOutcome = await speechService.stopListening(waitForLocalFinal: false)
         Self.log.info("[VoiceChat] latency stopListening ms=\(latencyMs(since: stopT0), privacy: .public)")
+        Self.log.info("[VoiceChat] transcriptionStarted stopReason=\(stopReason.rawValue, privacy: .public)")
         let strings = uiLanguage.strings
         let speechMsgs = uiLanguage.speechMessages
 
