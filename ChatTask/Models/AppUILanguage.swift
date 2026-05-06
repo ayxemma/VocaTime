@@ -354,6 +354,8 @@ struct AppStrings {
     let paywallPurchaseFailedTitle: String
     let paywallAlertOK: String
     let paywallProductUnavailable: String
+    /// Short label on a paywall plan row when StoreKit did not return that product.
+    let paywallPlanUnavailable: String
     let paywallCloseA11y: String
     /// First-launch onboarding title.
     let onboardingTitle: String
@@ -562,6 +564,7 @@ struct AppStrings {
         paywallPurchaseFailedTitle: "Purchase Failed",
         paywallAlertOK: "OK",
         paywallProductUnavailable: "This product is currently unavailable. Please check your connection and try again.",
+        paywallPlanUnavailable: "Unavailable",
         paywallCloseA11y: "Close",
         onboardingTitle: "Speak or chat.",
         onboardingBody: "Turn what you say or type into tasks automatically.",
@@ -767,6 +770,7 @@ struct AppStrings {
         paywallPurchaseFailedTitle: "购买失败",
         paywallAlertOK: "好",
         paywallProductUnavailable: "此项目目前无法购买。请检查网络连接后重试。",
+        paywallPlanUnavailable: "不可用",
         paywallCloseA11y: "关闭",
         onboardingTitle: "说话或打字",
         onboardingBody: "自动把你说的或输入的内容变成任务。",
@@ -972,6 +976,7 @@ struct AppStrings {
         paywallPurchaseFailedTitle: "Error en la compra",
         paywallAlertOK: "OK",
         paywallProductUnavailable: "Este producto no está disponible ahora. Comprueba tu conexión e inténtalo de nuevo.",
+        paywallPlanUnavailable: "No disponible",
         paywallCloseA11y: "Cerrar",
         onboardingTitle: "Habla o escribe.",
         onboardingBody: "Convierte lo que dices o escribes en tareas automáticamente.",

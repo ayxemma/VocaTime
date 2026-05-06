@@ -40,7 +40,7 @@
               "locale" : "en_US"
             }
           ],
-          "productID" : "com.chattask.pro.monthly",
+          "productID" : "com.chattask.monthly",
           "recurringSubscriptionPeriod" : "P1M",
           "referenceName" : "ChatTask Pro Monthly",
           "subscriptionGroupID" : "CHATTASKPRO01",

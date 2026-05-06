@@ -107,6 +107,12 @@ struct PaywallView: View {
         } message: {
             Text(errorMessage)
         }
+        .onChange(of: subscriptionManager.monthlyProduct?.id) { _, _ in
+            rebalanceSelectedPlanAfterProductLoad()
+        }
+        .onChange(of: subscriptionManager.yearlyProduct?.id) { _, _ in
+            rebalanceSelectedPlanAfterProductLoad()
+        }
         .onChange(of: subscriptionManager.purchaseState) { _, newState in
             if case .failed(let msg) = newState {
                 errorMessage = msg
@@ -224,7 +230,9 @@ struct PaywallView: View {
                 per: s.paywallPerMonth,
                 trialIncludedLine: planTrialIncludedLine(for: .monthly),
                 badge: nil,
-                isSelected: selectedPlan == .monthly
+                isSelected: selectedPlan == .monthly,
+                isPurchaseAvailable: subscriptionManager.monthlyProduct != nil,
+                unavailableLabel: s.paywallPlanUnavailable
             ) { selectedPlan = .monthly }
 
             PlanCard(
@@ -233,7 +241,9 @@ struct PaywallView: View {
                 per: s.paywallPerYear,
                 trialIncludedLine: planTrialIncludedLine(for: .yearly),
                 badge: s.paywallYearlyBestValue,
-                isSelected: selectedPlan == .yearly
+                isSelected: selectedPlan == .yearly,
+                isPurchaseAvailable: subscriptionManager.yearlyProduct != nil,
+                unavailableLabel: s.paywallPlanUnavailable
             ) { selectedPlan = .yearly }
         }
     }
@@ -261,10 +271,8 @@ struct PaywallView: View {
             .shadow(color: Color.accentColor.opacity(0.25), radius: 8, y: 4)
             .animation(.easeInOut(duration: 0.15), value: isPurchasing)
         }
-        .disabled(!isIdle)
+        .disabled(!isIdle || selectedProduct == nil)
     }
-
-    // MARK: - Secondary actions
 
     private var secondaryActions: some View {
         let s = strings
@@ -330,6 +338,19 @@ struct PaywallView: View {
 
     // MARK: - Purchase action
 
+    private func rebalanceSelectedPlanAfterProductLoad() {
+        switch selectedPlan {
+        case .monthly:
+            if subscriptionManager.monthlyProduct == nil, subscriptionManager.yearlyProduct != nil {
+                selectedPlan = .yearly
+            }
+        case .yearly:
+            if subscriptionManager.yearlyProduct == nil, subscriptionManager.monthlyProduct != nil {
+                selectedPlan = .monthly
+            }
+        }
+    }
+
     private func handlePurchase() async {
         guard let product = selectedProduct else {
             errorMessage = strings.paywallProductUnavailable
@@ -349,6 +370,8 @@ private struct PlanCard: View {
     let trialIncludedLine: String
     let badge: String?
     let isSelected: Bool
+    let isPurchaseAvailable: Bool
+    let unavailableLabel: String
     let action: () -> Void
 
     var body: some View {
@@ -392,14 +415,21 @@ private struct PlanCard: View {
 
                 Spacer()
 
-                // Live price
+                // Live price or unavailable
                 VStack(alignment: .trailing, spacing: 1) {
-                    Text(price)
-                        .font(.system(size: 17, weight: .bold))
-                        .foregroundStyle(.primary)
-                    Text(per)
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
+                    if isPurchaseAvailable {
+                        Text(price)
+                            .font(.system(size: 17, weight: .bold))
+                            .foregroundStyle(.primary)
+                        Text(per)
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text(unavailableLabel)
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(Color(.tertiaryLabel))
+                            .multilineTextAlignment(.trailing)
+                    }
                 }
             }
             .padding(.horizontal, 16)
@@ -420,6 +450,8 @@ private struct PlanCard: View {
             .animation(.easeInOut(duration: 0.15), value: isSelected)
         }
         .buttonStyle(.plain)
+        .disabled(!isPurchaseAvailable)
+        .opacity(isPurchaseAvailable ? 1 : 0.55)
     }
 }
 

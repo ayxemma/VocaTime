@@ -196,6 +196,7 @@ extension AppStrings {
         paywallPurchaseFailedTitle: "खरीदारी विफल",
         paywallAlertOK: "ठीक",
         paywallProductUnavailable: "यह उत्पाद अभी उपलब्ध नहीं है। कृपया कनेक्शन जाँचें और पुनः प्रयास करें।",
+        paywallPlanUnavailable: "अनुपलब्ध",
         paywallCloseA11y: "बंद करें",
         onboardingTitle: "बोलें या टाइप करें।",
         onboardingBody: "आप जो बोलते या टाइप करते हैं, उसे अपने-आप कार्यों में बदलें।",

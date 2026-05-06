@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import os.log
 import StoreKit
 
 // MARK: - Purchase state
@@ -28,6 +29,8 @@ enum PurchaseState: Equatable {
 @MainActor
 @Observable
 final class SubscriptionManager {
+
+    private static let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "ChatTask", category: "Subscription")
 
     // MARK: - Products
 
@@ -80,20 +83,39 @@ final class SubscriptionManager {
     /// Fetch product metadata from App Store or the active StoreKit configuration.
     /// Safe to call on every launch; results are used to show live prices in the paywall.
     func loadProducts() async {
+        monthlyProduct = nil
+        yearlyProduct = nil
+
+        let requestedIDs = [
+            SubscriptionConfig.monthlyProductID,
+            SubscriptionConfig.yearlyProductID,
+        ]
+
         do {
-            let products = try await Product.products(for: [
-                SubscriptionConfig.monthlyProductID,
-                SubscriptionConfig.yearlyProductID,
-            ])
+            let products = try await Product.products(for: requestedIDs)
+            let loadedIDs = products.map(\.id)
+            let missing = Set(requestedIDs).subtracting(loadedIDs)
+
+            Self.log.info("[Store] loadProducts requestedIDs=\(requestedIDs.joined(separator: ", "), privacy: .public)")
+            Self.log.info("[Store] loadProducts loadedProductIDs=\(loadedIDs.joined(separator: ", "), privacy: .public)")
+            if missing.isEmpty {
+                Self.log.info("[Store] loadProducts missingProductIDs=none")
+            } else {
+                Self.log.warning("[Store] loadProducts missingProductIDs=\(missing.sorted().joined(separator: ", "), privacy: .public)")
+            }
+
             for product in products {
                 switch product.id {
-                case SubscriptionConfig.monthlyProductID: monthlyProduct = product
-                case SubscriptionConfig.yearlyProductID:  yearlyProduct  = product
-                default: break
+                case SubscriptionConfig.monthlyProductID:
+                    monthlyProduct = product
+                case SubscriptionConfig.yearlyProductID:
+                    yearlyProduct = product
+                default:
+                    Self.log.warning("[Store] loadProducts unexpectedProductID=\(product.id, privacy: .public)")
                 }
             }
         } catch {
-            // Products unavailable — paywall falls back to hard-coded copy.
+            Self.log.error("[Store] loadProducts failed error=\(String(describing: error), privacy: .public)")
         }
     }
 
