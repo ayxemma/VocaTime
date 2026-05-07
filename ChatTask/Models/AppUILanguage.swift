@@ -272,6 +272,7 @@ struct AppStrings {
     let chatFollowUpHint: String
     let chatRenameSuccess: String
     let chatTextInputPlaceholder: String
+    let chatEditingLabel: String
     let reminderLabel: String
     let reminderDefaultLabel: String
     let appLanguage: String
@@ -493,6 +494,7 @@ struct AppStrings {
         chatFollowUpHint: "You can keep editing this task.",
         chatRenameSuccess: "Renamed to \"%@\".",
         chatTextInputPlaceholder: "Type or say a task\u{2026}",
+        chatEditingLabel: "Editing:",
         reminderLabel: "Reminder",
         reminderDefaultLabel: "Default Reminder",
         appLanguage: "App Language",
@@ -699,6 +701,7 @@ struct AppStrings {
         chatFollowUpHint: "您可以继续修改这条任务。",
         chatRenameSuccess: "已改名为「%@」。",
         chatTextInputPlaceholder: "输入或说出任务\u{2026}",
+        chatEditingLabel: "正在编辑：",
         reminderLabel: "提醒",
         reminderDefaultLabel: "默认提醒时间",
         appLanguage: "应用语言",
@@ -905,6 +908,7 @@ struct AppStrings {
         chatFollowUpHint: "Puedes seguir editando esta tarea.",
         chatRenameSuccess: "Renombrado a \"%@\".",
         chatTextInputPlaceholder: "Escribe o di una tarea\u{2026}",
+        chatEditingLabel: "Editando:",
         reminderLabel: "Recordatorio",
         reminderDefaultLabel: "Recordatorio predeterminado",
         appLanguage: "Idioma",

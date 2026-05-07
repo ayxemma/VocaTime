@@ -138,7 +138,7 @@ struct ChatSheetView: View {
                     HStack(spacing: 4) {
                         Image(systemName: "pencil")
                             .font(.caption2.weight(.semibold))
-                        Text("Editing:")
+                        Text(s.chatEditingLabel)
                             .foregroundStyle(.secondary)
                         Text(title)
                             .foregroundStyle(.primary)
