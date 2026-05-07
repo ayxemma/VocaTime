@@ -852,17 +852,6 @@ final class VoiceCommandViewModel {
             break
         }
 
-        if let activeFollowUpTask = resolveActiveContextCreateFollowUp(command) {
-            let trimmedNotes = command.notes?.trimmingCharacters(in: .whitespacesAndNewlines)
-            let trimmedTitle = command.title.trimmingCharacters(in: .whitespacesAndNewlines)
-            let text = !(trimmedNotes?.isEmpty ?? true)
-                ? (trimmedNotes ?? "")
-                : (!trimmedTitle.isEmpty ? trimmedTitle : command.originalText.trimmingCharacters(in: .whitespacesAndNewlines))
-            Self.log.info("[VoiceChat] conflictDetectionSkipped reason=activeContextFollowUpCreate targetTaskID=\(activeFollowUpTask.id.uuidString, privacy: .public) backendIntentType=\(String(describing: command.actionType), privacy: .public)")
-            applyAppend(task: activeFollowUpTask, text: text, strings: uiLanguage.strings)
-            return
-        }
-
         // ── Create: conflict check then save ─────────────────────────────────
         guard command.actionType == .reminder || command.actionType == .calendarEvent else {
             Self.log.info("[VoiceChat] conflictDetectionSkipped reason=nonCreateIntent actionType=\(String(describing: command.actionType), privacy: .public)")
@@ -870,7 +859,7 @@ final class VoiceCommandViewModel {
             return
         }
         if lastActiveChatTaskContext != nil {
-            Self.log.info("[VoiceChat] createIntentWithActiveContext backendMayHaveMissedFollowUp actionType=\(String(describing: command.actionType), privacy: .public) target.reference_type=\(String(describing: command.targetReferenceType), privacy: .public) text=\(transcript, privacy: .public)")
+            Self.log.info("[VoiceChat] activeContextIgnored reason=backendReturnedCreate finalFrontendAction=createTask activeTaskID=\(lastActiveChatTaskContext?.taskID.uuidString ?? "nil", privacy: .public) actionType=\(String(describing: command.actionType), privacy: .public) target.reference_type=\(String(describing: command.targetReferenceType), privacy: .public) text=\(transcript, privacy: .public)")
         }
         let scheduledDate = command.reminderDate ?? command.startDate
         print("""
@@ -1090,7 +1079,7 @@ final class VoiceCommandViewModel {
     }
 
     private func applyReschedule(task: TaskItem, newDate: Date, strings s: AppStrings) {
-        Self.log.info("[VoiceChat] rescheduleApplied title=\(task.title, privacy: .public) newDate=\(newDate, privacy: .public)")
+        Self.log.info("[VoiceChat] finalFrontendAction=rescheduleTask activeContextUsed=true finalTargetTaskID=\(task.id.uuidString, privacy: .public) title=\(task.title, privacy: .public) newDate=\(newDate, privacy: .public)")
         task.scheduledDate = newDate
         task.updatedAt = Date()
         try? persistenceContext?.save()
@@ -1102,7 +1091,7 @@ final class VoiceCommandViewModel {
     }
 
     private func applyAppend(task: TaskItem, text: String, strings s: AppStrings) {
-        Self.log.info("[VoiceChat] appendApplied title=\(task.title, privacy: .public)")
+        Self.log.info("[VoiceChat] finalFrontendAction=appendToTask activeContextUsed=true finalTargetTaskID=\(task.id.uuidString, privacy: .public) title=\(task.title, privacy: .public)")
         if let existing = task.notes, !existing.isEmpty {
             task.notes = existing + "\n" + text
         } else {
@@ -1115,7 +1104,7 @@ final class VoiceCommandViewModel {
     }
 
     private func applyRename(task: TaskItem, newTitle: String, strings s: AppStrings) {
-        Self.log.info("[VoiceChat] renameApplied newTitle=\(newTitle, privacy: .public)")
+        Self.log.info("[VoiceChat] finalFrontendAction=updateTaskTitle activeContextUsed=true finalTargetTaskID=\(task.id.uuidString, privacy: .public) newTitle=\(newTitle, privacy: .public)")
         task.title = newTitle
         task.updatedAt = Date()
         try? persistenceContext?.save()
@@ -1166,29 +1155,6 @@ final class VoiceCommandViewModel {
         case found(TaskItem)
         case ambiguous([TaskItem])
         case notFound
-    }
-
-    private func resolveActiveContextCreateFollowUp(_ command: ParsedCommand) -> TaskItem? {
-        guard command.actionType == .reminder || command.actionType == .calendarEvent else { return nil }
-        switch command.targetReferenceType {
-        case .taskID:
-            guard let id = command.targetTaskID, let task = fetchIncompleteTask(id: id) else {
-                Self.log.info("[VoiceChat] activeContextCreateFollowUp targetTaskIDMissingOrNotFound target.task_id=\(command.targetTaskID?.uuidString ?? "nil", privacy: .public)")
-                return nil
-            }
-            Self.log.info("[VoiceChat] activeContextCreateFollowUp source=backendTaskID finalTargetTaskID=\(task.id.uuidString, privacy: .public)")
-            return task
-        case .recentTask:
-            guard let active = lastActiveChatTaskContext,
-                  let task = fetchIncompleteTask(id: active.taskID) else {
-                Self.log.info("[VoiceChat] activeContextCreateFollowUp recentTaskMissing")
-                return nil
-            }
-            Self.log.info("[VoiceChat] activeContextCreateFollowUp source=backendRecentTask finalTargetTaskID=\(task.id.uuidString, privacy: .public)")
-            return task
-        default:
-            return nil
-        }
     }
 
     private func resolveEditTarget(for command: ParsedCommand) -> TaskResolution {
@@ -1328,7 +1294,8 @@ final class VoiceCommandViewModel {
             let item = TaskItem.insertFromParsedCommand(command, context: ctx)
             refreshActiveContext(from: item)
             Self.log.info("""
-                [VoiceChat] taskSaveSuccess \
+                [VoiceChat] finalFrontendAction=createTask \
+                activeContextUsed=false \
                 title=\(command.title, privacy: .public) \
                 scheduledDate=\(String(describing: resolvedDate), privacy: .public) \
                 actionType=\(String(describing: command.actionType), privacy: .public)

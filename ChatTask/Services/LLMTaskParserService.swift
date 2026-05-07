@@ -50,12 +50,10 @@ struct LLMTaskParserService: TaskParsing {
             requestBody["last_active_task_id"] = ctx.taskID.uuidString
             requestBody["active_task_title"] = ctx.title
             requestBody["parse_instructions"] = """
-            Active task context is present. If the user text is a follow-up/edit continuation
-            (for example "also...", "after that...", "after waking up...", "add a note...",
-            "change it...", "睡醒之后...", "之后...", "也...", "再..."), prefer an edit action such
-            as appendToTask instead of creating a new task. When doing so, return
+            Conversation context: last_active_task_id is only context. Use it only for clear
+            follow-up edits. If the user asks for a separate new task/reminder, return a create
+            action and ignore the active task context. For active-task edits, return
             target_reference_type="recent_task" and target_task_id="\(ctx.taskID.uuidString)".
-            Only return reminder/calendarEvent when the text is clearly a standalone new task.
             """
             if let sd = ctx.scheduledDate {
                 requestBody["active_task_scheduled_at"] = formatter.string(from: sd)
