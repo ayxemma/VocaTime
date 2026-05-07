@@ -53,6 +53,7 @@ struct RootTabView: View {
         }
         .sheet(item: $chatSheetSession, onDismiss: {
             Self.log.info("[RootTab] chatSheetDismissed")
+            chatViewModel.clearActiveChatTaskContext()
             chatSheetSession = nil
         }) { session in
             ChatSheetView(
