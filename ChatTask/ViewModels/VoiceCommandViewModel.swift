@@ -859,7 +859,7 @@ final class VoiceCommandViewModel {
             return
         }
         if lastActiveChatTaskContext != nil {
-            Self.log.info("[VoiceChat] activeContextIgnored reason=backendReturnedCreate finalFrontendAction=createTask activeTaskID=\(lastActiveChatTaskContext?.taskID.uuidString ?? "nil", privacy: .public) actionType=\(String(describing: command.actionType), privacy: .public) target.reference_type=\(String(describing: command.targetReferenceType), privacy: .public) text=\(transcript, privacy: .public)")
+            Self.log.info("[VoiceChat] activeContextIgnored reason=backendReturnedCreate finalFrontendAction=createTask activeTaskID=\(self.lastActiveChatTaskContext?.taskID.uuidString ?? "nil", privacy: .public) actionType=\(String(describing: command.actionType), privacy: .public) target.reference_type=\(String(describing: command.targetReferenceType), privacy: .public) text=\(transcript, privacy: .public)")
         }
         let scheduledDate = command.reminderDate ?? command.startDate
         print("""
