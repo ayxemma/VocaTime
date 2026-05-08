@@ -204,10 +204,15 @@ struct SettingsView: View {
                 }
                 .font(typography.body)
                 .foregroundStyle(.primary)
+                Button("Reset free AI usage counter") {
+                    subscriptionManager.resetFreeAIParseUsageForDebug()
+                }
+                .font(typography.body)
+                .foregroundStyle(.primary)
             } header: {
                 Text("Debug")
             } footer: {
-                Text("Shows the first-launch onboarding again on Home.")
+                Text("Reset onboarding on Home, or clear the 20 free AI action counter for paywall testing.")
             }
             #endif
 

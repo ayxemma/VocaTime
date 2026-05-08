@@ -59,11 +59,11 @@ enum SubscriptionConfig {
         }
     }
 
-    // MARK: - Paywall trigger
+    // MARK: - Free AI usage (paywall gate)
 
-    /// The paywall is presented after the user has created this many tasks,
-    /// ensuring they experience the app before being asked to subscribe.
-    static let paywallTriggerTaskCount = 3
+    /// Successful LLM-backed parse actions while not subscribed are free up to this count.
+    /// The next AI action shows the paywall (`count == allowance` blocks before parse).
+    static let freeAIParseAllowance = 20
 
     // MARK: - User-facing copy
 

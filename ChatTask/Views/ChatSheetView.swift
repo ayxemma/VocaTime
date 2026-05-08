@@ -9,6 +9,7 @@ struct ChatSheetView: View {
 
     @Environment(\.appUILanguage) private var appUILanguage
     @Environment(\.themePalette) private var themePalette
+    @Environment(SubscriptionManager.self) private var subscriptionManager
     @Environment(\.dismiss) private var dismiss
     @Environment(\.locale) private var locale
     @Environment(\.modelContext) private var modelContext
@@ -49,6 +50,7 @@ struct ChatSheetView: View {
             }
             .onAppear {
                 viewModel.attachPersistence(modelContext)
+                viewModel.subscriptionManager = subscriptionManager
                 viewModel.uiLanguage = appUILanguage
                 BackendWarmup.scheduleSessionWarmup()
                 Self.log.info("[ChatSheet] chatAutoStart — sheet opened, beginning recording")
@@ -478,4 +480,5 @@ private struct ChatTypingIndicatorView: View {
         .environment(\.appUILanguage, .en)
         .environment(\.themePalette, .palette(for: .purple))
         .environment(\.locale, Locale(identifier: "en_US"))
+        .environment(SubscriptionManager())
 }

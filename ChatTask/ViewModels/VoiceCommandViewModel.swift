@@ -83,8 +83,15 @@ final class VoiceCommandViewModel {
     /// Most recent task touched in this chat session; sent to backend parse for follow-ups. Cleared on sheet dismiss.
     var lastActiveChatTaskContext: ChatActiveTaskContext?
 
+    /// Set from `ChatSheetView` so free-tier AI limits can be enforced before `POST /parse`.
+    var subscriptionManager: SubscriptionManager?
+
     private var pendingConflictCommand: ParsedCommand?
     private var pendingDeleteTask: TaskItem?
+    /// LLM command that led to the delete confirmation (for free-usage accounting).
+    private var pendingDeleteUsageCommand: ParsedCommand?
+    /// LLM command that led to disambiguation (for free-usage accounting after the user picks a task).
+    private var pendingDisambiguationUsageCommand: ParsedCommand?
     private var pendingEditAction: PendingEditAction?
 
     // MARK: - Pending edit model (unchanged)
@@ -818,6 +825,11 @@ final class VoiceCommandViewModel {
     // MARK: - Parse + route to task actions (largely unchanged)
 
     func applyChatParse(transcript: String) async {
+        guard ensureAIParseAllowed() else {
+            handlePaywallBlockedParse()
+            return
+        }
+
         Self.log.info("[VoiceChat] parse input appUILanguage=\(self.uiLanguage.rawValue, privacy: .public) activeTaskID=\(self.lastActiveChatTaskContext?.taskID.uuidString ?? "nil", privacy: .public) transcript=\(transcript, privacy: .public)")
         let command = await parsingCoordinator.parse(
             text: transcript,
@@ -939,6 +951,34 @@ final class VoiceCommandViewModel {
         emitAssistantResponse(message, nextState: .error, stream: false)
     }
 
+    private func ensureAIParseAllowed() -> Bool {
+        guard let sm = subscriptionManager else { return true }
+        #if DEBUG
+        print("[PaywallGate] pre-parse isSubscribed=\(sm.isPremium) freeUsage=\(sm.freeAIParseSuccessCount)/\(SubscriptionConfig.freeAIParseAllowance)")
+        #endif
+        if sm.canUseFreeAIParseSlot() { return true }
+        #if DEBUG
+        print("[PaywallGate] parse blocked — presenting paywall (free tier exhausted or not subscribed)")
+        #endif
+        NotificationCenter.default.post(name: .chatTaskPresentPaywall, object: nil)
+        return false
+    }
+
+    private func handlePaywallBlockedParse() {
+        Self.log.info("[PaywallGate] paywallBlockedParse — AI parse not started")
+        removePendingAssistantSlotIfEmpty()
+        chatFlowState = .idle
+        currentSubmitCameFromVoiceDraft = false
+        voiceFollowUpAutoStartsRemaining = 0
+        pendingAssistantSlotId = nil
+        parsedCommand = nil
+    }
+
+    private func recordFreeAIUsageIfNeeded(_ command: ParsedCommand?) {
+        guard let command, command.parserSource == .llm else { return }
+        subscriptionManager?.recordSuccessfulFreeAIParseIfNeeded()
+    }
+
     private func unclearCommandMessage() -> String {
         if uiLanguage == .en {
             return "Didn’t understand that — try something like:\n“Remind me in 10 minutes to drink water”"
@@ -974,9 +1014,9 @@ final class VoiceCommandViewModel {
         case .notFound:
             emitAssistantResponse(s.chatEditNoTaskFound, nextState: .error, stream: false)
         case .ambiguous(let matches):
-            enterDisambiguation(matches: matches, editType: .rename(to: newTitle), strings: s)
+            enterDisambiguation(matches: matches, editType: .rename(to: newTitle), strings: s, usageCommand: command)
         case .found(let task):
-            applyRename(task: task, newTitle: newTitle, strings: s)
+            applyRename(task: task, newTitle: newTitle, strings: s, usageCommand: command)
         }
     }
 
@@ -988,10 +1028,10 @@ final class VoiceCommandViewModel {
             emitAssistantResponse(s.chatEditNoTaskFound, nextState: .error, stream: false)
         case .ambiguous(let matches):
             Self.log.info("[VoiceChat] deleteIntent — ambiguous matchCount=\(matches.count, privacy: .public)")
-            enterDisambiguation(matches: matches, editType: .delete, strings: s)
+            enterDisambiguation(matches: matches, editType: .delete, strings: s, usageCommand: command)
         case .found(let task):
             Self.log.info("[VoiceChat] deleteIntent — found task title=\(task.title, privacy: .public)")
-            enterDeleteConfirmation(for: task, strings: s)
+            enterDeleteConfirmation(for: task, strings: s, usageCommand: command)
         }
     }
 
@@ -1007,14 +1047,14 @@ final class VoiceCommandViewModel {
                 emitAssistantResponse(s.chatEditNoTaskFound, nextState: .error, stream: false)
                 return
             }
-            enterDisambiguation(matches: matches, editType: .reschedule(newDate: newDate), strings: s)
+            enterDisambiguation(matches: matches, editType: .reschedule(newDate: newDate), strings: s, usageCommand: command)
         case .found(let task):
             guard let newDate = command.newScheduledDate else {
                 Self.log.warning("[VoiceChat] rescheduleIntent — newScheduledDate is nil")
                 emitAssistantResponse(s.chatEditNoTaskFound, nextState: .error, stream: false)
                 return
             }
-            applyReschedule(task: task, newDate: newDate, strings: s)
+            applyReschedule(task: task, newDate: newDate, strings: s, usageCommand: command)
         }
     }
 
@@ -1031,9 +1071,9 @@ final class VoiceCommandViewModel {
             emitAssistantResponse(s.chatEditNoTaskFound, nextState: .error, stream: false)
         case .ambiguous(let matches):
             Self.log.info("[VoiceChat] appendIntent — ambiguous matchCount=\(matches.count, privacy: .public)")
-            enterDisambiguation(matches: matches, editType: .appendNote(text: text), strings: s)
+            enterDisambiguation(matches: matches, editType: .appendNote(text: text), strings: s, usageCommand: command)
         case .found(let task):
-            applyAppend(task: task, text: text, strings: s)
+            applyAppend(task: task, text: text, strings: s, usageCommand: command)
         }
     }
 
@@ -1041,12 +1081,13 @@ final class VoiceCommandViewModel {
 
     private static let disambiguationLimit = 5
 
-    private func enterDisambiguation(matches: [TaskItem], editType: PendingEditType, strings s: AppStrings) {
+    private func enterDisambiguation(matches: [TaskItem], editType: PendingEditType, strings s: AppStrings, usageCommand: ParsedCommand) {
         if matches.count > Self.disambiguationLimit {
             emitAssistantResponse(s.chatEditAmbiguousTask, nextState: .error, stream: false)
             return
         }
         Self.log.info("[VoiceChat] enterDisambiguation count=\(matches.count, privacy: .public)")
+        pendingDisambiguationUsageCommand = usageCommand
         disambiguationCandidates = matches
         pendingEditAction = PendingEditAction(type: editType)
         emitAssistantResponse(String(format: s.chatDisambiguateSelect, matches.count), nextState: .disambiguating, stream: true)
@@ -1054,31 +1095,34 @@ final class VoiceCommandViewModel {
 
     func chatSelectCandidate(_ task: TaskItem) {
         guard let action = pendingEditAction else { return }
+        let usageCommand = pendingDisambiguationUsageCommand
+        pendingDisambiguationUsageCommand = nil
         pendingEditAction = nil
         disambiguationCandidates = []
         let s = uiLanguage.strings
         Self.log.info("[VoiceChat] candidateSelected title=\(task.title, privacy: .public)")
         switch action.type {
         case .delete:
-            enterDeleteConfirmation(for: task, strings: s)
+            enterDeleteConfirmation(for: task, strings: s, usageCommand: usageCommand)
         case .reschedule(let newDate):
-            applyReschedule(task: task, newDate: newDate, strings: s)
+            applyReschedule(task: task, newDate: newDate, strings: s, usageCommand: usageCommand)
         case .appendNote(let text):
-            applyAppend(task: task, text: text, strings: s)
+            applyAppend(task: task, text: text, strings: s, usageCommand: usageCommand)
         case .rename(let newTitle):
-            applyRename(task: task, newTitle: newTitle, strings: s)
+            applyRename(task: task, newTitle: newTitle, strings: s, usageCommand: usageCommand)
         }
     }
 
     // MARK: - Shared edit operations (unchanged)
 
-    private func enterDeleteConfirmation(for task: TaskItem, strings s: AppStrings) {
+    private func enterDeleteConfirmation(for task: TaskItem, strings s: AppStrings, usageCommand: ParsedCommand?) {
+        pendingDeleteUsageCommand = usageCommand
         pendingDeleteTask = task
         let prompt = String(format: s.chatDeletePrompt, task.title)
         emitAssistantResponse(prompt, nextState: .deletePending, stream: true)
     }
 
-    private func applyReschedule(task: TaskItem, newDate: Date, strings s: AppStrings) {
+    private func applyReschedule(task: TaskItem, newDate: Date, strings s: AppStrings, usageCommand: ParsedCommand?) {
         Self.log.info("[VoiceChat] finalFrontendAction=rescheduleTask activeContextUsed=true finalTargetTaskID=\(task.id.uuidString, privacy: .public) title=\(task.title, privacy: .public) newDate=\(newDate, privacy: .public)")
         task.scheduledDate = newDate
         task.updatedAt = Date()
@@ -1088,9 +1132,10 @@ final class VoiceCommandViewModel {
         let msg = String(format: s.chatRescheduleSuccess, task.title, timeStr)
         emitAssistantResponse(msg, nextState: .success, stream: true)
         refreshActiveContext(from: task)
+        recordFreeAIUsageIfNeeded(usageCommand)
     }
 
-    private func applyAppend(task: TaskItem, text: String, strings s: AppStrings) {
+    private func applyAppend(task: TaskItem, text: String, strings s: AppStrings, usageCommand: ParsedCommand?) {
         Self.log.info("[VoiceChat] finalFrontendAction=appendToTask activeContextUsed=true finalTargetTaskID=\(task.id.uuidString, privacy: .public) title=\(task.title, privacy: .public)")
         if let existing = task.notes, !existing.isEmpty {
             task.notes = existing + "\n" + text
@@ -1101,21 +1146,25 @@ final class VoiceCommandViewModel {
         try? persistenceContext?.save()
         emitAssistantResponse(String(format: s.chatAppendSuccess, task.title), nextState: .success, stream: true)
         refreshActiveContext(from: task)
+        recordFreeAIUsageIfNeeded(usageCommand)
     }
 
-    private func applyRename(task: TaskItem, newTitle: String, strings s: AppStrings) {
+    private func applyRename(task: TaskItem, newTitle: String, strings s: AppStrings, usageCommand: ParsedCommand?) {
         Self.log.info("[VoiceChat] finalFrontendAction=updateTaskTitle activeContextUsed=true finalTargetTaskID=\(task.id.uuidString, privacy: .public) newTitle=\(newTitle, privacy: .public)")
         task.title = newTitle
         task.updatedAt = Date()
         try? persistenceContext?.save()
         emitAssistantResponse(String(format: s.chatRenameSuccess, newTitle), nextState: .success, stream: true)
         refreshActiveContext(from: task)
+        recordFreeAIUsageIfNeeded(usageCommand)
     }
 
     // MARK: - Delete confirmation (unchanged)
 
     func chatConfirmDelete() {
         guard let task = pendingDeleteTask else { return }
+        let usageCommand = pendingDeleteUsageCommand
+        pendingDeleteUsageCommand = nil
         let title = task.title
         let deletedId = task.id
         pendingDeleteTask = nil
@@ -1128,11 +1177,13 @@ final class VoiceCommandViewModel {
         if lastActiveChatTaskContext?.taskID == deletedId {
             lastActiveChatTaskContext = nil
         }
+        recordFreeAIUsageIfNeeded(usageCommand)
         emitAssistantResponse(String(format: uiLanguage.strings.chatDeleteSuccess, title), nextState: .success, stream: true)
     }
 
     func chatCancelDelete() {
         pendingDeleteTask = nil
+        pendingDeleteUsageCommand = nil
         emitAssistantResponse(uiLanguage.strings.chatDeleteCanceled, nextState: .error, stream: false)
     }
 
@@ -1302,6 +1353,7 @@ final class VoiceCommandViewModel {
                 """)
         }
         emitAssistantResponse(reply, nextState: .success, stream: true)
+        recordFreeAIUsageIfNeeded(command)
     }
 
     func clearActiveChatTaskContext() {
@@ -1392,7 +1444,9 @@ final class VoiceCommandViewModel {
         parsedCommand = nil
         pendingConflictCommand = nil
         pendingDeleteTask = nil
+        pendingDeleteUsageCommand = nil
         pendingEditAction = nil
+        pendingDisambiguationUsageCommand = nil
         disambiguationCandidates = []
         lastActiveChatTaskContext = nil
         Self.log.info("[VoiceChat] chatDismissReset completed — state ready for new session")

@@ -45,10 +45,7 @@ struct ChatTaskApp: App {
 private struct AppShellView: View {
     @AppStorage(AppUILanguage.storageKey) private var languageRaw: String = AppUILanguage.defaultForDevice().rawValue
     @AppStorage(AppColorTheme.storageKey) private var themeRaw: String = AppColorTheme.white.rawValue
-    @AppStorage(FirstLaunchOnboarding.paywallSuppressedUntilTaskCountKey) private var paywallSuppressedUntilTaskCount = 0
-    @Environment(SubscriptionManager.self) private var subscriptionManager
     @Environment(\.scenePhase) private var scenePhase
-    @Query private var allTasks: [TaskItem]
 
     @State private var showPaywall = false
     @State private var didRunRootOnAppearWarmup = false
@@ -71,11 +68,11 @@ private struct AppShellView: View {
                     .environment(\.themePalette, themePalette)
                     .environment(\.locale, uiLang.locale)
             }
-            .onChange(of: allTasks.count) { _, newCount in
-                if newCount <= paywallSuppressedUntilTaskCount { return }
-                if !showPaywall && subscriptionManager.shouldShowPaywall(taskCount: newCount) {
-                    showPaywall = true
-                }
+            .onReceive(NotificationCenter.default.publisher(for: .chatTaskPresentPaywall)) { _ in
+                #if DEBUG
+                print("[PaywallGate] presenting paywall sheet reason=freeAILimit")
+                #endif
+                showPaywall = true
             }
             // Backend warm-up: SwiftUI lifecycle (not only `App.init`); `BackendWarmup` deduplicates in-session.
             .onAppear {

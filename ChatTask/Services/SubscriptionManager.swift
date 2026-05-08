@@ -3,6 +3,13 @@ import Observation
 import os.log
 import StoreKit
 
+// MARK: - Notifications
+
+extension Notification.Name {
+    /// Posted when free AI usage is exhausted and the app should present `PaywallView`.
+    static let chatTaskPresentPaywall = Notification.Name("ChatTaskPresentPaywall")
+}
+
 // MARK: - Purchase state
 
 enum PurchaseState: Equatable {
@@ -57,6 +64,12 @@ final class SubscriptionManager {
         didSet { UserDefaults.standard.set(paywallWasDismissed, forKey: Keys.paywallWasDismissed) }
     }
 
+    /// Persisted count of **successful** AI (LLM) chat actions while the user was not subscribed.
+    /// Increment only after a successful task change from an LLM-backed parse; subscribed users bypass the limit.
+    private(set) var freeAIParseSuccessCount: Int {
+        didSet { UserDefaults.standard.set(freeAIParseSuccessCount, forKey: Keys.freeAIParseSuccessCount) }
+    }
+
     // MARK: - Private
 
     private var listenerTask: Task<Void, Never>?
@@ -66,6 +79,10 @@ final class SubscriptionManager {
     init() {
         isProUnlocked       = UserDefaults.standard.bool(forKey: Keys.isProUnlocked)
         paywallWasDismissed = UserDefaults.standard.bool(forKey: Keys.paywallWasDismissed)
+        freeAIParseSuccessCount = UserDefaults.standard.integer(forKey: Keys.freeAIParseSuccessCount)
+        #if DEBUG
+        print("[PaywallGate] SubscriptionManager init isProUnlocked=\(isProUnlocked) freeAIUsage=\(freeAIParseSuccessCount)/\(SubscriptionConfig.freeAIParseAllowance)")
+        #endif
     }
 
     // MARK: - App launch startup
@@ -131,6 +148,9 @@ final class SubscriptionManager {
             await tx.finish()
         }
         isProUnlocked = hasActive
+        #if DEBUG
+        print("[PaywallGate] checkEntitlements isProUnlocked=\(isProUnlocked)")
+        #endif
     }
 
     // MARK: - Purchase
@@ -188,13 +208,28 @@ final class SubscriptionManager {
 
     var isPremium: Bool { isProUnlocked }
 
-    /// Returns `true` when the paywall should be presented.
-    /// Never `true` on first launch — requires the user to have created
-    /// at least `SubscriptionConfig.paywallTriggerTaskCount` tasks first.
-    func shouldShowPaywall(taskCount: Int) -> Bool {
-        !isProUnlocked && !paywallWasDismissed
-            && taskCount >= SubscriptionConfig.paywallTriggerTaskCount
+    /// `true` when the user may run another AI parse (LLM) without subscribing.
+    func canUseFreeAIParseSlot() -> Bool {
+        isProUnlocked || freeAIParseSuccessCount < SubscriptionConfig.freeAIParseAllowance
     }
+
+    /// Call after a **successful** chat outcome driven by an LLM-backed `ParsedCommand`.
+    func recordSuccessfulFreeAIParseIfNeeded() {
+        guard !isProUnlocked else { return }
+        freeAIParseSuccessCount += 1
+        Self.log.info("[PaywallGate] freeAIParseSuccessCount=\(self.freeAIParseSuccessCount, privacy: .public) limit=\(SubscriptionConfig.freeAIParseAllowance, privacy: .public)")
+        #if DEBUG
+        print("[PaywallGate] recorded free AI usage; count=\(freeAIParseSuccessCount)/\(SubscriptionConfig.freeAIParseAllowance) isSubscribed=\(isProUnlocked)")
+        #endif
+    }
+
+    #if DEBUG
+    /// Resets the free AI usage counter (debug only).
+    func resetFreeAIParseUsageForDebug() {
+        freeAIParseSuccessCount = 0
+        print("[PaywallGate] DEBUG reset freeAIParseSuccessCount=0")
+    }
+    #endif
 
     /// Records that the user dismissed the paywall without subscribing.
     func dismissPaywall() {
@@ -226,7 +261,8 @@ final class SubscriptionManager {
     }
 
     private enum Keys {
-        static let isProUnlocked       = "subscriptionIsProUnlocked"
-        static let paywallWasDismissed = "subscriptionPaywallDismissed"
+        static let isProUnlocked          = "subscriptionIsProUnlocked"
+        static let paywallWasDismissed    = "subscriptionPaywallDismissed"
+        static let freeAIParseSuccessCount = "freeAIParseSuccessCount"
     }
 }
