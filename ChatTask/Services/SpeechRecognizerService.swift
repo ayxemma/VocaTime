@@ -101,7 +101,7 @@ final class SpeechRecognizerService: SpeechManaging {
     /// sub-threshold audio before end-of-speech silence can count down.
     private static let quietTicksBeforeSilenceEligible: Int = 12
     /// Sustained silence (after `quietTicksBeforeSilenceEligible`) before auto-stop.
-    private static let requiredSilenceDuration: Double = 2.5
+    private static let requiredSilenceDuration: Double = 1.5
     /// No auto-stop from silence during the first N seconds (manual stop always allowed).
     private static let minimumDurationBeforeAutoStop: Double = 2.0
     /// Service-level safety cap in case the view-model safety timer is interrupted.

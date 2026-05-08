@@ -616,7 +616,7 @@ final class VoiceCommandViewModel {
         if startReason == "autoRelisten", !cancelledFollowUpWindow {
             Self.log.info("[VoiceChat] followUpWindowCancelled reason=recordingStarted")
         }
-        Self.log.info("[VoiceChat] listening active — auto-stop only after ~3s below-threshold hangover + ~2.5s quiet; min recording 2s before auto-stop; max 60s; tap mic to stop")
+        Self.log.info("[VoiceChat] listening active — auto-stop only after ~3s below-threshold hangover + ~1.5s quiet (~4.5s total after last speech); min recording 2s before auto-stop; max 60s; tap mic to stop")
         Self.log.info("[VoiceChat] recordingSessionParams note=see SpeechRecognizerService silence metering")
     }
 
