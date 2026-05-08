@@ -91,17 +91,19 @@ final class SpeechRecognizerService: SpeechManaging {
     private static let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "VocaTime", category: "Speech")
 
     // MARK: - Silence detection tuning
-    /// Smoothed dBFS above this is treated as meaningful sound. This is intentionally forgiving
-    /// for soft speech, turning away from the mic, and natural multilingual phrasing.
-    private static let silenceThresholdDb: Float = -45.0
-    /// EMA smoothing per metering tick (`smoothed = (1-α)*smoothed + α*raw`) to ignore single-buffer noise spikes.
-    private static let levelSmoothingAlpha: Float = 0.28
-    /// Quiet ticks required before silence is eligible. At 250 ms this gives a 2 s speech hangover.
-    private static let quietTicksBeforeSilenceEligible: Int = 8
-    /// Sustained silence required before auto-stop.
-    private static let requiredSilenceDuration: Double = 6.0
-    /// Minimum session length before auto-silence may fire.
-    private static let minimumDurationBeforeAutoStop: Double = 3.0
+    /// Smoothed dBFS above this is treated as meaningful sound. More negative = softer audio still
+    /// counts as "speech", which avoids auto-stop mid-phrase on long, quieter utterances.
+    private static let silenceThresholdDb: Float = -52.0
+    /// EMA smoothing per metering tick (`smoothed = (1-α)*smoothed + α*raw`) — slightly slower
+    /// reaction so brief level dips inside a sentence do not immediately read as silence.
+    private static let levelSmoothingAlpha: Float = 0.22
+    /// Quiet ticks required before silence is eligible. At 250 ms × 12 = 3 s consecutive
+    /// sub-threshold audio before end-of-speech silence can count down.
+    private static let quietTicksBeforeSilenceEligible: Int = 12
+    /// Sustained silence (after `quietTicksBeforeSilenceEligible`) before auto-stop.
+    private static let requiredSilenceDuration: Double = 2.5
+    /// No auto-stop from silence during the first N seconds (manual stop always allowed).
+    private static let minimumDurationBeforeAutoStop: Double = 2.0
     /// Service-level safety cap in case the view-model safety timer is interrupted.
     private static let maxRecordingDuration: Double = 60.0
     /// Metering poll interval.
@@ -454,17 +456,21 @@ final class SpeechRecognizerService: SpeechManaging {
                     self.currentBestConfidence = confidence
 
                     if result.isFinal {
-                        Self.log.info("[Speech] recognitionFinal transcript=\(transcript, privacy: .public)")
+                        Self.log.info("[Speech] recognitionAppleFinal transcriptChars=\(transcript.count, privacy: .public) privacyRedacted=true stillRecording=\(self.audioEngine != nil, privacy: .public)")
                         self.stopSessionReceivedAppleFinal = true
                         self.resumeFinalContinuation(with: transcript)
-                        let captureResult = LocalSpeechCaptureResult(
-                            transcript: transcript,
-                            isFinal: true,
-                            confidence: confidence,
-                            audioURL: self.recordingFileURL,
-                            duration: Date().timeIntervalSince(self.recordingStartTime ?? Date())
-                        )
-                        self.onFinalResult?(captureResult)
+                        // Apple may emit `isFinal` for phrase boundaries while the mic is still open.
+                        // Never notify `onFinalResult` during live capture — avoids premature processing.
+                        if self.audioEngine == nil {
+                            let captureResult = LocalSpeechCaptureResult(
+                                transcript: transcript,
+                                isFinal: true,
+                                confidence: confidence,
+                                audioURL: self.recordingFileURL,
+                                duration: Date().timeIntervalSince(self.recordingStartTime ?? Date())
+                            )
+                            self.onFinalResult?(captureResult)
+                        }
                     } else {
                         self.onPartialTranscript?(transcript)
                     }
@@ -584,8 +590,8 @@ final class SpeechRecognizerService: SpeechManaging {
 
                 if recordingDuration >= SpeechRecognizerService.maxRecordingDuration {
                     if autoStopEnabled {
-                        SpeechRecognizerService.log.info(
-                            "[Speech] autoStopTriggered reason=maxDuration recordingDuration=\(recordingDuration, privacy: .public)s"
+                        SpeechRecognizerService.log.warning(
+                            "[Speech] autoStopTriggered reason=maxDuration recordingDuration=\(recordingDuration, privacy: .public)s max=\(SpeechRecognizerService.maxRecordingDuration, privacy: .public)s"
                         )
                         self.autoStopCallback?()
                     }

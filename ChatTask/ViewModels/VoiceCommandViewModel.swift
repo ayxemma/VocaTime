@@ -600,7 +600,7 @@ final class VoiceCommandViewModel {
             autoStopBehavior: .enabled,
             onAutoStop: { [weak self] in
                 guard let self, self.chatFlowState == .listening else { return }
-                Self.log.info("[VoiceChat] autoStopTriggered reason=autoSilence")
+                Self.log.info("[VoiceChat] autoStopTriggered reason=silenceMeteringElapsed")
                 Task { await self.chatFinalizeListening(stopReason: .autoSilence) }
             }
         )
@@ -616,7 +616,8 @@ final class VoiceCommandViewModel {
         if startReason == "autoRelisten", !cancelledFollowUpWindow {
             Self.log.info("[VoiceChat] followUpWindowCancelled reason=recordingStarted")
         }
-        Self.log.info("[VoiceChat] listening active — auto-silence after sustained pause; maxDurationStop=60s; manual stop immediate")
+        Self.log.info("[VoiceChat] listening active — auto-stop only after ~3s below-threshold hangover + ~2.5s quiet; min recording 2s before auto-stop; max 60s; tap mic to stop")
+        Self.log.info("[VoiceChat] recordingSessionParams note=see SpeechRecognizerService silence metering")
     }
 
     // MARK: - Finalize listening (orchestrator)
@@ -637,7 +638,7 @@ final class VoiceCommandViewModel {
         chatDraftText = ""
 
         let pipelineT0 = CFAbsoluteTimeGetCurrent()
-        Self.log.info("[VoiceChat] stoppingListening stopReason=\(stopReason.rawValue, privacy: .public)")
+        Self.log.info("[VoiceChat] recordingStopped enteringProcessing stopReason=\(stopReason.rawValue, privacy: .public)")
         let stopT0 = CFAbsoluteTimeGetCurrent()
         let captureOutcome = await speechService.stopListening(waitForLocalFinal: false)
         Self.log.info("[VoiceChat] latency stopListening ms=\(latencyMs(since: stopT0), privacy: .public)")
@@ -813,6 +814,7 @@ final class VoiceCommandViewModel {
             chatFlowState = .idle
             return
         }
+        Self.log.info("[VoiceChat] transcriptionCompleted transcriptChars=\(trimmed.count, privacy: .public) next=idleAwaitingUserSend")
         Self.log.info("[VoiceChat] transcriptDeliveredToInputField=\(trimmed, privacy: .public)")
         voiceDraftErrorMessage = nil
         voiceDraftAwaitingSubmit = true
@@ -829,6 +831,8 @@ final class VoiceCommandViewModel {
             handlePaywallBlockedParse()
             return
         }
+
+        Self.log.info("[VoiceChat] parseStarted")
 
         Self.log.info("[VoiceChat] parse input appUILanguage=\(self.uiLanguage.rawValue, privacy: .public) activeTaskID=\(self.lastActiveChatTaskContext?.taskID.uuidString ?? "nil", privacy: .public) transcript=\(transcript, privacy: .public)")
         let command = await parsingCoordinator.parse(
