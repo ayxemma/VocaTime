@@ -542,7 +542,11 @@ final class SpeechRecognizerService: SpeechManaging {
             guard let self else { return }
             let recordingStartTime = self.recordingStartTime ?? Date()
             var lastSoundDetectedAt = recordingStartTime
-            var smoothedDb: Float = self.lastBufferPowerLevel
+            /// Bootstrap smoothed level from the first real sample — initializing from -160 made
+            /// `smoothedDb` lag many ticks behind speech, so `isSound` stayed false and
+            /// `lastSoundDetectedAt` never moved (silence appeared counted from recording start).
+            var smoothedDb: Float = 0
+            var didSeedSmoothedDb = false
             var lastDiagnosticWallTime = CFAbsoluteTimeGetCurrent()
             var wasSilent = false
             var didReportFirstSound = false
@@ -556,19 +560,29 @@ final class SpeechRecognizerService: SpeechManaging {
                 try? await Task.sleep(nanoseconds: SpeechRecognizerService.meterPollNanoseconds)
                 guard !Task.isCancelled else { break }
 
-                let rawDb = self.lastBufferPowerLevel
+                let rawDbRaw = self.lastBufferPowerLevel
+                let rawDb = rawDbRaw.isFinite ? rawDbRaw : -160.0
                 let alpha = SpeechRecognizerService.levelSmoothingAlpha
-                smoothedDb = smoothedDb * (1 - alpha) + rawDb * alpha
+                if !didSeedSmoothedDb {
+                    smoothedDb = rawDb
+                    didSeedSmoothedDb = true
+                } else {
+                    smoothedDb = smoothedDb * (1 - alpha) + rawDb * alpha
+                }
+                if !smoothedDb.isFinite { smoothedDb = rawDb }
                 let now = Date()
                 let recordingDuration = now.timeIntervalSince(recordingStartTime)
-                let isSound = smoothedDb > SpeechRecognizerService.silenceThresholdDb
+                let threshold = SpeechRecognizerService.silenceThresholdDb
+                /// Either instantaneous or smoothed above threshold counts as speech so EMA lag
+                /// cannot suppress `lastSoundDetectedAt` updates during continuous talking.
+                let isSound = (rawDb > threshold) || (smoothedDb > threshold)
 
                 if isSound {
                     quietTickCount = 0
                     lastSoundDetectedAt = now
                     if !didReportFirstSound || wasSilent {
                         SpeechRecognizerService.log.info(
-                            "[Speech] soundDetected rawLevel=\(rawDb, privacy: .public)dB smoothedLevel=\(smoothedDb, privacy: .public)dB threshold=\(SpeechRecognizerService.silenceThresholdDb, privacy: .public)dB quietTickCount=\(quietTickCount, privacy: .public) lastSoundDetectedAt=\(lastSoundDetectedAt.timeIntervalSince1970, privacy: .public)"
+                            "[Speech] soundDetected lastSoundDetectedAtUpdated rawDb=\(rawDb, privacy: .public)dB smoothedDb=\(smoothedDb, privacy: .public)dB threshold=\(threshold, privacy: .public)dB speechDetected=true quietTicks=0"
                         )
                         self.onSpeechDetected?()
                     }
@@ -578,13 +592,15 @@ final class SpeechRecognizerService: SpeechManaging {
                     quietTickCount += 1
                 }
 
+                /// True silence length since the last *speech* tick — never derived from recordingStartTime alone.
                 let silenceDuration = now.timeIntervalSince(lastSoundDetectedAt)
 
                 let wallNow = CFAbsoluteTimeGetCurrent()
                 if wallNow - lastDiagnosticWallTime >= 1.0 {
                     lastDiagnosticWallTime = wallNow
+                    let lastSoundAge = silenceDuration
                     SpeechRecognizerService.log.info(
-                        "[Speech] metering rawLevel=\(rawDb, privacy: .public)dB smoothedLevel=\(smoothedDb, privacy: .public)dB threshold=\(SpeechRecognizerService.silenceThresholdDb, privacy: .public)dB quietTickCount=\(quietTickCount, privacy: .public) recordingDuration=\(recordingDuration, privacy: .public)s silenceDuration=\(silenceDuration, privacy: .public)s lastSoundDetectedAt=\(lastSoundDetectedAt.timeIntervalSince1970, privacy: .public)"
+                        "[Speech] metering1Hz rawDb=\(rawDb, privacy: .public) smoothedDb=\(smoothedDb, privacy: .public) threshold=\(threshold, privacy: .public) speechDetected=\(isSound, privacy: .public) lastSoundAgeSec=\(lastSoundAge, privacy: .public) quietTickCount=\(quietTickCount, privacy: .public) recordingSec=\(recordingDuration, privacy: .public) didReportFirstSound=\(didReportFirstSound, privacy: .public)"
                     )
                 }
 
@@ -598,12 +614,17 @@ final class SpeechRecognizerService: SpeechManaging {
                     break
                 }
 
+                // Silence-based stop uses only lastSoundDetectedAt + min/max recording guards.
+                // Do not fire until we've seen at least one speech tick (otherwise smoothing/threshold
+                // startup could look like "silence since t0" while the user is talking).
+                guard didReportFirstSound else { continue }
+
                 guard !isSound else { continue }
                 guard quietTickCount >= SpeechRecognizerService.quietTicksBeforeSilenceEligible else { continue }
                 if !wasSilent {
                     wasSilent = true
                     SpeechRecognizerService.log.info(
-                        "[Speech] silenceDetected duration=\(silenceDuration, privacy: .public)s rawLevel=\(rawDb, privacy: .public)dB smoothedLevel=\(smoothedDb, privacy: .public)dB threshold=\(SpeechRecognizerService.silenceThresholdDb, privacy: .public)dB quietTickCount=\(quietTickCount, privacy: .public) lastSoundDetectedAt=\(lastSoundDetectedAt.timeIntervalSince1970, privacy: .public)"
+                        "[Speech] silenceEligibleAfterHangover silenceSinceLastSoundSec=\(silenceDuration, privacy: .public) rawDb=\(rawDb, privacy: .public)dB smoothedDb=\(smoothedDb, privacy: .public)dB quietTickCount=\(quietTickCount, privacy: .public)"
                     )
                 }
 
@@ -612,7 +633,7 @@ final class SpeechRecognizerService: SpeechManaging {
 
                 if autoStopEnabled {
                     SpeechRecognizerService.log.info(
-                        "[Speech] autoStopTriggered reason=silence silenceDuration=\(silenceDuration, privacy: .public)s recordingDuration=\(recordingDuration, privacy: .public)s rawLevel=\(rawDb, privacy: .public)dB smoothedLevel=\(smoothedDb, privacy: .public)dB threshold=\(SpeechRecognizerService.silenceThresholdDb, privacy: .public)dB quietTickCount=\(quietTickCount, privacy: .public) lastSoundDetectedAt=\(lastSoundDetectedAt.timeIntervalSince1970, privacy: .public)"
+                        "[Speech] autoStopTriggered reason=silence silenceSinceLastSoundSec=\(silenceDuration, privacy: .public)s recordingSec=\(recordingDuration, privacy: .public)s rawDb=\(rawDb, privacy: .public)dB smoothedDb=\(smoothedDb, privacy: .public)dB threshold=\(threshold, privacy: .public)dB quietTickCount=\(quietTickCount, privacy: .public) lastSoundDetectedAt=\(lastSoundDetectedAt.timeIntervalSince1970, privacy: .public)"
                     )
                     self.autoStopCallback?()
                 }
@@ -630,18 +651,48 @@ final class SpeechRecognizerService: SpeechManaging {
 
     /// Computes RMS power (dBFS) from the first channel of a PCM buffer.
     /// Called from the AVAudioEngine tap (background thread) — must be nonisolated.
+    /// Supports Float32 and Int16 taps; invalid buffers return a quiet floor (not NaN).
     nonisolated private static func computePowerLevel(_ buffer: AVAudioPCMBuffer) -> Float {
-        guard let channelData = buffer.floatChannelData,
-              buffer.frameLength > 0 else { return -160 }
         let count = Int(buffer.frameLength)
-        let samples = channelData[0]
-        var sumSquares: Float = 0
-        for i in 0..<count {
-            let s = samples[i]
-            sumSquares += s * s
+        guard count > 0 else { return -160 }
+        let rms: Float
+        switch buffer.format.commonFormat {
+        case .pcmFormatFloat32:
+            guard let channelData = buffer.floatChannelData else { return -160 }
+            let samples = channelData[0]
+            var sumSquares: Float = 0
+            for i in 0..<count {
+                let s = samples[i]
+                sumSquares += s * s
+            }
+            rms = sqrt(sumSquares / Float(count))
+        case .pcmFormatInt16:
+            guard let channelData = buffer.int16ChannelData else { return -160 }
+            let samples = channelData[0]
+            var sumSquares: Float = 0
+            let scale: Float = 1.0 / 32768.0
+            for i in 0..<count {
+                let s = Float(samples[i]) * scale
+                sumSquares += s * s
+            }
+            rms = sqrt(sumSquares / Float(count))
+        default:
+            if let channelData = buffer.floatChannelData {
+                let samples = channelData[0]
+                var sumSquares: Float = 0
+                for i in 0..<count {
+                    let s = samples[i]
+                    sumSquares += s * s
+                }
+                rms = sqrt(sumSquares / Float(count))
+            } else {
+                return -160
+            }
         }
-        let rms = sqrt(sumSquares / Float(count))
-        return rms > 0 ? 20 * log10(rms) : -160
+        guard rms.isFinite, rms > 0 else { return -160 }
+        let db = 20 * log10(max(rms, 1e-12))
+        guard db.isFinite else { return -160 }
+        return min(0, max(-160, db))
     }
 
     // MARK: - Teardown
