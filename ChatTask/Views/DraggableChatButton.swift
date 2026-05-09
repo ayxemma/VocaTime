@@ -31,7 +31,8 @@ private enum DraggableChatButtonMetrics {
     static let size: CGFloat = 56
     static let edgeMargin: CGFloat = 16
     static let onboardingTooltipWidth: CGFloat = 292
-    static let onboardingTooltipBubbleHeight: CGFloat = 132
+    /// Room for title, body, optional “Try:” line, and highlighted example pill.
+    static let onboardingTooltipBubbleHeight: CGFloat = 176
     static let onboardingTooltipPointerHeight: CGFloat = 10
     static let onboardingTooltipGap: CGFloat = 22
     /// Small gap above the home indicator / bottom safe inset (8–16 pt range; keeps the
@@ -373,8 +374,21 @@ private struct OnboardingCoachmarkTooltip: View {
     let pointerPointsDown: Bool
     let onDismiss: () -> Void
 
+    @Environment(\.themePalette) private var themePalette
+    @Environment(\.colorScheme) private var colorScheme
+
     @State private var didAnimateIn = false
     @State private var revealedCharacterCount = 0
+
+    private var exampleParts: (prefix: String, phrase: String) {
+        OnboardingVoiceExampleFormatting.split(example)
+    }
+
+    private var phraseToReveal: String {
+        let phrase = exampleParts.phrase
+        if !phrase.isEmpty { return phrase }
+        return example.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -385,7 +399,7 @@ private struct OnboardingCoachmarkTooltip: View {
             }
 
             HStack(alignment: .top, spacing: 10) {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 8) {
                     Text(title)
                         .font(.system(size: 19, weight: .bold))
                         .foregroundStyle(.primary)
@@ -393,10 +407,13 @@ private struct OnboardingCoachmarkTooltip: View {
                         .font(.system(size: 15, weight: .regular))
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
-                    Text(revealedExample)
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(.primary)
-                        .fixedSize(horizontal: false, vertical: true)
+                    if !exampleParts.prefix.isEmpty {
+                        Text(exampleParts.prefix)
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    examplePhrasePill(text: revealedPhrase)
                 }
                 Spacer(minLength: 8)
                 Button(action: onDismiss) {
@@ -432,13 +449,36 @@ private struct OnboardingCoachmarkTooltip: View {
         }
         .opacity(didAnimateIn ? 1 : 0)
         .offset(y: didAnimateIn ? 0 : 8)
+        .accessibilityElement(children: .combine)
         .task(id: example) {
             revealedCharacterCount = 0
             withAnimation(.easeOut(duration: 0.35)) {
                 didAnimateIn = true
             }
-            await reveal(example)
+            await reveal(phraseToReveal)
         }
+    }
+
+    @ViewBuilder
+    private func examplePhrasePill(text: String) -> some View {
+        let accentFillOpacity = colorScheme == .dark ? 0.22 : 0.12
+        let accentStrokeOpacity = colorScheme == .dark ? 0.55 : 0.38
+        Text(text)
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(themePalette.textPrimary)
+            .multilineTextAlignment(.leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(themePalette.accentColor.opacity(accentFillOpacity))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(themePalette.accentColor.opacity(accentStrokeOpacity), lineWidth: 1)
+            )
+            .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.25 : 0.08), radius: 5, y: 2)
     }
 
     private var pointer: some View {
@@ -450,15 +490,15 @@ private struct OnboardingCoachmarkTooltip: View {
             )
     }
 
-    private var revealedExample: String {
-        String(example.prefix(revealedCharacterCount))
+    private var revealedPhrase: String {
+        String(phraseToReveal.prefix(revealedCharacterCount))
     }
 
-    private func reveal(_ example: String) async {
+    private func reveal(_ phrase: String) async {
         let totalDurationNanos: UInt64 = 850_000_000
-        let count = max(example.count, 1)
+        let count = max(phrase.count, 1)
         let delay = max(totalDurationNanos / UInt64(count), 12_000_000)
-        for index in 1...example.count {
+        for index in 1...phrase.count {
             try? await Task.sleep(nanoseconds: delay)
             guard !Task.isCancelled else { return }
             revealedCharacterCount = index

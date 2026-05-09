@@ -243,6 +243,23 @@ struct AppThemePalette {
     }
 }
 
+// MARK: - Onboarding voice example (localized “Try:” / “例：” prefix vs phrase)
+
+enum OnboardingVoiceExampleFormatting {
+    /// Splits strings like `Try: Remind me…` into a short prefix (including colon) and the example phrase for highlighting.
+    static func split(_ raw: String) -> (prefix: String, phrase: String) {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let idx = trimmed.firstIndex(where: { $0 == ":" || $0 == "：" }) else {
+            return ("", trimmed)
+        }
+        let prefix = String(trimmed[...idx]).trimmingCharacters(in: .whitespaces)
+        let after = trimmed.index(after: idx)
+        let phrase = String(trimmed[after...]).trimmingCharacters(in: .whitespaces)
+        if phrase.isEmpty { return ("", trimmed) }
+        return (prefix, phrase)
+    }
+}
+
 // MARK: - Environment
 
 private enum AppThemePaletteKey: EnvironmentKey {

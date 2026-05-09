@@ -9,6 +9,7 @@ struct ChatSheetView: View {
 
     @Environment(\.appUILanguage) private var appUILanguage
     @Environment(\.themePalette) private var themePalette
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(SubscriptionManager.self) private var subscriptionManager
     @Environment(\.dismiss) private var dismiss
     @Environment(\.locale) private var locale
@@ -293,18 +294,44 @@ struct ChatSheetView: View {
     }
 
     private func starterPrompt(s: AppStrings) -> some View {
-        HStack(alignment: .top, spacing: 8) {
+        let parts = OnboardingVoiceExampleFormatting.split(s.onboardingVoiceExample)
+        let examplePhrase = parts.phrase.isEmpty ? s.onboardingVoiceExample.trimmingCharacters(in: .whitespacesAndNewlines) : parts.phrase
+        let accentFillOpacity = colorScheme == .dark ? 0.22 : 0.12
+        let accentStrokeOpacity = colorScheme == .dark ? 0.55 : 0.38
+        return HStack(alignment: .top, spacing: 8) {
             Image(systemName: "sparkles")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(themePalette.accentColor)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 8) {
                 Text(s.onboardingTapFabHint)
                     .font(typography.caption)
                     .foregroundStyle(.secondary)
-                Text(s.onboardingVoiceExample)
+                    .fixedSize(horizontal: false, vertical: true)
+                if !parts.prefix.isEmpty {
+                    Text(parts.prefix)
+                        .font(typography.caption)
+                        .fontWeight(.medium)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Text(examplePhrase)
                     .font(typography.caption)
-                    .fontWeight(.medium)
-                    .foregroundStyle(.primary)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(themePalette.textPrimary)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 9)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(themePalette.accentColor.opacity(accentFillOpacity))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .strokeBorder(themePalette.accentColor.opacity(accentStrokeOpacity), lineWidth: 1)
+                    )
+                    .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.22 : 0.07), radius: 4, y: 2)
             }
             .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 8)
@@ -322,9 +349,10 @@ struct ChatSheetView: View {
             .accessibilityLabel(s.paywallCloseA11y)
         }
         .padding(.horizontal, 10)
-        .padding(.vertical, 8)
+        .padding(.vertical, 10)
         .background(Color(.secondarySystemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .accessibilityElement(children: .combine)
     }
 
     private func completeOnboardingFromInput() {
