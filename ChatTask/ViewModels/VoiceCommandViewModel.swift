@@ -983,6 +983,11 @@ final class VoiceCommandViewModel {
         subscriptionManager?.recordSuccessfulFreeAIParseIfNeeded()
     }
 
+    /// After an AI parse path has visibly persisted a task change (create/update/delete).
+    private func recordSuccessfulAIActionForAppReview() {
+        ReviewPromptManager.shared.recordSuccessfulAIAction()
+    }
+
     private func unclearCommandMessage() -> String {
         if uiLanguage == .en {
             return "Didn’t understand that — try something like:\n“Remind me in 10 minutes to drink water”"
@@ -1137,6 +1142,9 @@ final class VoiceCommandViewModel {
         emitAssistantResponse(msg, nextState: .success, stream: true)
         refreshActiveContext(from: task)
         recordFreeAIUsageIfNeeded(usageCommand)
+        if persistenceContext != nil {
+            recordSuccessfulAIActionForAppReview()
+        }
     }
 
     private func applyAppend(task: TaskItem, text: String, strings s: AppStrings, usageCommand: ParsedCommand?) {
@@ -1151,6 +1159,9 @@ final class VoiceCommandViewModel {
         emitAssistantResponse(String(format: s.chatAppendSuccess, task.title), nextState: .success, stream: true)
         refreshActiveContext(from: task)
         recordFreeAIUsageIfNeeded(usageCommand)
+        if persistenceContext != nil {
+            recordSuccessfulAIActionForAppReview()
+        }
     }
 
     private func applyRename(task: TaskItem, newTitle: String, strings s: AppStrings, usageCommand: ParsedCommand?) {
@@ -1161,6 +1172,9 @@ final class VoiceCommandViewModel {
         emitAssistantResponse(String(format: s.chatRenameSuccess, newTitle), nextState: .success, stream: true)
         refreshActiveContext(from: task)
         recordFreeAIUsageIfNeeded(usageCommand)
+        if persistenceContext != nil {
+            recordSuccessfulAIActionForAppReview()
+        }
     }
 
     // MARK: - Delete confirmation (unchanged)
@@ -1177,6 +1191,7 @@ final class VoiceCommandViewModel {
             TaskReminderService.shared.cancel(taskID: task.id)
             ctx.delete(task)
             try? ctx.save()
+            recordSuccessfulAIActionForAppReview()
         }
         if lastActiveChatTaskContext?.taskID == deletedId {
             lastActiveChatTaskContext = nil
@@ -1338,6 +1353,7 @@ final class VoiceCommandViewModel {
 
     private func commitSave(command: ParsedCommand) {
         let reply = confirmationMessage(for: command, userTranscript: command.originalText)
+        var didPersistNewTask = false
         if let ctx = persistenceContext {
             let resolvedDate = command.reminderDate ?? command.startDate
             print("""
@@ -1348,6 +1364,7 @@ final class VoiceCommandViewModel {
             """)
             let item = TaskItem.insertFromParsedCommand(command, context: ctx)
             refreshActiveContext(from: item)
+            didPersistNewTask = true
             Self.log.info("""
                 [VoiceChat] finalFrontendAction=createTask \
                 activeContextUsed=false \
@@ -1358,6 +1375,9 @@ final class VoiceCommandViewModel {
         }
         emitAssistantResponse(reply, nextState: .success, stream: true)
         recordFreeAIUsageIfNeeded(command)
+        if didPersistNewTask {
+            recordSuccessfulAIActionForAppReview()
+        }
     }
 
     func clearActiveChatTaskContext() {
