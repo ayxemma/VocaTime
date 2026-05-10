@@ -101,21 +101,7 @@ struct DraggableChatButton: View {
                             .contentShape(Rectangle())
                             .onTapGesture { onOnboardingDismiss() }
                             .zIndex(0)
-                    }
-
-                    if showOnboardingHighlight {
-                        OnboardingCoachmarkTooltip(
-                            title: onboardingTitle,
-                            bodyText: onboardingBody,
-                            example: onboardingExample,
-                            dismissAccessibilityLabel: onboardingDismissA11y,
-                            pointerX: tooltip.pointerX,
-                            pointerPointsDown: tooltip.pointerPointsDown,
-                            onDismiss: onOnboardingDismiss
-                        )
-                        .frame(width: DraggableChatButtonMetrics.onboardingTooltipWidth)
-                        .offset(x: tooltip.origin.x, y: tooltip.origin.y)
-                        .zIndex(1)
+                            .allowsHitTesting(true)
                     }
 
                     Image(systemName: "message.fill")
@@ -244,9 +230,9 @@ struct DraggableChatButton: View {
                                     }
                                 }
                         )
-                        .zIndex(2)
+                        .zIndex(showOnboardingHighlight ? 1 : 0)
                     #if DEBUG
-                    .onAppear {
+                        .onAppear {
                         if !didLogPlacementMode {
                             didLogPlacementMode = true
                             let mode = hasSavedPosition ? "saved" : "default_bottom_right"
@@ -257,6 +243,21 @@ struct DraggableChatButton: View {
                         logLayoutDebug(geo: geo, layout: layout, phase: "initial", droppedCenterY: nil)
                     }
                     #endif
+
+                    if showOnboardingHighlight {
+                        OnboardingCoachmarkTooltip(
+                            title: onboardingTitle,
+                            bodyText: onboardingBody,
+                            example: onboardingExample,
+                            dismissAccessibilityLabel: onboardingDismissA11y,
+                            pointerX: tooltip.pointerX,
+                            pointerPointsDown: tooltip.pointerPointsDown,
+                            onDismiss: onOnboardingDismiss
+                        )
+                        .frame(width: DraggableChatButtonMetrics.onboardingTooltipWidth)
+                        .offset(x: tooltip.origin.x, y: tooltip.origin.y)
+                        .zIndex(2)
+                    }
                 }
             }
         }
@@ -434,19 +435,20 @@ private struct OnboardingCoachmarkTooltip: View {
             )
             .background(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(.ultraThinMaterial)
+                    .fill(Color(.systemBackground))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+                    .strokeBorder(Color(.separator), lineWidth: 1)
             )
-            .shadow(color: .black.opacity(0.16), radius: 14, y: 5)
+            .shadow(color: .black.opacity(colorScheme == .dark ? 0.45 : 0.14), radius: 18, y: 6)
 
             if pointerPointsDown {
                 pointer
                     .padding(.leading, pointerX - 9)
             }
         }
+        .compositingGroup()
         .opacity(didAnimateIn ? 1 : 0)
         .offset(y: didAnimateIn ? 0 : 8)
         .accessibilityElement(children: .combine)
@@ -461,8 +463,8 @@ private struct OnboardingCoachmarkTooltip: View {
 
     @ViewBuilder
     private func examplePhrasePill(text: String) -> some View {
-        let accentFillOpacity = colorScheme == .dark ? 0.22 : 0.12
-        let accentStrokeOpacity = colorScheme == .dark ? 0.55 : 0.38
+        let accentFillOpacity = colorScheme == .dark ? 0.28 : 0.16
+        let accentStrokeOpacity = colorScheme == .dark ? 0.62 : 0.42
         Text(text)
             .font(.system(size: 14, weight: .semibold))
             .foregroundStyle(themePalette.textPrimary)
@@ -483,7 +485,7 @@ private struct OnboardingCoachmarkTooltip: View {
 
     private var pointer: some View {
         CoachmarkPointer()
-            .fill(.ultraThinMaterial)
+            .fill(Color(.systemBackground))
             .frame(
                 width: 18,
                 height: DraggableChatButtonMetrics.onboardingTooltipPointerHeight
