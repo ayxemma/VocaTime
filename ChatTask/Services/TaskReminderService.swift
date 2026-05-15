@@ -10,8 +10,9 @@ import UserNotifications
 ///   appropriate triggers.
 /// - Call `cancel(taskID:)` when a task is deleted or marked complete.
 ///
-/// Only tasks with a future, wall-clock-specific `scheduledDate` are eligible
-/// (date-only / midnight is skipped).
+/// One-off tasks need a future, wall-clock-specific `scheduledDate`.
+/// Recurring weekly tasks use recurrence metadata and schedule the next 14
+/// occurrence notifications as one-off calendar triggers.
 ///
 /// For tasks with a specific time, two **non-overlapping** local notifications
 /// may be used:
@@ -19,6 +20,8 @@ import UserNotifications
 ///   the offset is > 0 and the fire time is still in the future. No custom actions.
 /// - **Exact** (`<uuid>_exact`) — at `scheduledDate` when that moment is still in the
 ///   future. Uses category `chattask.exact` with **Done** and **Snooze 10 min** actions.
+/// - **Recurring** (`<uuid>_rec_<n>_pre`, `<uuid>_rec_<n>_exact`) — next 14 weekly
+///   occurrences only, still using exact + pre behavior.
 /// - **Snoozed** (`<uuid>_snooze_<ts>`) — one-off follow-up from a snooze; title "Reminder", no pre / no actions.
 ///
 /// **Delegate:** This class also acts as `UNUserNotificationCenterDelegate`.
@@ -146,7 +149,7 @@ final class TaskReminderService: NSObject, UNUserNotificationCenterDelegate {
                 pending: requests
             )
             self.center.removePendingNotificationRequests(withIdentifiers: toRemove)
-            print("[Reminder] cancel() — id=\(ids.base) removedIds=\(toRemove.count) (legacy+pre+exact+snoozes)")
+            print("[Reminder] cancel() — id=\(ids.base) removedIds=\(toRemove.count) (legacy+pre+exact+snoozes+recurrence)")
         }
     }
 
@@ -236,6 +239,11 @@ final class TaskReminderService: NSObject, UNUserNotificationCenterDelegate {
             return
         }
 
+        if task.isRecurring {
+            performRecurringScheduleAdditions(task: task, ids: ids)
+            return
+        }
+
         guard let scheduledDate = task.scheduledDate else {
             print("[Reminder] skip — no scheduledDate (id=\(ids.base))")
             return
@@ -252,66 +260,93 @@ final class TaskReminderService: NSObject, UNUserNotificationCenterDelegate {
         if offsetMinutes > 0 {
             let preFire = scheduledDate.addingTimeInterval(-Double(offsetMinutes) * 60)
             if preFire > now {
-                let content = UNMutableNotificationContent()
-                content.title = task.title
-                content.body = Self.preReminderBody
-                content.sound = .default
-                let preComps = Calendar.current.dateComponents(
-                    [.year, .month, .day, .hour, .minute],
-                    from: preFire
-                )
-                let preTrigger = UNCalendarNotificationTrigger(dateMatching: preComps, repeats: false)
-                let preRequest = UNNotificationRequest(
+                addPreReminderRequest(
                     identifier: ids.pre,
-                    content: content,
-                    trigger: preTrigger
+                    taskID: ids.base,
+                    taskTitle: task.title,
+                    fireDate: preFire,
+                    calendar: .current
                 )
-                center.add(preRequest) { [weak self] error in
-                    if let error {
-                        print("[Reminder] ERROR pre-reminder add — id=\(ids.pre) error=\(error)")
-                    } else {
-                        print("[Reminder] pre-reminder scheduled — id=\(ids.pre) taskId=\(ids.base) fireDate=\(preFire)")
-                        self?.center.getPendingNotificationRequests { requests in
-                            let found = requests.contains { $0.identifier == ids.pre }
-                            print("[Reminder] pendingVerify pre — id=\(ids.pre) foundInQueue=\(found) totalPending=\(requests.count)")
-                        }
-                    }
-                }
             } else {
                 print("[Reminder] skipped due to past time — kind=pre id=\(ids.pre) taskId=\(ids.base) triggerDate=\(preFire) now=\(now)")
             }
         }
 
         if scheduledDate > now {
-            let content = UNMutableNotificationContent()
-            content.title = Self.exactTimeTitle
-            content.body = task.title
-            content.categoryIdentifier = Self.categoryExact
-            content.sound = .default
-            content.userInfo = ["taskId": ids.base]
-            let exactComps = Calendar.current.dateComponents(
-                [.year, .month, .day, .hour, .minute],
-                from: scheduledDate
-            )
-            let exactTrigger = UNCalendarNotificationTrigger(dateMatching: exactComps, repeats: false)
-            let exactRequest = UNNotificationRequest(
+            addExactReminderRequest(
                 identifier: ids.exact,
-                content: content,
-                trigger: exactTrigger
+                taskID: ids.base,
+                taskTitle: task.title,
+                fireDate: scheduledDate,
+                calendar: .current
             )
-            center.add(exactRequest) { [weak self] error in
-                if let error {
-                    print("[Reminder] ERROR exact reminder add — id=\(ids.exact) error=\(error)")
-                } else {
-                    print("[Reminder] exact reminder scheduled — id=\(ids.exact) taskId=\(ids.base) fireDate=\(scheduledDate)")
-                    self?.center.getPendingNotificationRequests { requests in
-                        let found = requests.contains { $0.identifier == ids.exact }
-                        print("[Reminder] pendingVerify exact — id=\(ids.exact) foundInQueue=\(found) totalPending=\(requests.count)")
-                    }
-                }
-            }
         } else {
             print("[Reminder] skipped due to past time — kind=exact id=\(ids.exact) taskId=\(ids.base) triggerDate=\(scheduledDate) now=\(now)")
+        }
+    }
+
+    private func performRecurringScheduleAdditions(task: TaskItem, ids: NotificationIDs) {
+        guard task.recurrenceFrequency == .weekly else {
+            print("[Reminder] recurring skip — unsupported frequency id=\(ids.base) frequency=\(String(describing: task.recurrenceFrequency))")
+            return
+        }
+
+        guard let timeMinutes = task.recurrenceTimeMinutes,
+              (0..<(24 * 60)).contains(timeMinutes)
+        else {
+            print("[Reminder] recurring skip — missing/invalid time id=\(ids.base) timeMinutes=\(String(describing: task.recurrenceTimeMinutes))")
+            return
+        }
+
+        let weekdays = task.recurrenceWeekdays
+        guard !weekdays.isEmpty else {
+            print("[Reminder] recurring skip — no weekdays id=\(ids.base)")
+            return
+        }
+
+        let offsetMinutes = task.reminderOffsetMinutes ?? ReminderOffset.globalDefault.rawValue
+        let calendar = recurrenceCalendar(for: task)
+        let now = Date()
+        let occurrences = nextWeeklyOccurrences(
+            weekdays: weekdays,
+            timeMinutes: timeMinutes,
+            startDate: task.recurrenceStartDate,
+            endDate: task.recurrenceEndDate,
+            now: now,
+            calendar: calendar,
+            limit: Self.recurrenceOccurrenceLimit
+        )
+
+        print("""
+        [Reminder] recurring schedule — id=\(ids.base) title='\(task.title)' \
+        weekdays=\(weekdays) timeMinutes=\(timeMinutes) \
+        timezone=\(calendar.timeZone.identifier) occurrences=\(occurrences.count) \
+        reminderOffsetMinutes=\(offsetMinutes)
+        """)
+
+        for (index, occurrence) in occurrences.enumerated() {
+            if offsetMinutes > 0 {
+                let preFire = occurrence.addingTimeInterval(-Double(offsetMinutes) * 60)
+                if preFire > now {
+                    addPreReminderRequest(
+                        identifier: Self.recurringNotificationIdentifier(base: ids.base, index: index, kind: "pre"),
+                        taskID: ids.base,
+                        taskTitle: task.title,
+                        fireDate: preFire,
+                        calendar: calendar
+                    )
+                } else {
+                    print("[Reminder] recurring skipped due to past time — kind=pre taskId=\(ids.base) occurrence=\(occurrence) triggerDate=\(preFire) now=\(now)")
+                }
+            }
+
+            addExactReminderRequest(
+                identifier: Self.recurringNotificationIdentifier(base: ids.base, index: index, kind: "exact"),
+                taskID: ids.base,
+                taskTitle: task.title,
+                fireDate: occurrence,
+                calendar: calendar
+            )
         }
     }
 
@@ -320,6 +355,7 @@ final class TaskReminderService: NSObject, UNUserNotificationCenterDelegate {
     private static let preReminderBody = "Starting soon"
     private static let exactTimeTitle = "It's time"
     private static let snoozedReminderTitle = "Reminder"
+    private static let recurrenceOccurrenceLimit = 14
 
     private struct NotificationIDs {
         let base: String
@@ -344,8 +380,8 @@ final class TaskReminderService: NSObject, UNUserNotificationCenterDelegate {
         pending: [UNNotificationRequest]
     ) -> [String] {
         var s = Set(fixed)
-        let snoozePrefix = base + "_snooze_"
-        for r in pending where r.identifier.hasPrefix(snoozePrefix) {
+        let taskPrefix = base + "_"
+        for r in pending where r.identifier == base || r.identifier.hasPrefix(taskPrefix) {
             s.insert(r.identifier)
         }
         return Array(s)
@@ -353,8 +389,134 @@ final class TaskReminderService: NSObject, UNUserNotificationCenterDelegate {
 
     private static func parseBaseUUIDFromExactNotificationId(_ identifier: String) -> UUID? {
         guard identifier.hasSuffix("_exact") else { return nil }
-        let base = String(identifier.dropLast(6)) // "_exact"
+        let withoutSuffix = String(identifier.dropLast(6)) // "_exact"
+        let base = withoutSuffix.components(separatedBy: "_rec_").first ?? withoutSuffix
         return UUID(uuidString: base)
+    }
+
+    private static func recurringNotificationIdentifier(base: String, index: Int, kind: String) -> String {
+        "\(base)_rec_\(index)_\(kind)"
+    }
+
+    private func addPreReminderRequest(
+        identifier: String,
+        taskID: String,
+        taskTitle: String,
+        fireDate: Date,
+        calendar: Calendar
+    ) {
+        let content = UNMutableNotificationContent()
+        content.title = taskTitle
+        content.body = Self.preReminderBody
+        content.sound = .default
+        let comps = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: fireDate)
+        let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
+        let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
+        center.add(request) { [weak self] error in
+            if let error {
+                print("[Reminder] ERROR pre-reminder add — id=\(identifier) error=\(error)")
+            } else {
+                print("[Reminder] pre-reminder scheduled — id=\(identifier) taskId=\(taskID) fireDate=\(fireDate)")
+                self?.verifyPendingRequest(identifier: identifier, kind: "pre")
+            }
+        }
+    }
+
+    private func addExactReminderRequest(
+        identifier: String,
+        taskID: String,
+        taskTitle: String,
+        fireDate: Date,
+        calendar: Calendar
+    ) {
+        let content = UNMutableNotificationContent()
+        content.title = Self.exactTimeTitle
+        content.body = taskTitle
+        content.categoryIdentifier = Self.categoryExact
+        content.sound = .default
+        content.userInfo = ["taskId": taskID]
+        let comps = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: fireDate)
+        let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
+        let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
+        center.add(request) { [weak self] error in
+            if let error {
+                print("[Reminder] ERROR exact reminder add — id=\(identifier) error=\(error)")
+            } else {
+                print("[Reminder] exact reminder scheduled — id=\(identifier) taskId=\(taskID) fireDate=\(fireDate)")
+                self?.verifyPendingRequest(identifier: identifier, kind: "exact")
+            }
+        }
+    }
+
+    private func verifyPendingRequest(identifier: String, kind: String) {
+        center.getPendingNotificationRequests { requests in
+            let found = requests.contains { $0.identifier == identifier }
+            print("[Reminder] pendingVerify \(kind) — id=\(identifier) foundInQueue=\(found) totalPending=\(requests.count)")
+        }
+    }
+
+    private func recurrenceCalendar(for task: TaskItem) -> Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        if let tz = task.recurrenceTimeZoneIdentifier.flatMap(TimeZone.init(identifier:)) {
+            calendar.timeZone = tz
+        } else {
+            calendar.timeZone = .current
+        }
+        return calendar
+    }
+
+    private func nextWeeklyOccurrences(
+        weekdays: [Int],
+        timeMinutes: Int,
+        startDate: Date?,
+        endDate: Date?,
+        now: Date,
+        calendar: Calendar,
+        limit: Int
+    ) -> [Date] {
+        let weekdaySet = Set(weekdays.filter { (1...7).contains($0) })
+        guard !weekdaySet.isEmpty, limit > 0 else { return [] }
+
+        let hour = timeMinutes / 60
+        let minute = timeMinutes % 60
+        let effectiveStart = maxDate(now, startDate)
+        var day = calendar.startOfDay(for: effectiveStart)
+        var results: [Date] = []
+        var scannedDays = 0
+
+        while results.count < limit && scannedDays < Self.maxRecurrenceSearchDays {
+            let isoWeekday = self.isoWeekday(for: day, calendar: calendar)
+            if weekdaySet.contains(isoWeekday) {
+                var comps = calendar.dateComponents([.year, .month, .day], from: day)
+                comps.hour = hour
+                comps.minute = minute
+                comps.second = 0
+                if let occurrence = calendar.date(from: comps),
+                   occurrence > now,
+                   occurrence >= effectiveStart,
+                   endDate.map({ occurrence <= $0 }) ?? true {
+                    results.append(occurrence)
+                }
+            }
+
+            guard let nextDay = calendar.date(byAdding: .day, value: 1, to: day) else { break }
+            day = nextDay
+            scannedDays += 1
+        }
+
+        return results
+    }
+
+    private static let maxRecurrenceSearchDays = 370
+
+    private func isoWeekday(for date: Date, calendar: Calendar) -> Int {
+        let weekday = calendar.component(.weekday, from: date)
+        return weekday == 1 ? 7 : weekday - 1
+    }
+
+    private func maxDate(_ lhs: Date, _ rhs: Date?) -> Date {
+        guard let rhs else { return lhs }
+        return lhs > rhs ? lhs : rhs
     }
 
     private func hasWallClockTime(_ date: Date) -> Bool {
