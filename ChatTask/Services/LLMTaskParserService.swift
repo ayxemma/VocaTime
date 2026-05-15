@@ -54,9 +54,14 @@ struct LLMTaskParserService: TaskParsing {
             follow-up edits. If the user asks for a separate new task/reminder, return a create
             action and ignore the active task context. For active-task edits, return
             target_reference_type="recent_task" and target_task_id="\(ctx.taskID.uuidString)".
+            For recurrence follow-up edits like "把周四去掉", "改成周一到周三", or
+            "不要周五提醒了", return action_type="updateRecurrence" with recurrence_update.
             """
             if let sd = ctx.scheduledDate {
                 requestBody["active_task_scheduled_at"] = formatter.string(from: sd)
+            }
+            if let recurrence = activeRecurrencePayload(from: ctx) {
+                requestBody["active_task_recurrence"] = recurrence
             }
             if let n = ctx.notes, !n.isEmpty {
                 let maxNote = 800
@@ -239,7 +244,10 @@ struct LLMTaskParserService: TaskParsing {
         guard let raw = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
             return (.unknown, false)
         }
-        let collapsed = raw.replacingOccurrences(of: "_", with: "").lowercased()
+        let collapsed = raw
+            .replacingOccurrences(of: "_", with: "")
+            .replacingOccurrences(of: " ", with: "")
+            .lowercased()
         switch collapsed {
         case "reminder":       return (.reminder, false)
         case "calendarevent":  return (.calendarEvent, false)
@@ -272,6 +280,26 @@ struct LLMTaskParserService: TaskParsing {
         default:
             return .unknown
         }
+    }
+
+    private func activeRecurrencePayload(from ctx: ChatActiveTaskContext) -> [String: Any]? {
+        guard let frequency = ctx.recurrenceFrequency else { return nil }
+        var payload: [String: Any] = [
+            "frequency": frequency.rawValue,
+            "weekdays": ctx.recurrenceWeekdays,
+        ]
+        if let minutes = ctx.recurrenceTimeMinutes {
+            payload["time"] = Self.formatClockMinutes(minutes)
+        }
+        if let timeZone = ctx.recurrenceTimeZoneIdentifier {
+            payload["timezone"] = timeZone
+        }
+        return payload
+    }
+
+    private static func formatClockMinutes(_ minutes: Int) -> String {
+        let clamped = min(max(minutes, 0), (24 * 60) - 1)
+        return String(format: "%02d:%02d", clamped / 60, clamped % 60)
     }
 
     private static func parseISO8601(_ string: String, timeZone: TimeZone) -> Date? {
@@ -357,7 +385,7 @@ struct LLMTaskParserService: TaskParsing {
         case "addweekdays": return .addWeekdays
         case "removeweekdays": return .removeWeekdays
         case "settime": return .setTime
-        case "clearrecurrence", "remove recurrence", "nonrecurring": return .clearRecurrence
+        case "clearrecurrence", "removerecurrence", "nonrecurring": return .clearRecurrence
         default: return .unknown
         }
     }

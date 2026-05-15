@@ -101,6 +101,7 @@ final class VoiceCommandViewModel {
         case reschedule(newDate: Date)
         case appendNote(text: String)
         case rename(to: String)
+        case updateRecurrence(ParsedRecurrenceUpdate)
     }
 
     private struct PendingEditAction {
@@ -864,6 +865,9 @@ final class VoiceCommandViewModel {
         case .updateTaskTitle:
             handleUpdateTitleIntent(command)
             return
+        case .updateRecurrence:
+            handleUpdateRecurrenceIntent(command)
+            return
         default:
             break
         }
@@ -1086,6 +1090,25 @@ final class VoiceCommandViewModel {
         }
     }
 
+    private func handleUpdateRecurrenceIntent(_ command: ParsedCommand) {
+        let s = uiLanguage.strings
+        guard let update = command.recurrenceUpdate else {
+            Self.log.warning("[VoiceChat] updateRecurrenceIntent — recurrenceUpdate is nil")
+            emitAssistantResponse(s.chatEditNoTaskFound, nextState: .error, stream: false)
+            return
+        }
+        switch resolveEditTarget(for: command) {
+        case .notFound:
+            Self.log.info("[VoiceChat] updateRecurrenceIntent — no task found")
+            emitAssistantResponse(s.chatEditNoTaskFound, nextState: .error, stream: false)
+        case .ambiguous(let matches):
+            Self.log.info("[VoiceChat] updateRecurrenceIntent — ambiguous matchCount=\(matches.count, privacy: .public)")
+            enterDisambiguation(matches: matches, editType: .updateRecurrence(update), strings: s, usageCommand: command)
+        case .found(let task):
+            applyRecurrenceUpdate(task: task, update: update, strings: s, usageCommand: command)
+        }
+    }
+
     // MARK: - Disambiguation (unchanged)
 
     private static let disambiguationLimit = 5
@@ -1119,6 +1142,8 @@ final class VoiceCommandViewModel {
             applyAppend(task: task, text: text, strings: s, usageCommand: usageCommand)
         case .rename(let newTitle):
             applyRename(task: task, newTitle: newTitle, strings: s, usageCommand: usageCommand)
+        case .updateRecurrence(let update):
+            applyRecurrenceUpdate(task: task, update: update, strings: s, usageCommand: usageCommand)
         }
     }
 
@@ -1175,6 +1200,117 @@ final class VoiceCommandViewModel {
         if persistenceContext != nil {
             recordSuccessfulAIActionForAppReview()
         }
+    }
+
+    private func applyRecurrenceUpdate(task: TaskItem, update: ParsedRecurrenceUpdate, strings s: AppStrings, usageCommand: ParsedCommand?) {
+        Self.log.info("[VoiceChat] finalFrontendAction=updateRecurrence activeContextPreferred=true finalTargetTaskID=\(task.id.uuidString, privacy: .public) title=\(task.title, privacy: .public) operation=\(String(describing: update.operation), privacy: .public) weekdays=\(String(describing: update.weekdays), privacy: .public)")
+
+        var weekdays = Set(task.recurrenceWeekdays)
+        let updateWeekdays = Set(sanitizedRecurrenceWeekdays(update.weekdays ?? []))
+        var shouldClearRecurrence = false
+
+        switch update.operation {
+        case .setWeekdays:
+            guard !updateWeekdays.isEmpty else {
+                emitAssistantResponse(s.chatEditNoTaskFound, nextState: .error, stream: false)
+                return
+            }
+            weekdays = updateWeekdays
+        case .addWeekdays:
+            guard !updateWeekdays.isEmpty else {
+                emitAssistantResponse(s.chatEditNoTaskFound, nextState: .error, stream: false)
+                return
+            }
+            weekdays.formUnion(updateWeekdays)
+        case .removeWeekdays:
+            guard !updateWeekdays.isEmpty else {
+                emitAssistantResponse(s.chatEditNoTaskFound, nextState: .error, stream: false)
+                return
+            }
+            weekdays.subtract(updateWeekdays)
+            shouldClearRecurrence = weekdays.isEmpty
+        case .setTime:
+            break
+        case .clearRecurrence:
+            shouldClearRecurrence = true
+        case .unknown:
+            emitAssistantResponse(s.chatEditNoTaskFound, nextState: .error, stream: false)
+            return
+        }
+
+        if shouldClearRecurrence {
+            clearRecurrence(on: task)
+            task.updatedAt = Date()
+            try? persistenceContext?.save()
+            TaskReminderService.shared.schedule(for: task)
+            emitAssistantResponse("Removed repeat schedule for \(task.title).", nextState: .success, stream: true)
+            refreshActiveContext(from: task)
+            recordFreeAIUsageIfNeeded(usageCommand)
+            if persistenceContext != nil {
+                recordSuccessfulAIActionForAppReview()
+            }
+            return
+        }
+
+        let sortedWeekdays = Array(weekdays).filter { (1...7).contains($0) }.sorted()
+        guard !sortedWeekdays.isEmpty else {
+            emitAssistantResponse(s.chatEditNoTaskFound, nextState: .error, stream: false)
+            return
+        }
+
+        let timeMinutes = update.timeMinutes ?? task.recurrenceTimeMinutes ?? scheduledDateClockMinutes(task.scheduledDate)
+        guard let timeMinutes else {
+            emitAssistantResponse(s.chatEditNoTaskFound, nextState: .error, stream: false)
+            return
+        }
+
+        task.recurrenceFrequencyRaw = RecurrenceFrequency.weekly.rawValue
+        task.recurrenceWeekdaysRaw = encodeRecurrenceWeekdays(sortedWeekdays)
+        task.recurrenceTimeMinutes = timeMinutes
+        task.recurrenceTimeZoneIdentifier = update.timeZoneIdentifier ?? task.recurrenceTimeZoneIdentifier ?? TimeZone.current.identifier
+        task.recurrenceStartDate = update.startDate ?? task.recurrenceStartDate ?? recurrenceStartDateFallback(for: task)
+        task.recurrenceEndDate = update.endDate ?? task.recurrenceEndDate
+        task.updatedAt = Date()
+
+        try? persistenceContext?.save()
+        TaskReminderService.shared.schedule(for: task)
+        let label = TaskRecurrenceFormatting.label(for: task, locale: uiLanguage.locale) ?? "repeat schedule"
+        emitAssistantResponse("Updated \(task.title): \(label).", nextState: .success, stream: true)
+        refreshActiveContext(from: task)
+        recordFreeAIUsageIfNeeded(usageCommand)
+        if persistenceContext != nil {
+            recordSuccessfulAIActionForAppReview()
+        }
+    }
+
+    private func clearRecurrence(on task: TaskItem) {
+        task.recurrenceFrequencyRaw = nil
+        task.recurrenceWeekdaysRaw = nil
+        task.recurrenceTimeMinutes = nil
+        task.recurrenceTimeZoneIdentifier = nil
+        task.recurrenceStartDate = nil
+        task.recurrenceEndDate = nil
+    }
+
+    private func sanitizedRecurrenceWeekdays(_ weekdays: [Int]) -> [Int] {
+        Array(Set(weekdays.filter { (1...7).contains($0) })).sorted()
+    }
+
+    private func encodeRecurrenceWeekdays(_ weekdays: [Int]) -> String? {
+        let sanitized = sanitizedRecurrenceWeekdays(weekdays)
+        guard !sanitized.isEmpty else { return nil }
+        return sanitized.map(String.init).joined(separator: ",")
+    }
+
+    private func scheduledDateClockMinutes(_ date: Date?) -> Int? {
+        guard let date, TaskScheduleFormatting.hasWallClockTime(date) else { return nil }
+        let calendar = Calendar.current
+        return calendar.component(.hour, from: date) * 60 + calendar.component(.minute, from: date)
+    }
+
+    private func recurrenceStartDateFallback(for task: TaskItem) -> Date {
+        let base = task.scheduledDate ?? Date()
+        return Calendar.current.startOfDay(for: base)
     }
 
     // MARK: - Delete confirmation (unchanged)
