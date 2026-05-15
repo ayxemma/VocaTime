@@ -1392,7 +1392,11 @@ final class VoiceCommandViewModel {
             taskID: task.id,
             title: task.title,
             scheduledDate: task.scheduledDate,
-            notes: task.notes
+            notes: task.notes,
+            recurrenceFrequency: task.recurrenceFrequency,
+            recurrenceWeekdays: task.recurrenceWeekdays,
+            recurrenceTimeMinutes: task.recurrenceTimeMinutes,
+            recurrenceTimeZoneIdentifier: task.recurrenceTimeZoneIdentifier
         )
     }
 

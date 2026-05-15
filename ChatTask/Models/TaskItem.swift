@@ -27,6 +27,15 @@ final class TaskItem {
     var kindRaw: String
     /// Per-task reminder lead time in minutes. `nil` means use the global default.
     var reminderOffsetMinutes: Int?
+    /// Optional recurrence metadata. Nil means this task is a one-off task/reminder.
+    var recurrenceFrequencyRaw: String?
+    /// ISO weekdays stored as a comma-separated list: Monday = 1 ... Sunday = 7.
+    var recurrenceWeekdaysRaw: String?
+    /// Wall-clock recurrence time as minutes after midnight in `recurrenceTimeZoneIdentifier`.
+    var recurrenceTimeMinutes: Int?
+    var recurrenceTimeZoneIdentifier: String?
+    var recurrenceStartDate: Date?
+    var recurrenceEndDate: Date?
 
     var kind: TaskKind {
         TaskKind(rawValue: kindRaw) ?? .task
@@ -34,6 +43,19 @@ final class TaskItem {
 
     var source: TaskSource {
         TaskSource(rawValue: sourceRaw) ?? .voice
+    }
+
+    var recurrenceFrequency: RecurrenceFrequency? {
+        guard let recurrenceFrequencyRaw else { return nil }
+        return RecurrenceFrequency(rawValue: recurrenceFrequencyRaw)
+    }
+
+    var recurrenceWeekdays: [Int] {
+        Self.decodeRecurrenceWeekdays(recurrenceWeekdaysRaw)
+    }
+
+    var isRecurring: Bool {
+        recurrenceFrequency != nil
     }
 
     init(
@@ -48,7 +70,13 @@ final class TaskItem {
         updatedAt: Date = .now,
         source: TaskSource = .voice,
         kind: TaskKind = .task,
-        reminderOffsetMinutes: Int? = nil
+        reminderOffsetMinutes: Int? = nil,
+        recurrenceFrequency: RecurrenceFrequency? = nil,
+        recurrenceWeekdays: [Int] = [],
+        recurrenceTimeMinutes: Int? = nil,
+        recurrenceTimeZoneIdentifier: String? = nil,
+        recurrenceStartDate: Date? = nil,
+        recurrenceEndDate: Date? = nil
     ) {
         self.id = id
         self.title = title
@@ -62,6 +90,12 @@ final class TaskItem {
         self.sourceRaw = source.rawValue
         self.kindRaw = kind.rawValue
         self.reminderOffsetMinutes = reminderOffsetMinutes
+        self.recurrenceFrequencyRaw = recurrenceFrequency?.rawValue
+        self.recurrenceWeekdaysRaw = Self.encodeRecurrenceWeekdays(recurrenceWeekdays)
+        self.recurrenceTimeMinutes = recurrenceTimeMinutes
+        self.recurrenceTimeZoneIdentifier = recurrenceTimeZoneIdentifier
+        self.recurrenceStartDate = recurrenceStartDate
+        self.recurrenceEndDate = recurrenceEndDate
     }
 
     @MainActor
@@ -71,7 +105,7 @@ final class TaskItem {
         switch command.actionType {
         case .reminder: kind = .reminder
         case .calendarEvent: kind = .event
-        case .unknown, .deleteTask, .rescheduleTask, .appendToTask, .updateTaskTitle: kind = .task
+            case .unknown, .deleteTask, .rescheduleTask, .appendToTask, .updateTaskTitle, .updateRecurrence: kind = .task
         }
         let now = Date()
         let item = TaskItem(
@@ -85,11 +119,33 @@ final class TaskItem {
             updatedAt: now,
             source: .voice,
             kind: kind,
-            reminderOffsetMinutes: ReminderOffset.globalDefault.rawValue
+            reminderOffsetMinutes: ReminderOffset.globalDefault.rawValue,
+            recurrenceFrequency: command.recurrence?.frequency,
+            recurrenceWeekdays: command.recurrence?.weekdays ?? [],
+            recurrenceTimeMinutes: command.recurrence?.timeMinutes,
+            recurrenceTimeZoneIdentifier: command.recurrence?.timeZoneIdentifier,
+            recurrenceStartDate: command.recurrence?.startDate,
+            recurrenceEndDate: command.recurrence?.endDate
         )
         context.insert(item)
         try? context.save()
         TaskReminderService.shared.schedule(for: item)
         return item
+    }
+
+    private static func encodeRecurrenceWeekdays(_ weekdays: [Int]) -> String? {
+        let sanitized = Array(Set(weekdays.filter { (1...7).contains($0) })).sorted()
+        guard !sanitized.isEmpty else { return nil }
+        return sanitized.map(String.init).joined(separator: ",")
+    }
+
+    private static func decodeRecurrenceWeekdays(_ raw: String?) -> [Int] {
+        guard let raw, !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return []
+        }
+        return raw
+            .split(separator: ",")
+            .compactMap { Int(String($0).trimmingCharacters(in: .whitespacesAndNewlines)) }
+            .filter { (1...7).contains($0) }
     }
 }

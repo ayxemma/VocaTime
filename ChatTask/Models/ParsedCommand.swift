@@ -10,6 +10,7 @@ enum ActionType: String, CaseIterable, Equatable {
     case rescheduleTask
     case appendToTask
     case updateTaskTitle
+    case updateRecurrence
 }
 
 enum ParserSource: String, Codable, Equatable {
@@ -26,6 +27,41 @@ enum TargetReferenceType: String, Codable, Equatable {
     case unknown
 }
 
+enum RecurrenceFrequency: String, Codable, Equatable, CaseIterable {
+    case weekly
+}
+
+enum RecurrenceUpdateOperation: String, Codable, Equatable {
+    case setWeekdays
+    case addWeekdays
+    case removeWeekdays
+    case setTime
+    case clearRecurrence
+    case unknown
+}
+
+struct ParsedRecurrence: Codable, Equatable {
+    var frequency: RecurrenceFrequency
+    /// ISO weekdays: Monday = 1 ... Sunday = 7.
+    var weekdays: [Int]
+    /// Wall-clock fire time as minutes after midnight in the task timezone.
+    var timeMinutes: Int?
+    var timeZoneIdentifier: String?
+    var startDate: Date?
+    var endDate: Date?
+}
+
+struct ParsedRecurrenceUpdate: Codable, Equatable {
+    var operation: RecurrenceUpdateOperation
+    /// ISO weekdays: Monday = 1 ... Sunday = 7.
+    var weekdays: [Int]?
+    /// Replacement wall-clock fire time as minutes after midnight in the task timezone.
+    var timeMinutes: Int?
+    var timeZoneIdentifier: String?
+    var startDate: Date?
+    var endDate: Date?
+}
+
 struct ParsedCommand: Equatable {
     // Core fields (create and edit)
     var originalText: String
@@ -40,6 +76,7 @@ struct ParsedCommand: Equatable {
     var confidence: Double?
     var parserSource: ParserSource
     var languageCode: String?
+    var recurrence: ParsedRecurrence? = nil
 
     // Edit-command fields (nil for create commands)
     /// The time reference used to identify an existing task.
@@ -54,4 +91,6 @@ struct ParsedCommand: Equatable {
     var targetReferenceType: TargetReferenceType? = nil
     /// Explicit task id target returned by the backend.
     var targetTaskID: UUID? = nil
+    /// Recurrence mutation requested by an edit/follow-up command. Applied in Phase 2.
+    var recurrenceUpdate: ParsedRecurrenceUpdate? = nil
 }

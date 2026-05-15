@@ -113,12 +113,14 @@ struct LLMTaskParserService: TaskParsing {
         let (actionType, actionTypeUnmapped) = Self.mapLLMActionType(parsed.actionType)
         let targetReferenceType = Self.mapTargetReferenceType(parsed.targetReferenceType)
         let targetTaskID = parsed.targetTaskID.flatMap(UUID.init(uuidString:))
+        let recurrence = Self.mapRecurrence(parsed.recurrence, fallbackTimeZoneIdentifier: timeZoneIdentifier)
+        let recurrenceUpdate = Self.mapRecurrenceUpdate(parsed.recurrenceUpdate, fallbackTimeZoneIdentifier: timeZoneIdentifier)
         if actionTypeUnmapped {
             Self.log.warning("[Parse] action_type unmapped raw=\(parsed.actionType ?? "nil", privacy: .public)")
         }
         Self.log.info("[Parse] backend intent_type=\(parsed.actionType ?? "nil", privacy: .public) target.reference_type=\(parsed.targetReferenceType ?? "nil", privacy: .public) target.task_id=\(parsed.targetTaskID ?? "nil", privacy: .public)")
 
-        if actionType == .deleteTask || actionType == .rescheduleTask || actionType == .appendToTask || actionType == .updateTaskTitle {
+        if actionType == .deleteTask || actionType == .rescheduleTask || actionType == .appendToTask || actionType == .updateTaskTitle || actionType == .updateRecurrence {
             let targetDate = parsed.targetTime.flatMap { Self.parseISO8601($0, timeZone: tz) }
             let newScheduledDate = parsed.newScheduledAt.flatMap { Self.parseISO8601($0, timeZone: tz) }
 
@@ -133,12 +135,14 @@ struct LLMTaskParserService: TaskParsing {
                 confidence: parsed.confidence,
                 parserSource: .llm,
                 languageCode: parsed.languageCode,
+                recurrence: recurrence,
                 targetDate: targetDate,
                 newScheduledDate: newScheduledDate,
                 appendText: parsed.appendText,
                 newTitle: parsed.newTitle,
                 targetReferenceType: targetReferenceType,
-                targetTaskID: targetTaskID
+                targetTaskID: targetTaskID,
+                recurrenceUpdate: recurrenceUpdate
             )
             Self.logFinalParsedCommand(cmd)
             return cmd
@@ -177,8 +181,10 @@ struct LLMTaskParserService: TaskParsing {
             confidence: parsed.confidence,
             parserSource: .llm,
             languageCode: parsed.languageCode,
+            recurrence: recurrence,
             targetReferenceType: targetReferenceType,
-            targetTaskID: targetTaskID
+            targetTaskID: targetTaskID,
+            recurrenceUpdate: recurrenceUpdate
         )
 
         Self.logFinalParsedCommand(cmd)
@@ -197,7 +203,9 @@ struct LLMTaskParserService: TaskParsing {
             append_text=\(p.appendText ?? "nil", privacy: .public) \
             new_title=\(p.newTitle ?? "nil", privacy: .public)
             target_reference_type=\(p.targetReferenceType ?? "nil", privacy: .public) \
-            target_task_id=\(p.targetTaskID ?? "nil", privacy: .public)
+            target_task_id=\(p.targetTaskID ?? "nil", privacy: .public) \
+            recurrence_frequency=\(p.recurrence?.frequency ?? "nil", privacy: .public) \
+            recurrence_update_operation=\(p.recurrenceUpdate?.operation ?? "nil", privacy: .public)
             """)
     }
 
@@ -206,7 +214,7 @@ struct LLMTaskParserService: TaskParsing {
         let reminder = cmd.reminderDate.map { ISO8601DateFormatter().string(from: $0) } ?? "nil"
         let target = cmd.targetDate.map { ISO8601DateFormatter().string(from: $0) } ?? "nil"
         let newSched = cmd.newScheduledDate.map { ISO8601DateFormatter().string(from: $0) } ?? "nil"
-        log.info("[Parse] final ParsedCommand actionType=\(String(describing: cmd.actionType), privacy: .public) title=\(cmd.title, privacy: .public) startDate=\(start, privacy: .public) reminderDate=\(reminder, privacy: .public) targetDate=\(target, privacy: .public) newScheduledDate=\(newSched, privacy: .public) targetReferenceType=\(String(describing: cmd.targetReferenceType), privacy: .public) targetTaskID=\(cmd.targetTaskID?.uuidString ?? "nil", privacy: .public)")
+        log.info("[Parse] final ParsedCommand actionType=\(String(describing: cmd.actionType), privacy: .public) title=\(cmd.title, privacy: .public) startDate=\(start, privacy: .public) reminderDate=\(reminder, privacy: .public) targetDate=\(target, privacy: .public) newScheduledDate=\(newSched, privacy: .public) recurrenceFrequency=\(String(describing: cmd.recurrence?.frequency), privacy: .public) recurrenceWeekdays=\(String(describing: cmd.recurrence?.weekdays), privacy: .public) recurrenceUpdate=\(String(describing: cmd.recurrenceUpdate?.operation), privacy: .public) targetReferenceType=\(String(describing: cmd.targetReferenceType), privacy: .public) targetTaskID=\(cmd.targetTaskID?.uuidString ?? "nil", privacy: .public)")
     }
 
     private static func logLongString(prefix: String, text: String, chunkSize: Int = 800) {
@@ -240,6 +248,7 @@ struct LLMTaskParserService: TaskParsing {
         case "rescheduletask": return (.rescheduleTask, false)
         case "appendtotask":   return (.appendToTask, false)
         case "updatetasktitle": return (.updateTaskTitle, false)
+        case "updaterecurrence": return (.updateRecurrence, false)
         default:
             if let t = ActionType(rawValue: raw) { return (t, false) }
             return (.unknown, true)
@@ -295,5 +304,76 @@ struct LLMTaskParserService: TaskParsing {
             if let d = df.date(from: trimmed) { return d }
         }
         return nil
+    }
+
+    private static func mapRecurrence(
+        _ recurrence: LLMTaskParseResponse.Recurrence?,
+        fallbackTimeZoneIdentifier: String
+    ) -> ParsedRecurrence? {
+        guard let recurrence,
+              let frequencyRaw = recurrence.frequency?.trimmingCharacters(in: .whitespacesAndNewlines),
+              let frequency = RecurrenceFrequency(rawValue: frequencyRaw.lowercased())
+        else {
+            return nil
+        }
+
+        let timeZoneIdentifier = recurrence.timezone?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let tz = TimeZone(identifier: timeZoneIdentifier ?? fallbackTimeZoneIdentifier) ?? .current
+        return ParsedRecurrence(
+            frequency: frequency,
+            weekdays: sanitizeWeekdays(recurrence.weekdays ?? []),
+            timeMinutes: parseClockMinutes(recurrence.time),
+            timeZoneIdentifier: timeZoneIdentifier ?? fallbackTimeZoneIdentifier,
+            startDate: recurrence.startDate.flatMap { parseISO8601($0, timeZone: tz) },
+            endDate: recurrence.endDate.flatMap { parseISO8601($0, timeZone: tz) }
+        )
+    }
+
+    private static func mapRecurrenceUpdate(
+        _ update: LLMTaskParseResponse.RecurrenceUpdate?,
+        fallbackTimeZoneIdentifier: String
+    ) -> ParsedRecurrenceUpdate? {
+        guard let update else { return nil }
+        let operation = mapRecurrenceUpdateOperation(update.operation)
+        let timeZoneIdentifier = update.timezone?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let tz = TimeZone(identifier: timeZoneIdentifier ?? fallbackTimeZoneIdentifier) ?? .current
+        return ParsedRecurrenceUpdate(
+            operation: operation,
+            weekdays: update.weekdays.map(sanitizeWeekdays),
+            timeMinutes: parseClockMinutes(update.time),
+            timeZoneIdentifier: timeZoneIdentifier ?? fallbackTimeZoneIdentifier,
+            startDate: update.startDate.flatMap { parseISO8601($0, timeZone: tz) },
+            endDate: update.endDate.flatMap { parseISO8601($0, timeZone: tz) }
+        )
+    }
+
+    private static func mapRecurrenceUpdateOperation(_ raw: String?) -> RecurrenceUpdateOperation {
+        guard let raw = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
+            return .unknown
+        }
+        let collapsed = raw.replacingOccurrences(of: "_", with: "").lowercased()
+        switch collapsed {
+        case "setweekdays": return .setWeekdays
+        case "addweekdays": return .addWeekdays
+        case "removeweekdays": return .removeWeekdays
+        case "settime": return .setTime
+        case "clearrecurrence", "remove recurrence", "nonrecurring": return .clearRecurrence
+        default: return .unknown
+        }
+    }
+
+    private static func sanitizeWeekdays(_ weekdays: [Int]) -> [Int] {
+        Array(Set(weekdays.filter { (1...7).contains($0) })).sorted()
+    }
+
+    private static func parseClockMinutes(_ raw: String?) -> Int? {
+        guard let raw = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
+            return nil
+        }
+        let parts = raw.split(separator: ":", maxSplits: 1).compactMap { Int(String($0)) }
+        guard parts.count == 2, (0...23).contains(parts[0]), (0...59).contains(parts[1]) else {
+            return nil
+        }
+        return parts[0] * 60 + parts[1]
     }
 }

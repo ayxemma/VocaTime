@@ -6,4 +6,9 @@ struct ChatActiveTaskContext: Equatable, Sendable {
     var title: String
     var scheduledDate: Date?
     var notes: String?
+    var recurrenceFrequency: RecurrenceFrequency?
+    /// ISO weekdays: Monday = 1 ... Sunday = 7.
+    var recurrenceWeekdays: [Int]
+    var recurrenceTimeMinutes: Int?
+    var recurrenceTimeZoneIdentifier: String?
 }

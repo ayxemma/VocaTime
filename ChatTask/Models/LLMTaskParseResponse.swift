@@ -1,6 +1,36 @@
 import Foundation
 
 struct LLMTaskParseResponse: Decodable {
+    struct Recurrence: Decodable {
+        let frequency: String?
+        let weekdays: [Int]?
+        let time: String?
+        let timezone: String?
+        let startDate: String?
+        let endDate: String?
+
+        enum CodingKeys: String, CodingKey {
+            case frequency, weekdays, time, timezone
+            case startDate = "start_date"
+            case endDate = "end_date"
+        }
+    }
+
+    struct RecurrenceUpdate: Decodable {
+        let operation: String?
+        let weekdays: [Int]?
+        let time: String?
+        let timezone: String?
+        let startDate: String?
+        let endDate: String?
+
+        enum CodingKeys: String, CodingKey {
+            case operation, weekdays, time, timezone
+            case startDate = "start_date"
+            case endDate = "end_date"
+        }
+    }
+
     // ── Create-task fields ────────────────────────────────────
     let title: String?
     let notes: String?
@@ -10,6 +40,7 @@ struct LLMTaskParseResponse: Decodable {
     let hasSpecificTime: Bool?
     let languageCode: String?
     let confidence: Double?
+    let recurrence: Recurrence?
 
     // ── Edit-command fields ───────────────────────────────────
     /// ISO8601 time reference for the existing task to act on.
@@ -24,6 +55,8 @@ struct LLMTaskParseResponse: Decodable {
     let targetReferenceType: String?
     /// Explicit task UUID when targetReferenceType is task_id or recent_task.
     let targetTaskID: String?
+    /// Structured recurrence mutation for updateRecurrence commands.
+    let recurrenceUpdate: RecurrenceUpdate?
 
     enum CodingKeys: String, CodingKey {
         case title, notes, confidence
@@ -32,11 +65,13 @@ struct LLMTaskParseResponse: Decodable {
         case endAt          = "end_at"
         case hasSpecificTime = "has_specific_time"
         case languageCode   = "language_code"
+        case recurrence
         case targetTime     = "target_time"
         case newScheduledAt = "new_scheduled_at"
         case appendText     = "append_text"
         case newTitle       = "new_title"
         case targetReferenceType = "target_reference_type"
         case targetTaskID    = "target_task_id"
+        case recurrenceUpdate = "recurrence_update"
     }
 }
