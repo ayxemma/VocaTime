@@ -34,6 +34,7 @@ enum VoiceFlowState: Equatable {
     case processing
     case conflictPending
     case deletePending
+    case editConfirmationPending
     case disambiguating
     case success
     case error
@@ -80,6 +81,7 @@ final class VoiceCommandViewModel {
     var pendingVoiceTranscript: String = ""
     var parsedCommand: ParsedCommand?
     var disambiguationCandidates: [TaskItem] = []
+    var confirmationCandidate: TaskItem?
     /// Most recent task touched in this chat session; sent to backend parse for follow-ups. Cleared on sheet dismiss.
     var lastActiveChatTaskContext: ChatActiveTaskContext?
 
@@ -92,6 +94,8 @@ final class VoiceCommandViewModel {
     private var pendingDeleteUsageCommand: ParsedCommand?
     /// LLM command that led to disambiguation (for free-usage accounting after the user picks a task).
     private var pendingDisambiguationUsageCommand: ParsedCommand?
+    /// LLM command that led to edit-target confirmation (for free-usage accounting after the user confirms).
+    private var pendingConfirmationUsageCommand: ParsedCommand?
     private var pendingEditAction: PendingEditAction?
 
     // MARK: - Pending edit model (unchanged)
@@ -106,6 +110,26 @@ final class VoiceCommandViewModel {
 
     private struct PendingEditAction {
         let type: PendingEditType
+    }
+
+    private enum EditTargetConfidence: String {
+        case high
+        case medium
+    }
+
+    private struct ScoredTaskCandidate {
+        let task: TaskItem
+        let score: Double
+        let reasons: [String]
+    }
+
+    private enum TaskResolverThresholds {
+        static let highConfidence = 0.85
+        static let mediumConfidence = 0.60
+        static let ambiguityDelta = 0.15
+        static let topCandidateLimit = 3
+        static let exactTimeWindow: TimeInterval = 60
+        static let nearbyTimeWindow: TimeInterval = 15 * 60
     }
 
     var uiLanguage: AppUILanguage = .defaultForDevice()
@@ -188,7 +212,7 @@ final class VoiceCommandViewModel {
             if showSlowBackendHint { return s.voiceWakingUpServer }
             if showExtendedThinkingStatus { return s.chatAssistantThinking }
             return s.voiceProcessing
-        case .conflictPending, .deletePending, .disambiguating: return ""
+        case .conflictPending, .deletePending, .editConfirmationPending, .disambiguating: return ""
         case .success:    return s.voiceReady
         case .error:      return voiceDraftErrorMessage ?? s.voiceError
         }
@@ -275,7 +299,7 @@ final class VoiceCommandViewModel {
         case .listening:
             Self.log.info("[VoiceChat] manualStopTriggered")
             Task { await chatFinalizeListening(stopReason: .manual) }
-        case .processing, .conflictPending, .deletePending, .disambiguating:
+        case .processing, .conflictPending, .deletePending, .editConfirmationPending, .disambiguating:
             break
         }
     }
@@ -526,6 +550,7 @@ final class VoiceCommandViewModel {
         guard pendingAssistantSlotId == nil else { return "assistantSlotPending" }
         guard pendingConflictCommand == nil else { return "conflictPending" }
         guard pendingDeleteTask == nil else { return "deletePending" }
+        guard confirmationCandidate == nil else { return "editConfirmationPending" }
         guard pendingEditAction == nil else { return "editPending" }
         guard disambiguationCandidates.isEmpty else { return "disambiguationPending" }
 
@@ -540,6 +565,8 @@ final class VoiceCommandViewModel {
             return "conflictPending"
         case .deletePending:
             return "deletePending"
+        case .editConfirmationPending:
+            return "editConfirmationPending"
         case .disambiguating:
             return "disambiguationPending"
         case .error:
@@ -1023,51 +1050,28 @@ final class VoiceCommandViewModel {
             emitAssistantResponse(s.chatEditNoTaskFound, nextState: .error, stream: false)
             return
         }
-        switch resolveEditTarget(for: command) {
-        case .notFound:
-            emitAssistantResponse(s.chatEditNoTaskFound, nextState: .error, stream: false)
-        case .ambiguous(let matches):
-            enterDisambiguation(matches: matches, editType: .rename(to: newTitle), strings: s, usageCommand: command)
-        case .found(let task):
-            applyRename(task: task, newTitle: newTitle, strings: s, usageCommand: command)
+        routeResolvedEditTarget(command, editType: .rename(to: newTitle), strings: s) { task, usageCommand in
+            applyRename(task: task, newTitle: newTitle, strings: s, usageCommand: usageCommand)
         }
     }
 
     private func handleDeleteIntent(_ command: ParsedCommand) {
         let s = uiLanguage.strings
-        switch resolveEditTarget(for: command) {
-        case .notFound:
-            Self.log.info("[VoiceChat] deleteIntent — no task found near targetDate=\(String(describing: command.targetDate), privacy: .public)")
-            emitAssistantResponse(s.chatEditNoTaskFound, nextState: .error, stream: false)
-        case .ambiguous(let matches):
-            Self.log.info("[VoiceChat] deleteIntent — ambiguous matchCount=\(matches.count, privacy: .public)")
-            enterDisambiguation(matches: matches, editType: .delete, strings: s, usageCommand: command)
-        case .found(let task):
+        routeResolvedEditTarget(command, editType: .delete, strings: s) { task, usageCommand in
             Self.log.info("[VoiceChat] deleteIntent — found task title=\(task.title, privacy: .public)")
-            enterDeleteConfirmation(for: task, strings: s, usageCommand: command)
+            enterDeleteConfirmation(for: task, strings: s, usageCommand: usageCommand)
         }
     }
 
     private func handleRescheduleIntent(_ command: ParsedCommand) {
         let s = uiLanguage.strings
-        switch resolveEditTarget(for: command) {
-        case .notFound:
-            Self.log.info("[VoiceChat] rescheduleIntent — no task found")
+        guard let newDate = command.newScheduledDate else {
+            Self.log.warning("[VoiceChat] rescheduleIntent — newScheduledDate is nil")
             emitAssistantResponse(s.chatEditNoTaskFound, nextState: .error, stream: false)
-        case .ambiguous(let matches):
-            Self.log.info("[VoiceChat] rescheduleIntent — ambiguous matchCount=\(matches.count, privacy: .public)")
-            guard let newDate = command.newScheduledDate else {
-                emitAssistantResponse(s.chatEditNoTaskFound, nextState: .error, stream: false)
-                return
-            }
-            enterDisambiguation(matches: matches, editType: .reschedule(newDate: newDate), strings: s, usageCommand: command)
-        case .found(let task):
-            guard let newDate = command.newScheduledDate else {
-                Self.log.warning("[VoiceChat] rescheduleIntent — newScheduledDate is nil")
-                emitAssistantResponse(s.chatEditNoTaskFound, nextState: .error, stream: false)
-                return
-            }
-            applyReschedule(task: task, newDate: newDate, strings: s, usageCommand: command)
+            return
+        }
+        routeResolvedEditTarget(command, editType: .reschedule(newDate: newDate), strings: s) { task, usageCommand in
+            applyReschedule(task: task, newDate: newDate, strings: s, usageCommand: usageCommand)
         }
     }
 
@@ -1078,15 +1082,8 @@ final class VoiceCommandViewModel {
             emitAssistantResponse(s.chatEditNoTaskFound, nextState: .error, stream: false)
             return
         }
-        switch resolveEditTarget(for: command) {
-        case .notFound:
-            Self.log.info("[VoiceChat] appendIntent — no task found")
-            emitAssistantResponse(s.chatEditNoTaskFound, nextState: .error, stream: false)
-        case .ambiguous(let matches):
-            Self.log.info("[VoiceChat] appendIntent — ambiguous matchCount=\(matches.count, privacy: .public)")
-            enterDisambiguation(matches: matches, editType: .appendNote(text: text), strings: s, usageCommand: command)
-        case .found(let task):
-            applyAppend(task: task, text: text, strings: s, usageCommand: command)
+        routeResolvedEditTarget(command, editType: .appendNote(text: text), strings: s) { task, usageCommand in
+            applyAppend(task: task, text: text, strings: s, usageCommand: usageCommand)
         }
     }
 
@@ -1097,21 +1094,43 @@ final class VoiceCommandViewModel {
             emitAssistantResponse(s.chatEditNoTaskFound, nextState: .error, stream: false)
             return
         }
+        routeResolvedEditTarget(command, editType: .updateRecurrence(update), strings: s) { task, usageCommand in
+            applyRecurrenceUpdate(task: task, update: update, strings: s, usageCommand: usageCommand)
+        }
+    }
+
+    private func routeResolvedEditTarget(
+        _ command: ParsedCommand,
+        editType: PendingEditType,
+        strings s: AppStrings,
+        apply: (TaskItem, ParsedCommand?) -> Void
+    ) {
         switch resolveEditTarget(for: command) {
-        case .notFound:
-            Self.log.info("[VoiceChat] updateRecurrenceIntent — no task found")
-            emitAssistantResponse(s.chatEditNoTaskFound, nextState: .error, stream: false)
-        case .ambiguous(let matches):
-            Self.log.info("[VoiceChat] updateRecurrenceIntent — ambiguous matchCount=\(matches.count, privacy: .public)")
-            enterDisambiguation(matches: matches, editType: .updateRecurrence(update), strings: s, usageCommand: command)
-        case .found(let task):
-            applyRecurrenceUpdate(task: task, update: update, strings: s, usageCommand: command)
+        case .resolved(let task, let confidence, let reason):
+            Self.log.info("[VoiceChat] taskResolveHighConfidence task=\(task.title, privacy: .public) confidence=\(confidence.rawValue, privacy: .public) reason=\(reason, privacy: .public)")
+            apply(task, command)
+        case .needsConfirmation(let candidate, let reason):
+            enterEditConfirmation(candidate: candidate, editType: editType, reason: reason, strings: s, usageCommand: command)
+        case .needsDisambiguation(let candidates, let reason):
+            Self.log.info("[VoiceChat] taskResolveNeedsDisambiguation count=\(candidates.count, privacy: .public) reason=\(reason, privacy: .public)")
+            enterDisambiguation(matches: candidates, editType: editType, strings: s, usageCommand: command)
+        case .noMatch(let reason):
+            Self.log.info("[VoiceChat] taskResolveNoMatch reason=\(reason, privacy: .public)")
+            emitAssistantResponse(noTaskMatchMessage(strings: s), nextState: .error, stream: false)
         }
     }
 
     // MARK: - Disambiguation (unchanged)
 
     private static let disambiguationLimit = 5
+
+    private func enterEditConfirmation(candidate: TaskItem, editType: PendingEditType, reason: String, strings s: AppStrings, usageCommand: ParsedCommand) {
+        Self.log.info("[VoiceChat] taskResolveNeedsConfirmation candidate=\(candidate.title, privacy: .public) reason=\(reason, privacy: .public)")
+        pendingConfirmationUsageCommand = usageCommand
+        pendingEditAction = PendingEditAction(type: editType)
+        confirmationCandidate = candidate
+        emitAssistantResponse(editConfirmationMessage(for: candidate), nextState: .editConfirmationPending, stream: true)
+    }
 
     private func enterDisambiguation(matches: [TaskItem], editType: PendingEditType, strings s: AppStrings, usageCommand: ParsedCommand) {
         if matches.count > Self.disambiguationLimit {
@@ -1122,7 +1141,41 @@ final class VoiceCommandViewModel {
         pendingDisambiguationUsageCommand = usageCommand
         disambiguationCandidates = matches
         pendingEditAction = PendingEditAction(type: editType)
-        emitAssistantResponse(String(format: s.chatDisambiguateSelect, matches.count), nextState: .disambiguating, stream: true)
+        emitAssistantResponse(editDisambiguationMessage(), nextState: .disambiguating, stream: true)
+    }
+
+    func chatConfirmEditCandidate() {
+        guard let task = confirmationCandidate, let action = pendingEditAction else { return }
+        let usageCommand = pendingConfirmationUsageCommand
+        pendingConfirmationUsageCommand = nil
+        confirmationCandidate = nil
+        pendingEditAction = nil
+        Self.log.info("[VoiceChat] taskResolveUserConfirmed task=\(task.title, privacy: .public)")
+        applyPendingEditAction(action.type, to: task, usageCommand: usageCommand)
+    }
+
+    func chatChooseAnotherEditCandidate() {
+        guard let action = pendingEditAction else { return }
+        let usageCommand = pendingConfirmationUsageCommand
+        pendingConfirmationUsageCommand = nil
+        confirmationCandidate = nil
+        if disambiguationCandidates.isEmpty, let context = usageCommand {
+            disambiguationCandidates = Array(rankedEditCandidates(for: context).prefix(TaskResolverThresholds.topCandidateLimit).map(\.task))
+        }
+        pendingDisambiguationUsageCommand = usageCommand
+        pendingEditAction = action
+        Self.log.info("[VoiceChat] taskResolveChooseAnother")
+        emitAssistantResponse(editDisambiguationMessage(), nextState: .disambiguating, stream: true)
+    }
+
+    func chatCancelEditResolution() {
+        pendingConfirmationUsageCommand = nil
+        pendingDisambiguationUsageCommand = nil
+        pendingEditAction = nil
+        confirmationCandidate = nil
+        disambiguationCandidates = []
+        Self.log.info("[VoiceChat] taskResolveCancelled")
+        emitAssistantResponse(uiLanguage == .en ? "Canceled." : "已取消。", nextState: .error, stream: false)
     }
 
     func chatSelectCandidate(_ task: TaskItem) {
@@ -1131,9 +1184,13 @@ final class VoiceCommandViewModel {
         pendingDisambiguationUsageCommand = nil
         pendingEditAction = nil
         disambiguationCandidates = []
+        Self.log.info("[VoiceChat] taskResolveUserSelectedCandidate task=\(task.title, privacy: .public)")
+        applyPendingEditAction(action.type, to: task, usageCommand: usageCommand)
+    }
+
+    private func applyPendingEditAction(_ editType: PendingEditType, to task: TaskItem, usageCommand: ParsedCommand?) {
         let s = uiLanguage.strings
-        Self.log.info("[VoiceChat] candidateSelected title=\(task.title, privacy: .public)")
-        switch action.type {
+        switch editType {
         case .delete:
             enterDeleteConfirmation(for: task, strings: s, usageCommand: usageCommand)
         case .reschedule(let newDate):
@@ -1355,12 +1412,13 @@ final class VoiceCommandViewModel {
         emitAssistantResponse(uiLanguage.strings.chatConflictCanceled, nextState: .error, stream: false)
     }
 
-    // MARK: - Task resolution (unchanged)
+    // MARK: - Task resolution
 
     private enum TaskResolution {
-        case found(TaskItem)
-        case ambiguous([TaskItem])
-        case notFound
+        case resolved(TaskItem, confidence: EditTargetConfidence, reason: String)
+        case needsConfirmation(TaskItem, reason: String)
+        case needsDisambiguation([TaskItem], reason: String)
+        case noMatch(String)
     }
 
     private func resolveEditTarget(for command: ParsedCommand) -> TaskResolution {
@@ -1371,7 +1429,7 @@ final class VoiceCommandViewModel {
         if command.targetReferenceType == .taskID, let id = command.targetTaskID {
             if let task = fetchIncompleteTask(id: id) {
                 Self.log.info("[VoiceChat] editTargetResolution source=backendTaskID target.reference_type=task_id finalTargetTaskID=\(task.id.uuidString, privacy: .public) skipGlobalMatching=true")
-                return .found(task)
+                return .resolved(task, confidence: .high, reason: "backendTaskID")
             }
             Self.log.info("[VoiceChat] editTargetResolution source=backendTaskID result=notFound target.task_id=\(id.uuidString, privacy: .public) fallback=activeContext")
         }
@@ -1379,16 +1437,19 @@ final class VoiceCommandViewModel {
         if command.targetReferenceType == .recentTask, let active = lastActiveChatTaskContext {
             if let task = fetchIncompleteTask(id: active.taskID) {
                 Self.log.info("[VoiceChat] editTargetResolution source=backendRecentTask target.reference_type=recent_task finalTargetTaskID=\(task.id.uuidString, privacy: .public) skipGlobalMatching=true")
-                return .found(task)
+                return .resolved(task, confidence: .high, reason: "backendRecentTask")
             }
             Self.log.info("[VoiceChat] editTargetResolution source=backendRecentTask result=activeTaskMissing taskID=\(active.taskID.uuidString, privacy: .public)")
         }
 
         if !explicitDifferent, let active = lastActiveChatTaskContext {
             if let task = fetchIncompleteTask(id: active.taskID) {
-                let reason = implicitActive ? "implicitCurrentTaskReference" : "activeContextDefaultNoExplicitTarget"
-                Self.log.info("[VoiceChat] editTargetResolution source=activeTaskContext actionType=\(String(describing: command.actionType), privacy: .public) reason=\(reason, privacy: .public) skipDisambiguation=true taskID=\(active.taskID.uuidString, privacy: .public) title=\(active.title, privacy: .public) scheduledDate=\(String(describing: active.scheduledDate), privacy: .public)")
-                return .found(task)
+                let noOtherTarget = !hasExplicitTaskReference(command)
+                if implicitActive || noOtherTarget {
+                    let reason = implicitActive ? "implicitCurrentTaskReference" : "activeContextNoOtherTarget"
+                    Self.log.info("[VoiceChat] editTargetResolution source=activeTaskContext actionType=\(String(describing: command.actionType), privacy: .public) reason=\(reason, privacy: .public) skipDisambiguation=true taskID=\(active.taskID.uuidString, privacy: .public) title=\(active.title, privacy: .public) scheduledDate=\(String(describing: active.scheduledDate), privacy: .public)")
+                    return .resolved(task, confidence: .high, reason: reason)
+                }
             }
             Self.log.info("[VoiceChat] editTargetResolution source=activeTaskContext reason=activeTaskMissing fallback=globalMatching taskID=\(active.taskID.uuidString, privacy: .public) title=\(active.title, privacy: .public)")
         }
@@ -1399,35 +1460,214 @@ final class VoiceCommandViewModel {
             Self.log.info("[VoiceChat] editTargetResolution source=globalFallback actionType=\(String(describing: command.actionType), privacy: .public) reason=noActiveContextOrTargetMissing")
         }
 
-        return resolveTargetTaskGlobally(near: command.targetDate)
+        return resolveEditTargetForGlobalChoice(command)
     }
 
-    private func resolveTargetTaskGlobally(near targetDate: Date?) -> TaskResolution {
-        if let targetDate, let ctx = persistenceContext {
-            let descriptor = FetchDescriptor<TaskItem>(
-                predicate: #Predicate<TaskItem> { !$0.isCompleted }
-            )
-            let candidates = (try? ctx.fetch(descriptor)) ?? []
-            let window: TimeInterval = 15 * 60
-            let matches = candidates.filter { item in
-                guard let d = item.scheduledDate,
-                      TaskScheduleFormatting.hasWallClockTime(d) else { return false }
-                return abs(d.timeIntervalSince(targetDate)) <= window
+    private func resolveEditTargetForGlobalChoice(_ command: ParsedCommand) -> TaskResolution {
+        let scored = rankedEditCandidates(for: command)
+        guard let top = scored.first else {
+            Self.log.info("[VoiceChat] taskResolveNoMatch topScore=0 reason=noCandidates")
+            return .noMatch("noCandidates")
+        }
+
+        let topScore = top.score
+        if topScore < TaskResolverThresholds.mediumConfidence {
+            Self.log.info("[VoiceChat] taskResolveNoMatch topScore=\(topScore, privacy: .public)")
+            return .noMatch("topScoreBelowMedium")
+        }
+
+        let closeCandidates = scored.prefix(TaskResolverThresholds.topCandidateLimit).filter {
+            topScore - $0.score < TaskResolverThresholds.ambiguityDelta
+        }
+        if closeCandidates.count > 1 {
+            let candidates = closeCandidates.map(\.task)
+            Self.log.info("[VoiceChat] taskResolveNeedsDisambiguation count=\(candidates.count, privacy: .public) reason=closeTopScores")
+            return .needsDisambiguation(candidates, reason: "closeTopScores")
+        }
+
+        if isExactTitleAndTimeMatch(top, command: command) || isOnlyExactTitleMatch(top, in: scored, command: command) || isOnlyExactTimeMatch(top, in: scored, command: command) || topScore >= TaskResolverThresholds.highConfidence {
+            return .resolved(top.task, confidence: .high, reason: top.reasons.joined(separator: ","))
+        }
+
+        return .needsConfirmation(top.task, reason: "mediumScore=\(String(format: "%.2f", topScore))")
+    }
+
+    private func rankedEditCandidates(for command: ParsedCommand) -> [ScoredTaskCandidate] {
+        let candidates = fetchIncompleteTasks()
+        let scored = candidates
+            .map { scoreCandidate($0, command: command) }
+            .sorted {
+                if abs($0.score - $1.score) > 0.001 {
+                    return $0.score > $1.score
+                }
+                return $0.task.updatedAt > $1.task.updatedAt
             }
-            switch matches.count {
-            case 1:
-                Self.log.info("[VoiceChat] editTargetResolution source=explicitMatch result=found title=\(matches[0].title, privacy: .public) targetDate=\(targetDate, privacy: .public)")
-                return .found(matches[0])
-            case 0:
-                Self.log.info("[VoiceChat] editTargetResolution source=explicitMatch result=notFound targetDate=\(targetDate, privacy: .public)")
-                break
-            default:
-                Self.log.info("[VoiceChat] editTargetResolution source=globalDisambiguation reason=multipleTargetDateMatches count=\(matches.count, privacy: .public) targetDate=\(targetDate, privacy: .public)")
-                return .ambiguous(matches)
+        for candidate in scored.prefix(5) {
+            Self.log.info("[VoiceChat] taskResolveScore candidate=\(candidate.task.title, privacy: .public) score=\(candidate.score, privacy: .public) reasons=\(candidate.reasons.joined(separator: ","), privacy: .public)")
+        }
+        return scored
+    }
+
+    private func scoreCandidate(_ task: TaskItem, command: ParsedCommand) -> ScoredTaskCandidate {
+        let original = normalizeForMatching(command.originalText)
+        let targetTitle = normalizedCommandTargetTitle(command)
+        let taskTitle = normalizeForMatching(task.title)
+        var score = 0.05
+        var reasons = ["incomplete"]
+
+        if let active = lastActiveChatTaskContext, active.taskID == task.id {
+            score += 0.12
+            reasons.append("activeContext")
+        }
+
+        if original.contains(taskTitle), !taskTitle.isEmpty {
+            score += 0.45
+            reasons.append("titleInUtterance")
+        }
+
+        if let targetTitle, !targetTitle.isEmpty {
+            if targetTitle == taskTitle {
+                score += 0.50
+                reasons.append("exactParsedTitle")
+            } else if taskTitle.contains(targetTitle) || targetTitle.contains(taskTitle) {
+                score += 0.36
+                reasons.append("partialParsedTitle")
+            } else {
+                let similarity = stringSimilarity(targetTitle, taskTitle)
+                if similarity >= 0.55 {
+                    let contribution = 0.42 * similarity
+                    score += contribution
+                    reasons.append("fuzzyTitle\(String(format: "%.2f", similarity))")
+                }
             }
         }
-        Self.log.info("[VoiceChat] editTargetResolution source=globalMatching result=notFound reason=noTargetDateOrNoMatches")
-        return .notFound
+
+        if let targetDate = command.targetDate {
+            let timeScore = scheduleTimeMatchScore(task: task, targetDate: targetDate)
+            if timeScore > 0 {
+                score += timeScore
+                reasons.append(timeScore >= 0.35 ? "exactTime" : "nearbyTime")
+            }
+        }
+
+        if let updatedAge = Calendar.current.dateComponents([.minute], from: task.updatedAt, to: Date()).minute,
+           updatedAge >= 0, updatedAge <= 10 {
+            score += 0.08
+            reasons.append("recentlyEdited")
+        } else if let createdAge = Calendar.current.dateComponents([.minute], from: task.createdAt, to: Date()).minute,
+                  createdAge >= 0, createdAge <= 10 {
+            score += 0.06
+            reasons.append("recentlyCreated")
+        }
+
+        if task.isRecurring, mentionsRecurrence(command.originalText) {
+            score += 0.12
+            reasons.append("recurrenceMention")
+        }
+
+        return ScoredTaskCandidate(task: task, score: min(score, 1.0), reasons: reasons)
+    }
+
+    private func scheduleTimeMatchScore(task: TaskItem, targetDate: Date) -> Double {
+        if let scheduled = task.scheduledDate, TaskScheduleFormatting.hasWallClockTime(scheduled) {
+            let delta = abs(scheduled.timeIntervalSince(targetDate))
+            if delta <= TaskResolverThresholds.exactTimeWindow { return 0.35 }
+            if delta <= TaskResolverThresholds.nearbyTimeWindow { return 0.24 }
+        }
+        if let recurrenceMinutes = task.recurrenceTimeMinutes,
+           recurrenceMinutes == scheduledDateClockMinutes(targetDate) {
+            return 0.30
+        }
+        return 0
+    }
+
+    private func hasExplicitTaskReference(_ command: ParsedCommand) -> Bool {
+        if command.targetDate != nil { return true }
+        if let title = normalizedCommandTargetTitle(command), !title.isEmpty { return true }
+        return false
+    }
+
+    private func normalizedCommandTargetTitle(_ command: ParsedCommand) -> String? {
+        let title = command.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { return nil }
+        let lower = title.lowercased()
+        let generic = ["move meeting", "move task", "reschedule", "delete task", "rename task", "append", "update recurrence"]
+        if generic.contains(lower) { return nil }
+        return normalizeForMatching(title)
+    }
+
+    private func isExactTitleAndTimeMatch(_ candidate: ScoredTaskCandidate, command: ParsedCommand) -> Bool {
+        candidate.reasons.contains("exactParsedTitle") && candidate.reasons.contains("exactTime")
+    }
+
+    private func isOnlyExactTitleMatch(_ candidate: ScoredTaskCandidate, in all: [ScoredTaskCandidate], command: ParsedCommand) -> Bool {
+        guard candidate.reasons.contains("exactParsedTitle") || candidate.reasons.contains("titleInUtterance") else {
+            return false
+        }
+        let exactMatches = all.filter { $0.reasons.contains("exactParsedTitle") || $0.reasons.contains("titleInUtterance") }
+        return exactMatches.count == 1
+    }
+
+    private func isOnlyExactTimeMatch(_ candidate: ScoredTaskCandidate, in all: [ScoredTaskCandidate], command: ParsedCommand) -> Bool {
+        guard command.targetDate != nil, candidate.reasons.contains("exactTime") else { return false }
+        return all.filter { $0.reasons.contains("exactTime") }.count == 1
+    }
+
+    private func mentionsRecurrence(_ text: String) -> Bool {
+        let lower = text.lowercased()
+        return lower.contains("repeat")
+            || lower.contains("recurr")
+            || lower.contains("every")
+            || lower.contains("每周")
+            || lower.contains("周一")
+            || lower.contains("周二")
+            || lower.contains("周三")
+            || lower.contains("周四")
+            || lower.contains("周五")
+            || lower.contains("周六")
+            || lower.contains("周日")
+            || lower.contains("星期")
+    }
+
+    private func normalizeForMatching(_ text: String) -> String {
+        text
+            .lowercased()
+            .folding(options: [.diacriticInsensitive, .widthInsensitive], locale: uiLanguage.locale)
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .joined()
+    }
+
+    private func stringSimilarity(_ lhs: String, _ rhs: String) -> Double {
+        guard !lhs.isEmpty, !rhs.isEmpty else { return 0 }
+        if lhs == rhs { return 1 }
+        let distance = levenshteinDistance(Array(lhs), Array(rhs))
+        let maxCount = max(lhs.count, rhs.count)
+        guard maxCount > 0 else { return 0 }
+        return max(0, 1 - (Double(distance) / Double(maxCount)))
+    }
+
+    private func levenshteinDistance(_ lhs: [Character], _ rhs: [Character]) -> Int {
+        if lhs.isEmpty { return rhs.count }
+        if rhs.isEmpty { return lhs.count }
+        var previous = Array(0...rhs.count)
+        var current = Array(repeating: 0, count: rhs.count + 1)
+        for i in 1...lhs.count {
+            current[0] = i
+            for j in 1...rhs.count {
+                let cost = lhs[i - 1] == rhs[j - 1] ? 0 : 1
+                current[j] = min(previous[j] + 1, current[j - 1] + 1, previous[j - 1] + cost)
+            }
+            previous = current
+        }
+        return previous[rhs.count]
+    }
+
+    private func fetchIncompleteTasks() -> [TaskItem] {
+        guard let ctx = persistenceContext else { return [] }
+        let descriptor = FetchDescriptor<TaskItem>(
+            predicate: #Predicate<TaskItem> { !$0.isCompleted }
+        )
+        return (try? ctx.fetch(descriptor)) ?? []
     }
 
     private func isImplicitActiveTaskReference(_ text: String) -> Bool {
@@ -1609,6 +1849,8 @@ final class VoiceCommandViewModel {
         pendingConflictCommand = nil
         pendingDeleteTask = nil
         pendingDeleteUsageCommand = nil
+        confirmationCandidate = nil
+        pendingConfirmationUsageCommand = nil
         pendingEditAction = nil
         pendingDisambiguationUsageCommand = nil
         disambiguationCandidates = []
@@ -1637,6 +1879,41 @@ final class VoiceCommandViewModel {
         f.dateStyle = .none
         f.timeStyle = .short
         return f
+    }
+
+    func chatCandidateMetadata(for task: TaskItem) -> String? {
+        var parts: [String] = []
+        if let d = task.scheduledDate, TaskScheduleFormatting.hasWallClockTime(d) {
+            parts.append(shortTimeFormatter.string(from: d))
+        }
+        if let recurrence = TaskRecurrenceFormatting.label(for: task, locale: uiLanguage.locale) {
+            parts.append(recurrence)
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    private func editConfirmationMessage(for task: TaskItem) -> String {
+        let metadata = chatCandidateMetadata(for: task)
+        if uiLanguage == .en {
+            if let metadata {
+                return "Did you mean “\(task.title)” (\(metadata))?"
+            }
+            return "Did you mean “\(task.title)”?"
+        }
+        if let metadata {
+            return "你是指「\(task.title)」\(metadata) 吗？"
+        }
+        return "你是指「\(task.title)」吗？"
+    }
+
+    private func editDisambiguationMessage() -> String {
+        uiLanguage == .en ? "Which task do you want to edit?" : "你想修改哪一个任务？"
+    }
+
+    private func noTaskMatchMessage(strings s: AppStrings) -> String {
+        uiLanguage == .en
+            ? "I couldn’t find that task. Try saying the title or time again."
+            : "我找不到那个任务。请再说一次标题或时间。"
     }
 
     private func confirmationMessage(for command: ParsedCommand, userTranscript: String) -> String {

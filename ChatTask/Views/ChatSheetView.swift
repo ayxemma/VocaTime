@@ -188,6 +188,8 @@ struct ChatSheetView: View {
                 conflictButtons(s: s)
             } else if viewModel.chatFlowState == .deletePending {
                 deleteButtons(s: s)
+            } else if viewModel.chatFlowState == .editConfirmationPending {
+                editConfirmationButtons
             } else if viewModel.chatFlowState == .disambiguating {
                 disambiguationCandidateList
             } else {
@@ -390,6 +392,29 @@ struct ChatSheetView: View {
         .padding(.top, 2)
     }
 
+    // MARK: - Edit confirmation buttons
+
+    private var editConfirmationButtons: some View {
+        HStack(spacing: 8) {
+            Button(appUILanguage == .en ? "Cancel" : "取消") {
+                viewModel.chatCancelEditResolution()
+            }
+            .buttonStyle(.bordered)
+
+            Button(appUILanguage == .en ? "Choose another" : "选择其他") {
+                viewModel.chatChooseAnotherEditCandidate()
+            }
+            .buttonStyle(.bordered)
+
+            Button(appUILanguage == .en ? "Yes" : "是的") {
+                viewModel.chatConfirmEditCandidate()
+            }
+            .buttonStyle(.borderedProminent)
+        }
+        .frame(maxWidth: .infinity, alignment: .trailing)
+        .padding(.top, 2)
+    }
+
     // MARK: - Disambiguation list
 
     @ViewBuilder
@@ -405,13 +430,11 @@ struct ChatSheetView: View {
                                 .font(typography.font(size: 15, weight: .medium))
                                 .foregroundStyle(.primary)
                                 .lineLimit(1)
-                            if let d = task.scheduledDate,
-                               TaskScheduleFormatting.hasWallClockTime(d) {
-                                Text(d.formatted(
-                                    Date.FormatStyle(date: .omitted, time: .shortened).locale(locale)
-                                ))
+                            if let metadata = viewModel.chatCandidateMetadata(for: task) {
+                                Text(metadata)
                                 .font(typography.caption)
                                 .foregroundStyle(.secondary)
+                                .lineLimit(2)
                             }
                         }
                         Spacer()
