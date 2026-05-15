@@ -15,6 +15,8 @@ struct TaskDetailView: View {
     @State private var specificTimeEnabled: Bool
     @State private var timeSelection: Date
     @State private var reminderOffset: ReminderOffset
+    @State private var recurrenceEnabled: Bool
+    @State private var selectedWeekdays: Set<Int>
 
     private var calendar: Calendar { .current }
 
@@ -36,6 +38,8 @@ struct TaskDetailView: View {
         }
         let offsetMinutes = task.reminderOffsetMinutes ?? ReminderOffset.globalDefault.rawValue
         _reminderOffset = State(initialValue: ReminderOffset.nearest(to: offsetMinutes))
+        _recurrenceEnabled = State(initialValue: task.isRecurring)
+        _selectedWeekdays = State(initialValue: Set(task.recurrenceWeekdays))
     }
 
     var body: some View {
@@ -71,6 +75,10 @@ struct TaskDetailView: View {
 
                     Toggle(s.specificTime, isOn: $specificTimeEnabled)
                         .onChange(of: specificTimeEnabled) { _, _ in
+                            if !specificTimeEnabled {
+                                recurrenceEnabled = false
+                                selectedWeekdays = []
+                            }
                             flushScheduleToTask()
                         }
 
@@ -90,6 +98,24 @@ struct TaskDetailView: View {
                             task.reminderOffsetMinutes = new.rawValue
                             task.updatedAt = Date()
                             TaskReminderService.shared.schedule(for: task)
+                        }
+
+                        Toggle("Repeat weekly", isOn: $recurrenceEnabled)
+                            .onChange(of: recurrenceEnabled) { _, new in
+                                if new, selectedWeekdays.isEmpty {
+                                    selectedWeekdays = [isoWeekday(for: daySelection)]
+                                }
+                                flushScheduleToTask()
+                            }
+
+                        if recurrenceEnabled {
+                            weekdayEditor
+
+                            if let label = TaskRecurrenceFormatting.label(for: task, locale: locale) {
+                                Text(label)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                     }
                 }
@@ -131,6 +157,35 @@ struct TaskDetailView: View {
         )
     }
 
+    private var weekdayEditor: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Repeat on")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            HStack(spacing: 8) {
+                ForEach(1...7, id: \.self) { weekday in
+                    Button {
+                        toggleWeekday(weekday)
+                    } label: {
+                        Text(shortWeekdaySymbol(forISOWeekday: weekday))
+                            .font(.subheadline.weight(.semibold))
+                            .frame(width: 34, height: 34)
+                            .background(
+                                Circle()
+                                    .fill(selectedWeekdays.contains(weekday) ? Color.accentColor : Color(.secondarySystemBackground))
+                            )
+                            .foregroundStyle(selectedWeekdays.contains(weekday) ? Color.white : Color.primary)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(fullWeekdaySymbol(forISOWeekday: weekday))
+                    .accessibilityAddTraits(selectedWeekdays.contains(weekday) ? .isSelected : [])
+                }
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
     private var notesBinding: Binding<String> {
         Binding(
             get: { task.notes ?? "" },
@@ -162,9 +217,13 @@ struct TaskDetailView: View {
         guard scheduleEnabled else {
             task.scheduledDate = nil
             task.reminderOffsetMinutes = nil
+            clearRecurrence()
             task.updatedAt = Date()
             TaskReminderService.shared.cancel(taskID: task.id)
             return
+        }
+        if recurrenceEnabled && !specificTimeEnabled {
+            recurrenceEnabled = false
         }
         task.scheduledDate = TaskScheduleHelpers.scheduledDate(
             calendar: calendar,
@@ -174,8 +233,78 @@ struct TaskDetailView: View {
             timeSelection: timeSelection
         )
         task.reminderOffsetMinutes = specificTimeEnabled ? reminderOffset.rawValue : nil
+        if recurrenceEnabled {
+            let weekdays = sanitizedSelectedWeekdays
+            if weekdays.isEmpty {
+                clearRecurrence()
+                recurrenceEnabled = false
+            } else {
+                task.recurrenceFrequencyRaw = RecurrenceFrequency.weekly.rawValue
+                task.recurrenceWeekdaysRaw = weekdays.map(String.init).joined(separator: ",")
+                task.recurrenceTimeMinutes = recurrenceTimeMinutes
+                task.recurrenceTimeZoneIdentifier = TimeZone.current.identifier
+                task.recurrenceStartDate = calendar.startOfDay(for: daySelection)
+                task.recurrenceEndDate = nil
+            }
+        } else {
+            clearRecurrence()
+        }
         task.updatedAt = Date()
         TaskReminderService.shared.schedule(for: task)
+    }
+
+    private var sanitizedSelectedWeekdays: [Int] {
+        Array(selectedWeekdays.filter { (1...7).contains($0) }).sorted()
+    }
+
+    private var recurrenceTimeMinutes: Int {
+        calendar.component(.hour, from: timeSelection) * 60 + calendar.component(.minute, from: timeSelection)
+    }
+
+    private func clearRecurrence() {
+        task.recurrenceFrequencyRaw = nil
+        task.recurrenceWeekdaysRaw = nil
+        task.recurrenceTimeMinutes = nil
+        task.recurrenceTimeZoneIdentifier = nil
+        task.recurrenceStartDate = nil
+        task.recurrenceEndDate = nil
+    }
+
+    private func toggleWeekday(_ weekday: Int) {
+        if selectedWeekdays.contains(weekday) {
+            if selectedWeekdays.count > 1 {
+                selectedWeekdays.remove(weekday)
+            }
+        } else {
+            selectedWeekdays.insert(weekday)
+        }
+        flushScheduleToTask()
+    }
+
+    private func isoWeekday(for date: Date) -> Int {
+        let weekday = calendar.component(.weekday, from: date)
+        return weekday == 1 ? 7 : weekday - 1
+    }
+
+    private func shortWeekdaySymbol(forISOWeekday iso: Int) -> String {
+        guard let index = Self.foundationWeekdayIndex(forISOWeekday: iso) else { return "" }
+        let formatter = DateFormatter()
+        formatter.locale = locale
+        let symbols = formatter.veryShortWeekdaySymbols ?? ["S", "M", "T", "W", "T", "F", "S"]
+        return symbols[index]
+    }
+
+    private func fullWeekdaySymbol(forISOWeekday iso: Int) -> String {
+        guard let index = Self.foundationWeekdayIndex(forISOWeekday: iso) else { return "" }
+        let formatter = DateFormatter()
+        formatter.locale = locale
+        let symbols = formatter.weekdaySymbols ?? ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+        return symbols[index]
+    }
+
+    private static func foundationWeekdayIndex(forISOWeekday iso: Int) -> Int? {
+        guard (1...7).contains(iso) else { return nil }
+        return iso == 7 ? 0 : iso
     }
 }
 

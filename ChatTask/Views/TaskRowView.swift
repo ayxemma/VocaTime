@@ -93,6 +93,13 @@ struct TaskRowMainContent: View {
                     .foregroundStyle(Color(.tertiaryLabel))
                     .strikethrough(task.isCompleted)
             }
+
+            if let recurrence = TaskRecurrenceFormatting.label(for: task, locale: locale) {
+                Text(recurrence)
+                    .font(typography.caption)
+                    .foregroundStyle(Color(.tertiaryLabel))
+                    .strikethrough(task.isCompleted)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -106,6 +113,9 @@ struct TaskRowMainContent: View {
 
     private var timeText: String {
         let s = strings
+        if let recurringTime = TaskRecurrenceFormatting.timeText(for: task, locale: locale) {
+            return recurringTime
+        }
         guard let d = task.scheduledDate else { return s.anytime }
         guard TaskScheduleFormatting.hasWallClockTime(d, calendar: calendar) else { return s.anytime }
         return d.formatted(Date.FormatStyle(date: .omitted, time: .shortened).locale(locale))
@@ -144,6 +154,81 @@ struct TaskRowMainContent: View {
 
     private var titleForegroundColor: Color {
         task.isCompleted ? Color.secondary : Color.primary
+    }
+}
+
+enum TaskRecurrenceFormatting {
+    static func label(for task: TaskItem, locale: Locale) -> String? {
+        guard task.recurrenceFrequency == .weekly else { return nil }
+        let weekdays = task.recurrenceWeekdays
+        guard !weekdays.isEmpty else { return nil }
+        let days = weekdayRangeText(weekdays: weekdays, locale: locale)
+        if let time = timeText(for: task, locale: locale) {
+            return "Repeats \(days) at \(time)"
+        }
+        return "Repeats \(days)"
+    }
+
+    static func timeText(for task: TaskItem, locale: Locale) -> String? {
+        guard let minutes = task.recurrenceTimeMinutes,
+              (0..<(24 * 60)).contains(minutes)
+        else {
+            return nil
+        }
+        var calendar = Calendar(identifier: .gregorian)
+        if let tz = task.recurrenceTimeZoneIdentifier.flatMap(TimeZone.init(identifier:)) {
+            calendar.timeZone = tz
+        }
+        var comps = DateComponents()
+        comps.year = 2000
+        comps.month = 1
+        comps.day = 3
+        comps.hour = minutes / 60
+        comps.minute = minutes % 60
+        guard let date = calendar.date(from: comps) else { return nil }
+        return date.formatted(Date.FormatStyle(date: .omitted, time: .shortened).locale(locale))
+    }
+
+    private static func weekdayRangeText(weekdays: [Int], locale: Locale) -> String {
+        let sanitized = Array(Set(weekdays.filter { (1...7).contains($0) })).sorted()
+        guard !sanitized.isEmpty else { return "" }
+        let ranges = contiguousRanges(sanitized)
+        return ranges.map { range in
+            if range.count >= 3, let first = range.first, let last = range.last {
+                return "\(shortWeekdaySymbol(forISOWeekday: first, locale: locale))-\(shortWeekdaySymbol(forISOWeekday: last, locale: locale))"
+            }
+            return range.map { shortWeekdaySymbol(forISOWeekday: $0, locale: locale) }.joined(separator: ", ")
+        }
+        .joined(separator: ", ")
+    }
+
+    private static func contiguousRanges(_ weekdays: [Int]) -> [[Int]] {
+        weekdays.reduce(into: [[Int]]()) { ranges, day in
+            guard var last = ranges.popLast() else {
+                ranges.append([day])
+                return
+            }
+            if let previous = last.last, day == previous + 1 {
+                last.append(day)
+                ranges.append(last)
+            } else {
+                ranges.append(last)
+                ranges.append([day])
+            }
+        }
+    }
+
+    private static func shortWeekdaySymbol(forISOWeekday iso: Int, locale: Locale) -> String {
+        guard let index = foundationWeekdayIndex(forISOWeekday: iso) else { return "" }
+        let formatter = DateFormatter()
+        formatter.locale = locale
+        let symbols = formatter.shortWeekdaySymbols ?? ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+        return symbols[index]
+    }
+
+    private static func foundationWeekdayIndex(forISOWeekday iso: Int) -> Int? {
+        guard (1...7).contains(iso) else { return nil }
+        return iso == 7 ? 0 : iso
     }
 }
 
