@@ -117,19 +117,11 @@ final class VoiceCommandViewModel {
         case medium
     }
 
-    private struct ScoredTaskCandidate {
-        let task: TaskItem
-        let score: Double
-        let reasons: [String]
-    }
-
-    private enum TaskResolverThresholds {
+    private enum TaskResolverConfig {
         static let highConfidence = 0.85
-        static let mediumConfidence = 0.60
-        static let ambiguityDelta = 0.15
-        static let topCandidateLimit = 3
-        static let exactTimeWindow: TimeInterval = 60
-        static let nearbyTimeWindow: TimeInterval = 15 * 60
+        static let candidateLimit = 20
+        static let disambiguationLimit = 3
+        static let nearbyTimeWindow: TimeInterval = 6 * 60 * 60
     }
 
     var uiLanguage: AppUILanguage = .defaultForDevice()
@@ -140,6 +132,7 @@ final class VoiceCommandViewModel {
     private let transcriptionService: any FallbackTranscribing
     private let transcriptionRouter: any TranscriptionRouting
     private let localEvaluator: LocalTranscriptEvaluator
+    private let taskTargetResolver: TaskTargetResolverService
 
     /// Main parsing coordinator. Strategy is set per-call depending on whether the transcript
     /// came from local recognition (`.localFirst`) or cloud transcription (`.llmFirst`).
@@ -184,12 +177,14 @@ final class VoiceCommandViewModel {
         transcriptionService: (any FallbackTranscribing)? = nil,
         transcriptionRouter: (any TranscriptionRouting)? = nil,
         localEvaluator: LocalTranscriptEvaluator? = nil,
-        parsingCoordinator: TaskParsingCoordinator? = nil
+        parsingCoordinator: TaskParsingCoordinator? = nil,
+        taskTargetResolver: TaskTargetResolverService = TaskTargetResolverService()
     ) {
         self.speechService = speechService ?? SpeechRecognizerService()
         self.transcriptionService = transcriptionService ?? MultilingualTranscriptionService()
         self.transcriptionRouter = transcriptionRouter ?? TranscriptionRouter()
         self.localEvaluator = localEvaluator ?? LocalTranscriptEvaluator()
+        self.taskTargetResolver = taskTargetResolver
         self.parsingCoordinator = parsingCoordinator ?? TaskParsingCoordinator(
             localParser: LocalTaskParser(),
             llmParser: LLMTaskParserService(),
@@ -881,19 +876,19 @@ final class VoiceCommandViewModel {
         // ── Route edit intents ────────────────────────────────────────────────
         switch command.actionType {
         case .deleteTask:
-            handleDeleteIntent(command)
+            await handleDeleteIntent(command)
             return
         case .rescheduleTask:
-            handleRescheduleIntent(command)
+            await handleRescheduleIntent(command)
             return
         case .appendToTask:
-            handleAppendIntent(command)
+            await handleAppendIntent(command)
             return
         case .updateTaskTitle:
-            handleUpdateTitleIntent(command)
+            await handleUpdateTitleIntent(command)
             return
         case .updateRecurrence:
-            handleUpdateRecurrenceIntent(command)
+            await handleUpdateRecurrenceIntent(command)
             return
         default:
             break
@@ -1043,58 +1038,58 @@ final class VoiceCommandViewModel {
 
     // MARK: - Edit intent handlers (unchanged)
 
-    private func handleUpdateTitleIntent(_ command: ParsedCommand) {
+    private func handleUpdateTitleIntent(_ command: ParsedCommand) async {
         let s = uiLanguage.strings
         let newTitle = command.newTitle?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard !newTitle.isEmpty else {
             emitAssistantResponse(s.chatEditNoTaskFound, nextState: .error, stream: false)
             return
         }
-        routeResolvedEditTarget(command, editType: .rename(to: newTitle), strings: s) { task, usageCommand in
+        await routeResolvedEditTarget(command, editType: .rename(to: newTitle), strings: s) { task, usageCommand in
             applyRename(task: task, newTitle: newTitle, strings: s, usageCommand: usageCommand)
         }
     }
 
-    private func handleDeleteIntent(_ command: ParsedCommand) {
+    private func handleDeleteIntent(_ command: ParsedCommand) async {
         let s = uiLanguage.strings
-        routeResolvedEditTarget(command, editType: .delete, strings: s) { task, usageCommand in
+        await routeResolvedEditTarget(command, editType: .delete, strings: s) { task, usageCommand in
             Self.log.info("[VoiceChat] deleteIntent — found task title=\(task.title, privacy: .public)")
             enterDeleteConfirmation(for: task, strings: s, usageCommand: usageCommand)
         }
     }
 
-    private func handleRescheduleIntent(_ command: ParsedCommand) {
+    private func handleRescheduleIntent(_ command: ParsedCommand) async {
         let s = uiLanguage.strings
         guard let newDate = command.newScheduledDate else {
             Self.log.warning("[VoiceChat] rescheduleIntent — newScheduledDate is nil")
             emitAssistantResponse(s.chatEditNoTaskFound, nextState: .error, stream: false)
             return
         }
-        routeResolvedEditTarget(command, editType: .reschedule(newDate: newDate), strings: s) { task, usageCommand in
+        await routeResolvedEditTarget(command, editType: .reschedule(newDate: newDate), strings: s) { task, usageCommand in
             applyReschedule(task: task, newDate: newDate, strings: s, usageCommand: usageCommand)
         }
     }
 
-    private func handleAppendIntent(_ command: ParsedCommand) {
+    private func handleAppendIntent(_ command: ParsedCommand) async {
         let s = uiLanguage.strings
         let text = command.appendText ?? command.title
         guard !text.isEmpty else {
             emitAssistantResponse(s.chatEditNoTaskFound, nextState: .error, stream: false)
             return
         }
-        routeResolvedEditTarget(command, editType: .appendNote(text: text), strings: s) { task, usageCommand in
+        await routeResolvedEditTarget(command, editType: .appendNote(text: text), strings: s) { task, usageCommand in
             applyAppend(task: task, text: text, strings: s, usageCommand: usageCommand)
         }
     }
 
-    private func handleUpdateRecurrenceIntent(_ command: ParsedCommand) {
+    private func handleUpdateRecurrenceIntent(_ command: ParsedCommand) async {
         let s = uiLanguage.strings
         guard let update = command.recurrenceUpdate else {
             Self.log.warning("[VoiceChat] updateRecurrenceIntent — recurrenceUpdate is nil")
             emitAssistantResponse(s.chatEditNoTaskFound, nextState: .error, stream: false)
             return
         }
-        routeResolvedEditTarget(command, editType: .updateRecurrence(update), strings: s) { task, usageCommand in
+        await routeResolvedEditTarget(command, editType: .updateRecurrence(update), strings: s) { task, usageCommand in
             applyRecurrenceUpdate(task: task, update: update, strings: s, usageCommand: usageCommand)
         }
     }
@@ -1104,8 +1099,8 @@ final class VoiceCommandViewModel {
         editType: PendingEditType,
         strings s: AppStrings,
         apply: (TaskItem, ParsedCommand?) -> Void
-    ) {
-        switch resolveEditTarget(for: command) {
+    ) async {
+        switch await resolveEditTarget(for: command) {
         case .resolved(let task, let confidence, let reason):
             Self.log.info("[VoiceChat] taskResolveHighConfidence task=\(task.title, privacy: .public) confidence=\(confidence.rawValue, privacy: .public) reason=\(reason, privacy: .public)")
             apply(task, command)
@@ -1160,7 +1155,7 @@ final class VoiceCommandViewModel {
         pendingConfirmationUsageCommand = nil
         confirmationCandidate = nil
         if disambiguationCandidates.isEmpty, let context = usageCommand {
-            disambiguationCandidates = Array(rankedEditCandidates(for: context).prefix(TaskResolverThresholds.topCandidateLimit).map(\.task))
+            disambiguationCandidates = Array(taskTargetCandidates(for: context).prefix(TaskResolverConfig.disambiguationLimit))
         }
         pendingDisambiguationUsageCommand = usageCommand
         pendingEditAction = action
@@ -1421,7 +1416,7 @@ final class VoiceCommandViewModel {
         case noMatch(String)
     }
 
-    private func resolveEditTarget(for command: ParsedCommand) -> TaskResolution {
+    private func resolveEditTarget(for command: ParsedCommand) async -> TaskResolution {
         let implicitActive = isImplicitActiveTaskReference(command.originalText)
         let explicitDifferent = isExplicitDifferentTarget(command)
         logActiveTaskContext(command: command, implicitActive: implicitActive, explicitDifferent: explicitDifferent)
@@ -1460,157 +1455,119 @@ final class VoiceCommandViewModel {
             Self.log.info("[VoiceChat] editTargetResolution source=globalFallback actionType=\(String(describing: command.actionType), privacy: .public) reason=noActiveContextOrTargetMissing")
         }
 
-        return resolveEditTargetForGlobalChoice(command)
+        return await resolveEditTargetWithLLM(command)
     }
 
-    private func resolveEditTargetForGlobalChoice(_ command: ParsedCommand) -> TaskResolution {
-        let scored = rankedEditCandidates(for: command)
-        guard let top = scored.first else {
-            Self.log.info("[VoiceChat] taskResolveNoMatch topScore=0 reason=noCandidates")
+    private func resolveEditTargetWithLLM(_ command: ParsedCommand) async -> TaskResolution {
+        let candidateTasks = taskTargetCandidates(for: command)
+        guard !candidateTasks.isEmpty else {
+            Self.log.info("[VoiceChat] taskResolveNoMatch reason=noCandidates")
             return .noMatch("noCandidates")
         }
 
-        let topScore = top.score
-        if topScore < TaskResolverThresholds.mediumConfidence {
-            Self.log.info("[VoiceChat] taskResolveNoMatch topScore=\(topScore, privacy: .public)")
-            return .noMatch("topScoreBelowMedium")
-        }
+        let targetTime = command.targetDate.map { ISO8601DateFormatter().string(from: $0) }
+        let request = TaskTargetResolveRequest(
+            userText: command.originalText,
+            actionType: command.actionType.rawValue,
+            targetTitle: llmTargetTitle(from: command),
+            targetTime: targetTime,
+            candidates: candidateTasks.map(resolveCandidatePayload),
+            activeTaskID: lastActiveChatTaskContext?.taskID.uuidString,
+            timezone: TimeZone.current.identifier,
+            locale: uiLanguage.uiLocaleIdentifier
+        )
 
-        let closeCandidates = scored.prefix(TaskResolverThresholds.topCandidateLimit).filter {
-            topScore - $0.score < TaskResolverThresholds.ambiguityDelta
+        do {
+            let response = try await taskTargetResolver.resolve(request)
+            return mapLLMResolution(response, candidateTasks: candidateTasks)
+        } catch {
+            Self.log.error("[VoiceChat] fallbackToManualDisambiguation error=\(String(describing: error), privacy: .public)")
+            let fallback = Array(candidateTasks.prefix(TaskResolverConfig.disambiguationLimit))
+            return fallback.isEmpty ? .noMatch("resolverFailedNoCandidates") : .needsDisambiguation(fallback, reason: "resolverFailed")
         }
-        if closeCandidates.count > 1 {
-            let candidates = closeCandidates.map(\.task)
-            Self.log.info("[VoiceChat] taskResolveNeedsDisambiguation count=\(candidates.count, privacy: .public) reason=closeTopScores")
-            return .needsDisambiguation(candidates, reason: "closeTopScores")
-        }
-
-        if isExactTitleAndTimeMatch(top, command: command) || isOnlyExactTitleMatch(top, in: scored, command: command) || isOnlyExactTimeMatch(top, in: scored, command: command) || topScore >= TaskResolverThresholds.highConfidence {
-            return .resolved(top.task, confidence: .high, reason: top.reasons.joined(separator: ","))
-        }
-
-        return .needsConfirmation(top.task, reason: "mediumScore=\(String(format: "%.2f", topScore))")
     }
 
-    private func rankedEditCandidates(for command: ParsedCommand) -> [ScoredTaskCandidate] {
-        let candidates = fetchIncompleteTasks()
-        let scored = candidates
-            .map { scoreCandidate($0, command: command) }
-            .sorted {
-                if abs($0.score - $1.score) > 0.001 {
-                    return $0.score > $1.score
-                }
-                return $0.task.updatedAt > $1.task.updatedAt
+    private func mapLLMResolution(_ response: TaskTargetResolveResponse, candidateTasks: [TaskItem]) -> TaskResolution {
+        let byID = Dictionary(uniqueKeysWithValues: candidateTasks.map { ($0.id.uuidString, $0) })
+        switch response.resolution {
+        case .resolved:
+            guard let id = response.selectedID, let task = byID[id] else {
+                return .noMatch("resolverSelectedUnknownID")
             }
-        for candidate in scored.prefix(5) {
-            Self.log.info("[VoiceChat] taskResolveScore candidate=\(candidate.task.title, privacy: .public) score=\(candidate.score, privacy: .public) reasons=\(candidate.reasons.joined(separator: ","), privacy: .public)")
+            if response.confidence >= TaskResolverConfig.highConfidence {
+                return .resolved(task, confidence: .high, reason: response.reason ?? "llmResolved")
+            }
+            return .needsConfirmation(task, reason: response.reason ?? "llmResolvedBelowHighConfidence")
+        case .needsConfirmation:
+            guard let id = response.selectedID, let task = byID[id] else {
+                return .noMatch("resolverConfirmationUnknownID")
+            }
+            return .needsConfirmation(task, reason: response.reason ?? "llmNeedsConfirmation")
+        case .ambiguous:
+            let tasks = (response.candidates ?? [])
+                .compactMap { byID[$0] }
+                .prefix(TaskResolverConfig.disambiguationLimit)
+            let choices = Array(tasks)
+            return choices.isEmpty ? .noMatch("resolverAmbiguousWithoutCandidates") : .needsDisambiguation(choices, reason: response.reason ?? "llmAmbiguous")
+        case .noMatch:
+            return .noMatch(response.reason ?? "llmNoMatch")
         }
-        return scored
     }
 
-    private func scoreCandidate(_ task: TaskItem, command: ParsedCommand) -> ScoredTaskCandidate {
-        let original = normalizeForMatching(command.originalText)
-        let targetTitle = normalizedCommandTargetTitle(command)
-        let taskTitle = normalizeForMatching(task.title)
-        var score = 0.05
-        var reasons = ["incomplete"]
-
-        if let active = lastActiveChatTaskContext, active.taskID == task.id {
-            score += 0.12
-            reasons.append("activeContext")
+    private func taskTargetCandidates(for command: ParsedCommand) -> [TaskItem] {
+        let all = fetchIncompleteTasks()
+        guard !all.isEmpty else { return [] }
+        let now = Date()
+        let activeID = lastActiveChatTaskContext?.taskID
+        let recurrenceMentioned = mentionsRecurrence(command.originalText)
+        return all.sorted { lhs, rhs in
+            candidatePriority(lhs, command: command, now: now, activeID: activeID, recurrenceMentioned: recurrenceMentioned)
+                > candidatePriority(rhs, command: command, now: now, activeID: activeID, recurrenceMentioned: recurrenceMentioned)
         }
-
-        if original.contains(taskTitle), !taskTitle.isEmpty {
-            score += 0.45
-            reasons.append("titleInUtterance")
-        }
-
-        if let targetTitle, !targetTitle.isEmpty {
-            if targetTitle == taskTitle {
-                score += 0.50
-                reasons.append("exactParsedTitle")
-            } else if taskTitle.contains(targetTitle) || targetTitle.contains(taskTitle) {
-                score += 0.36
-                reasons.append("partialParsedTitle")
-            } else {
-                let similarity = stringSimilarity(targetTitle, taskTitle)
-                if similarity >= 0.55 {
-                    let contribution = 0.42 * similarity
-                    score += contribution
-                    reasons.append("fuzzyTitle\(String(format: "%.2f", similarity))")
-                }
-            }
-        }
-
-        if let targetDate = command.targetDate {
-            let timeScore = scheduleTimeMatchScore(task: task, targetDate: targetDate)
-            if timeScore > 0 {
-                score += timeScore
-                reasons.append(timeScore >= 0.35 ? "exactTime" : "nearbyTime")
-            }
-        }
-
-        if let updatedAge = Calendar.current.dateComponents([.minute], from: task.updatedAt, to: Date()).minute,
-           updatedAge >= 0, updatedAge <= 10 {
-            score += 0.08
-            reasons.append("recentlyEdited")
-        } else if let createdAge = Calendar.current.dateComponents([.minute], from: task.createdAt, to: Date()).minute,
-                  createdAge >= 0, createdAge <= 10 {
-            score += 0.06
-            reasons.append("recentlyCreated")
-        }
-
-        if task.isRecurring, mentionsRecurrence(command.originalText) {
-            score += 0.12
-            reasons.append("recurrenceMention")
-        }
-
-        return ScoredTaskCandidate(task: task, score: min(score, 1.0), reasons: reasons)
+        .prefix(TaskResolverConfig.candidateLimit)
+        .map { $0 }
     }
 
-    private func scheduleTimeMatchScore(task: TaskItem, targetDate: Date) -> Double {
-        if let scheduled = task.scheduledDate, TaskScheduleFormatting.hasWallClockTime(scheduled) {
-            let delta = abs(scheduled.timeIntervalSince(targetDate))
-            if delta <= TaskResolverThresholds.exactTimeWindow { return 0.35 }
-            if delta <= TaskResolverThresholds.nearbyTimeWindow { return 0.24 }
+    private func candidatePriority(_ task: TaskItem, command: ParsedCommand, now: Date, activeID: UUID?, recurrenceMentioned: Bool) -> Int {
+        var score = 0
+        if task.id == activeID { score += 100 }
+        if let targetDate = command.targetDate, isTask(task, near: targetDate) { score += 70 }
+        if let scheduled = task.scheduledDate, scheduled >= now { score += 30 }
+        if task.isRecurring, recurrenceMentioned { score += 25 }
+        if now.timeIntervalSince(task.updatedAt) < 30 * 60 { score += 20 }
+        if now.timeIntervalSince(task.createdAt) < 30 * 60 { score += 10 }
+        return score
+    }
+
+    private func isTask(_ task: TaskItem, near targetDate: Date) -> Bool {
+        if let scheduled = task.scheduledDate,
+           TaskScheduleFormatting.hasWallClockTime(scheduled),
+           abs(scheduled.timeIntervalSince(targetDate)) <= TaskResolverConfig.nearbyTimeWindow {
+            return true
         }
-        if let recurrenceMinutes = task.recurrenceTimeMinutes,
-           recurrenceMinutes == scheduledDateClockMinutes(targetDate) {
-            return 0.30
-        }
-        return 0
+        return task.recurrenceTimeMinutes == scheduledDateClockMinutes(targetDate)
+    }
+
+    private func resolveCandidatePayload(for task: TaskItem) -> TaskTargetResolveCandidate {
+        TaskTargetResolveCandidate(
+            id: task.id.uuidString,
+            title: task.title,
+            scheduledAt: task.scheduledDate.map { ISO8601DateFormatter().string(from: $0) },
+            isRecurring: task.isRecurring,
+            recurrenceLabel: TaskRecurrenceFormatting.label(for: task, locale: uiLanguage.locale)
+        )
     }
 
     private func hasExplicitTaskReference(_ command: ParsedCommand) -> Bool {
-        if command.targetDate != nil { return true }
-        if let title = normalizedCommandTargetTitle(command), !title.isEmpty { return true }
-        return false
+        command.targetDate != nil || llmTargetTitle(from: command) != nil
     }
 
-    private func normalizedCommandTargetTitle(_ command: ParsedCommand) -> String? {
+    private func llmTargetTitle(from command: ParsedCommand) -> String? {
         let title = command.title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty else { return nil }
         let lower = title.lowercased()
         let generic = ["move meeting", "move task", "reschedule", "delete task", "rename task", "append", "update recurrence"]
-        if generic.contains(lower) { return nil }
-        return normalizeForMatching(title)
-    }
-
-    private func isExactTitleAndTimeMatch(_ candidate: ScoredTaskCandidate, command: ParsedCommand) -> Bool {
-        candidate.reasons.contains("exactParsedTitle") && candidate.reasons.contains("exactTime")
-    }
-
-    private func isOnlyExactTitleMatch(_ candidate: ScoredTaskCandidate, in all: [ScoredTaskCandidate], command: ParsedCommand) -> Bool {
-        guard candidate.reasons.contains("exactParsedTitle") || candidate.reasons.contains("titleInUtterance") else {
-            return false
-        }
-        let exactMatches = all.filter { $0.reasons.contains("exactParsedTitle") || $0.reasons.contains("titleInUtterance") }
-        return exactMatches.count == 1
-    }
-
-    private func isOnlyExactTimeMatch(_ candidate: ScoredTaskCandidate, in all: [ScoredTaskCandidate], command: ParsedCommand) -> Bool {
-        guard command.targetDate != nil, candidate.reasons.contains("exactTime") else { return false }
-        return all.filter { $0.reasons.contains("exactTime") }.count == 1
+        return generic.contains(lower) ? nil : title
     }
 
     private func mentionsRecurrence(_ text: String) -> Bool {
@@ -1627,39 +1584,6 @@ final class VoiceCommandViewModel {
             || lower.contains("周六")
             || lower.contains("周日")
             || lower.contains("星期")
-    }
-
-    private func normalizeForMatching(_ text: String) -> String {
-        text
-            .lowercased()
-            .folding(options: [.diacriticInsensitive, .widthInsensitive], locale: uiLanguage.locale)
-            .components(separatedBy: CharacterSet.alphanumerics.inverted)
-            .joined()
-    }
-
-    private func stringSimilarity(_ lhs: String, _ rhs: String) -> Double {
-        guard !lhs.isEmpty, !rhs.isEmpty else { return 0 }
-        if lhs == rhs { return 1 }
-        let distance = levenshteinDistance(Array(lhs), Array(rhs))
-        let maxCount = max(lhs.count, rhs.count)
-        guard maxCount > 0 else { return 0 }
-        return max(0, 1 - (Double(distance) / Double(maxCount)))
-    }
-
-    private func levenshteinDistance(_ lhs: [Character], _ rhs: [Character]) -> Int {
-        if lhs.isEmpty { return rhs.count }
-        if rhs.isEmpty { return lhs.count }
-        var previous = Array(0...rhs.count)
-        var current = Array(repeating: 0, count: rhs.count + 1)
-        for i in 1...lhs.count {
-            current[0] = i
-            for j in 1...rhs.count {
-                let cost = lhs[i - 1] == rhs[j - 1] ? 0 : 1
-                current[j] = min(previous[j] + 1, current[j - 1] + 1, previous[j - 1] + cost)
-            }
-            previous = current
-        }
-        return previous[rhs.count]
     }
 
     private func fetchIncompleteTasks() -> [TaskItem] {

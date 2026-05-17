@@ -38,4 +38,9 @@ enum BackendConfig {
     static var parseURL: URL {
         baseURL.appendingPathComponent("parse")
     }
+
+    /// `POST` JSON: LLM-assisted selection of an edit target from client-provided candidates only.
+    static var resolveTaskTargetURL: URL {
+        baseURL.appendingPathComponent("resolve-task-target")
+    }
 }
