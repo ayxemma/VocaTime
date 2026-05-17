@@ -43,4 +43,9 @@ enum BackendConfig {
     static var resolveTaskTargetURL: URL {
         baseURL.appendingPathComponent("resolve-task-target")
     }
+
+    /// `POST` JSON: one-shot command interpretation for chat create/edit commands.
+    static var interpretCommandURL: URL {
+        baseURL.appendingPathComponent("interpret-command")
+    }
 }

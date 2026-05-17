@@ -96,6 +96,7 @@ final class VoiceCommandViewModel {
     private var pendingDisambiguationUsageCommand: ParsedCommand?
     /// LLM command that led to edit-target confirmation (for free-usage accounting after the user confirms).
     private var pendingConfirmationUsageCommand: ParsedCommand?
+    private var pendingConfirmationPayload: PendingConfirmationPayload?
     private var pendingEditAction: PendingEditAction?
 
     // MARK: - Pending edit model (unchanged)
@@ -110,6 +111,11 @@ final class VoiceCommandViewModel {
 
     private struct PendingEditAction {
         let type: PendingEditType
+    }
+
+    private enum PendingConfirmationPayload {
+        case legacy(PendingEditType, ParsedCommand?)
+        case interpreted(CommandInterpretResponse, transcript: String)
     }
 
     private enum EditTargetConfidence: String {
@@ -133,6 +139,7 @@ final class VoiceCommandViewModel {
     private let transcriptionRouter: any TranscriptionRouting
     private let localEvaluator: LocalTranscriptEvaluator
     private let taskTargetResolver: TaskTargetResolverService
+    private let commandInterpreter: CommandInterpreterService
 
     /// Main parsing coordinator. Strategy is set per-call depending on whether the transcript
     /// came from local recognition (`.localFirst`) or cloud transcription (`.llmFirst`).
@@ -178,13 +185,15 @@ final class VoiceCommandViewModel {
         transcriptionRouter: (any TranscriptionRouting)? = nil,
         localEvaluator: LocalTranscriptEvaluator? = nil,
         parsingCoordinator: TaskParsingCoordinator? = nil,
-        taskTargetResolver: TaskTargetResolverService = TaskTargetResolverService()
+        taskTargetResolver: TaskTargetResolverService = TaskTargetResolverService(),
+        commandInterpreter: CommandInterpreterService = CommandInterpreterService()
     ) {
         self.speechService = speechService ?? SpeechRecognizerService()
         self.transcriptionService = transcriptionService ?? MultilingualTranscriptionService()
         self.transcriptionRouter = transcriptionRouter ?? TranscriptionRouter()
         self.localEvaluator = localEvaluator ?? LocalTranscriptEvaluator()
         self.taskTargetResolver = taskTargetResolver
+        self.commandInterpreter = commandInterpreter
         self.parsingCoordinator = parsingCoordinator ?? TaskParsingCoordinator(
             localParser: LocalTaskParser(),
             llmParser: LLMTaskParserService(),
@@ -855,7 +864,16 @@ final class VoiceCommandViewModel {
             return
         }
 
-        Self.log.info("[VoiceChat] parseStarted")
+        Self.log.info("[VoiceChat] commandInterpretStart")
+        do {
+            let interpretation = try await interpretChatCommand(transcript)
+            await handleCommandInterpretation(interpretation, transcript: transcript)
+            return
+        } catch {
+            Self.log.error("[VoiceChat] commandInterpretFallbackToParse error=\(String(describing: error), privacy: .public)")
+        }
+
+        Self.log.info("[VoiceChat] parseStarted fallback=true")
 
         Self.log.info("[VoiceChat] parse input appUILanguage=\(self.uiLanguage.rawValue, privacy: .public) activeTaskID=\(self.lastActiveChatTaskContext?.taskID.uuidString ?? "nil", privacy: .public) transcript=\(transcript, privacy: .public)")
         let command = await parsingCoordinator.parse(
@@ -1036,6 +1054,143 @@ final class VoiceCommandViewModel {
         pendingAssistantSlotId = nil
     }
 
+    private func interpretChatCommand(_ transcript: String) async throws -> CommandInterpretResponse {
+        let requestId = UUID()
+        let formatter = ISO8601DateFormatter()
+        formatter.timeZone = TimeZone.current
+        let candidates = commandCandidateTasks()
+        Self.log.info("[VoiceChat] candidateTasksBuilt count=\(candidates.count, privacy: .public)")
+        let request = CommandInterpretRequest(
+            text: transcript,
+            now: formatter.string(from: Date()),
+            timezone: TimeZone.current.identifier,
+            locale: uiLanguage.uiLocaleIdentifier,
+            activeTask: activeInterpretTaskSnapshot(),
+            candidateTasks: candidates.map(commandTaskSnapshot),
+            requestID: requestId.uuidString
+        )
+        return try await commandInterpreter.interpret(request)
+    }
+
+    private func handleCommandInterpretation(_ result: CommandInterpretResponse, transcript: String) async {
+        Self.log.info("[VoiceChat] commandInterpretResult action=\(result.actionType ?? "nil", privacy: .public) confidence=\(result.confidence, privacy: .public) confirmation=\(result.confirmationKind ?? "nil", privacy: .public)")
+        guard result.actionType != nil else {
+            emitAssistantResponse(result.assistantMessage ?? unclearCommandMessage(), nextState: .error, stream: false)
+            return
+        }
+        if result.requiresConfirmation {
+            showInterpretedConfirmation(result, transcript: transcript)
+            return
+        }
+        await executeInterpretedCommand(result, selectedTaskOverride: nil, transcript: transcript)
+    }
+
+    private func showInterpretedConfirmation(_ result: CommandInterpretResponse, transcript: String) {
+        switch result.confirmationKind {
+        case "choose_candidate":
+            let tasks = tasksForInterpretedCandidateIDs(result.target?.candidateIDs ?? [])
+            guard !tasks.isEmpty else {
+                emitAssistantResponse(result.assistantMessage ?? noTaskMatchMessage(strings: uiLanguage.strings), nextState: .error, stream: false)
+                return
+            }
+            pendingConfirmationPayload = .interpreted(result, transcript: transcript)
+            disambiguationCandidates = tasks
+            emitAssistantResponse(result.assistantMessage ?? editDisambiguationMessage(), nextState: .disambiguating, stream: true)
+            Self.log.info("[VoiceChat] confirmationShown kind=choose_candidate")
+        case "clarify":
+            emitAssistantResponse(result.assistantMessage ?? unclearCommandMessage(), nextState: .error, stream: false)
+            Self.log.info("[VoiceChat] confirmationShown kind=clarify")
+        default:
+            guard let task = taskForInterpretedTarget(result) else {
+                emitAssistantResponse(result.assistantMessage ?? noTaskMatchMessage(strings: uiLanguage.strings), nextState: .error, stream: false)
+                return
+            }
+            confirmationCandidate = task
+            pendingConfirmationPayload = .interpreted(result, transcript: transcript)
+            emitAssistantResponse(result.assistantMessage ?? editConfirmationMessage(for: task), nextState: .editConfirmationPending, stream: true)
+            Self.log.info("[VoiceChat] confirmationShown kind=confirm_action")
+        }
+    }
+
+    private func executeInterpretedCommand(_ result: CommandInterpretResponse, selectedTaskOverride: TaskItem?, transcript: String) async {
+        guard let action = result.actionType else { return }
+        Self.log.info("[VoiceChat] commandExecutionStarted action=\(action, privacy: .public)")
+        switch action {
+        case "createReminder", "createEvent":
+            guard let command = parsedCommand(from: result) else {
+                blockInterpretedExecution(reason: "missingField")
+                return
+            }
+            commitCreateWithConflictCheck(command)
+        case "rescheduleTask":
+            guard let task = selectedTaskOverride ?? taskForInterpretedTarget(result),
+                  let raw = result.edit?.newScheduledAt,
+                  let newDate = parseInterpretedDate(raw) else {
+                blockInterpretedExecution(reason: "missingField")
+                return
+            }
+            applyReschedule(task: task, newDate: newDate, strings: uiLanguage.strings, usageCommand: nil)
+        case "renameTask":
+            guard let task = selectedTaskOverride ?? taskForInterpretedTarget(result),
+                  let newTitle = result.edit?.newTitle?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !newTitle.isEmpty else {
+                blockInterpretedExecution(reason: "missingField")
+                return
+            }
+            guard isExplicitRenameRequest(transcript) else {
+                blockInterpretedExecution(reason: "renameWithoutExplicitRequest")
+                return
+            }
+            applyRename(task: task, newTitle: newTitle, strings: uiLanguage.strings, usageCommand: nil)
+        case "appendToTask":
+            guard let task = selectedTaskOverride ?? taskForInterpretedTarget(result),
+                  let text = result.edit?.appendText?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !text.isEmpty else {
+                blockInterpretedExecution(reason: "missingField")
+                return
+            }
+            applyAppend(task: task, text: text, strings: uiLanguage.strings, usageCommand: nil)
+        case "deleteTask":
+            guard let task = selectedTaskOverride ?? taskForInterpretedTarget(result) else {
+                blockInterpretedExecution(reason: "missingField")
+                return
+            }
+            enterDeleteConfirmation(for: task, strings: uiLanguage.strings, usageCommand: nil)
+        case "updateRecurrence":
+            guard let task = selectedTaskOverride ?? taskForInterpretedTarget(result),
+                  let update = recurrenceUpdate(from: result) else {
+                blockInterpretedExecution(reason: "missingField")
+                return
+            }
+            applyRecurrenceUpdate(task: task, update: update, strings: uiLanguage.strings, usageCommand: nil)
+        default:
+            emitAssistantResponse(result.assistantMessage ?? unclearCommandMessage(), nextState: .error, stream: false)
+            return
+        }
+        if action != "createReminder" && action != "createEvent" {
+            subscriptionManager?.recordSuccessfulFreeAIParseIfNeeded()
+        }
+        Self.log.info("[VoiceChat] commandExecutionCompleted action=\(action, privacy: .public)")
+    }
+
+    private func blockInterpretedExecution(reason: String) {
+        Self.log.info("[VoiceChat] commandExecutionBlocked reason=\(reason, privacy: .public)")
+        emitAssistantResponse(unclearCommandMessage(), nextState: .error, stream: false)
+    }
+
+    private func isExplicitRenameRequest(_ transcript: String) -> Bool {
+        let lower = transcript.lowercased()
+        let compact = lower.replacingOccurrences(of: " ", with: "")
+        return compact.contains("改名")
+            || compact.contains("名字改成")
+            || compact.contains("名称改成")
+            || compact.contains("標題改成")
+            || compact.contains("标题改成")
+            || lower.contains("rename")
+            || lower.contains("change the name")
+            || lower.contains("change the title")
+    }
+
     // MARK: - Edit intent handlers (unchanged)
 
     private func handleUpdateTitleIntent(_ command: ParsedCommand) async {
@@ -1140,7 +1295,17 @@ final class VoiceCommandViewModel {
     }
 
     func chatConfirmEditCandidate() {
-        guard let task = confirmationCandidate, let action = pendingEditAction else { return }
+        guard let task = confirmationCandidate else { return }
+        if let payload = pendingConfirmationPayload {
+            pendingConfirmationPayload = nil
+            confirmationCandidate = nil
+            Self.log.info("[VoiceChat] confirmationAccepted action=interpreted")
+            if case .interpreted(let result, let transcript) = payload {
+                Task { await executeInterpretedCommand(result, selectedTaskOverride: task, transcript: transcript) }
+                return
+            }
+        }
+        guard let action = pendingEditAction else { return }
         let usageCommand = pendingConfirmationUsageCommand
         pendingConfirmationUsageCommand = nil
         confirmationCandidate = nil
@@ -1150,6 +1315,13 @@ final class VoiceCommandViewModel {
     }
 
     func chatChooseAnotherEditCandidate() {
+        if case .interpreted(let result, _) = pendingConfirmationPayload {
+            confirmationCandidate = nil
+            disambiguationCandidates = commandCandidateTasks().prefix(TaskResolverConfig.disambiguationLimit).map { $0 }
+            Self.log.info("[VoiceChat] taskResolveChooseAnother")
+            emitAssistantResponse(result.assistantMessage ?? editDisambiguationMessage(), nextState: .disambiguating, stream: true)
+            return
+        }
         guard let action = pendingEditAction else { return }
         let usageCommand = pendingConfirmationUsageCommand
         pendingConfirmationUsageCommand = nil
@@ -1167,6 +1339,7 @@ final class VoiceCommandViewModel {
         pendingConfirmationUsageCommand = nil
         pendingDisambiguationUsageCommand = nil
         pendingEditAction = nil
+        pendingConfirmationPayload = nil
         confirmationCandidate = nil
         disambiguationCandidates = []
         Self.log.info("[VoiceChat] taskResolveCancelled")
@@ -1174,6 +1347,13 @@ final class VoiceCommandViewModel {
     }
 
     func chatSelectCandidate(_ task: TaskItem) {
+        if case .interpreted(let result, let transcript) = pendingConfirmationPayload {
+            pendingConfirmationPayload = nil
+            disambiguationCandidates = []
+            Self.log.info("[VoiceChat] candidateSelected id=\(task.id.uuidString, privacy: .public)")
+            Task { await executeInterpretedCommand(result, selectedTaskOverride: task, transcript: transcript) }
+            return
+        }
         guard let action = pendingEditAction else { return }
         let usageCommand = pendingDisambiguationUsageCommand
         pendingDisambiguationUsageCommand = nil
@@ -1594,6 +1774,129 @@ final class VoiceCommandViewModel {
         return (try? ctx.fetch(descriptor)) ?? []
     }
 
+    private func commandCandidateTasks() -> [TaskItem] {
+        let now = Date()
+        return fetchIncompleteTasks()
+            .sorted {
+                commandCandidatePriority($0, now: now) > commandCandidatePriority($1, now: now)
+            }
+            .prefix(TaskResolverConfig.candidateLimit)
+            .map { $0 }
+    }
+
+    private func commandCandidatePriority(_ task: TaskItem, now: Date) -> Int {
+        var score = 0
+        if task.id == lastActiveChatTaskContext?.taskID { score += 100 }
+        if let scheduled = task.scheduledDate, scheduled >= now { score += 30 }
+        if task.isRecurring { score += 20 }
+        if now.timeIntervalSince(task.updatedAt) < 30 * 60 { score += 20 }
+        if now.timeIntervalSince(task.createdAt) < 30 * 60 { score += 10 }
+        return score
+    }
+
+    private func commandTaskSnapshot(for task: TaskItem) -> CommandInterpretTaskSnapshot {
+        CommandInterpretTaskSnapshot(
+            id: task.id.uuidString,
+            title: task.title,
+            scheduledAt: task.scheduledDate.map { ISO8601DateFormatter().string(from: $0) },
+            isRecurring: task.isRecurring,
+            recurrenceLabel: TaskRecurrenceFormatting.label(for: task, locale: uiLanguage.locale)
+        )
+    }
+
+    private func activeInterpretTaskSnapshot() -> CommandInterpretTaskSnapshot? {
+        guard let active = lastActiveChatTaskContext,
+              let task = fetchIncompleteTask(id: active.taskID) else { return nil }
+        return commandTaskSnapshot(for: task)
+    }
+
+    private func taskForInterpretedTarget(_ result: CommandInterpretResponse) -> TaskItem? {
+        guard let id = result.target?.selectedTaskID.flatMap(UUID.init(uuidString:)) else { return nil }
+        return fetchIncompleteTask(id: id)
+    }
+
+    private func tasksForInterpretedCandidateIDs(_ ids: [String]) -> [TaskItem] {
+        ids.compactMap { UUID(uuidString: $0) }.compactMap(fetchIncompleteTask)
+    }
+
+    private func parseInterpretedDate(_ raw: String) -> Date? {
+        let tz = TimeZone.current
+        let f1 = ISO8601DateFormatter()
+        f1.timeZone = tz
+        f1.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = f1.date(from: raw) { return date }
+        let f2 = ISO8601DateFormatter()
+        f2.timeZone = tz
+        f2.formatOptions = [.withInternetDateTime]
+        if let date = f2.date(from: raw) { return date }
+        return nil
+    }
+
+    private func parsedCommand(from result: CommandInterpretResponse) -> ParsedCommand? {
+        guard let create = result.create,
+              let title = create.title?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !title.isEmpty else { return nil }
+        let scheduled = create.scheduledAt.flatMap(parseInterpretedDate)
+        let end = create.endAt.flatMap(parseInterpretedDate)
+        let recurrence = parsedRecurrence(from: create, scheduledDate: scheduled)
+        let action: ActionType = result.actionType == "createEvent" ? .calendarEvent : .reminder
+        return ParsedCommand(
+            originalText: "",
+            actionType: action,
+            title: title,
+            notes: create.notes,
+            startDate: action == .calendarEvent ? scheduled : nil,
+            endDate: end,
+            reminderDate: action == .reminder ? scheduled : nil,
+            confidence: result.confidence,
+            parserSource: .llm,
+            languageCode: uiLanguage.uiLocaleIdentifier,
+            recurrence: recurrence
+        )
+    }
+
+    private func parsedRecurrence(from create: CommandInterpretResponse.Create, scheduledDate: Date?) -> ParsedRecurrence? {
+        guard create.recurrenceType == "weekly" else { return nil }
+        let weekdays = sanitizedRecurrenceWeekdays(create.recurrenceWeekdays ?? [])
+        guard !weekdays.isEmpty else { return nil }
+        return ParsedRecurrence(
+            frequency: .weekly,
+            weekdays: weekdays,
+            timeMinutes: scheduledDateClockMinutes(scheduledDate),
+            timeZoneIdentifier: TimeZone.current.identifier,
+            startDate: scheduledDate.map { Calendar.current.startOfDay(for: $0) },
+            endDate: create.recurrenceEndAt.flatMap(parseInterpretedDate)
+        )
+    }
+
+    private func recurrenceUpdate(from result: CommandInterpretResponse) -> ParsedRecurrenceUpdate? {
+        guard let edit = result.edit else { return nil }
+        if edit.newRecurrenceType == "weekly", let weekdays = edit.newRecurrenceWeekdays {
+            return ParsedRecurrenceUpdate(
+                operation: .setWeekdays,
+                weekdays: sanitizedRecurrenceWeekdays(weekdays),
+                timeMinutes: nil,
+                timeZoneIdentifier: TimeZone.current.identifier,
+                startDate: nil,
+                endDate: nil
+            )
+        }
+        if edit.newRecurrenceType == "none" {
+            return ParsedRecurrenceUpdate(operation: .clearRecurrence)
+        }
+        if let raw = edit.newScheduledAt, let date = parseInterpretedDate(raw) {
+            return ParsedRecurrenceUpdate(
+                operation: .setTime,
+                weekdays: nil,
+                timeMinutes: scheduledDateClockMinutes(date),
+                timeZoneIdentifier: TimeZone.current.identifier,
+                startDate: nil,
+                endDate: nil
+            )
+        }
+        return nil
+    }
+
     private func isImplicitActiveTaskReference(_ text: String) -> Bool {
         let lower = text.lowercased()
         let compact = lower.replacingOccurrences(of: " ", with: "")
@@ -1653,6 +1956,11 @@ final class VoiceCommandViewModel {
 
     private func commitSave(command: ParsedCommand) {
         let reply = confirmationMessage(for: command, userTranscript: command.originalText)
+        commitCreateWithConflictCheck(command, reply: reply)
+    }
+
+    private func commitCreateWithConflictCheck(_ command: ParsedCommand, reply: String? = nil) {
+        let reply = reply ?? (command.actionType == .calendarEvent ? "Added \(command.title)." : confirmationMessage(for: command, userTranscript: command.originalText))
         var didPersistNewTask = false
         if let ctx = persistenceContext {
             let resolvedDate = command.reminderDate ?? command.startDate
@@ -1777,6 +2085,8 @@ final class VoiceCommandViewModel {
         pendingConfirmationUsageCommand = nil
         pendingEditAction = nil
         pendingDisambiguationUsageCommand = nil
+        pendingConfirmationPayload = nil
+        confirmationCandidate = nil
         disambiguationCandidates = []
         lastActiveChatTaskContext = nil
         Self.log.info("[VoiceChat] chatDismissReset completed — state ready for new session")
