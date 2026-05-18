@@ -1,16 +1,20 @@
 import SwiftData
 import SwiftUI
+import UIKit
 
 struct CalendarView: View {
     @Environment(\.locale) private var locale
     @Environment(\.appUILanguage) private var appUILanguage
     @Environment(\.themePalette) private var themePalette
     @AppStorage(AppTextSize.storageKey) private var textSizeRaw: String = AppTextSize.default.rawValue
+    @AppStorage(CalendarSyncSettings.AppStorageKeys.importApple) private var calendarImportAppleEvents = false
     @Query(sort: \TaskItem.updatedAt, order: .reverse) private var allTasks: [TaskItem]
 
     @State private var displayedMonth: Date
     @State private var selectedDate: Date
     @State private var composerSession: ComposerSession?
+    @State private var importedCalendarItems: [CalendarDisplayItem] = []
+    @State private var importedDetailItem: CalendarDisplayItem?
 
     private var calendar: Calendar {
         var cal = Calendar.current
@@ -72,6 +76,21 @@ struct CalendarView: View {
             }
             .presentationDragIndicator(.visible)
         }
+        .sheet(item: $importedDetailItem) { item in
+            ImportedAppleCalendarEventSheet(item: item)
+                .environment(\.appUILanguage, appUILanguage)
+                .environment(\.locale, locale)
+                .presentationDragIndicator(.visible)
+        }
+        .task(id: displayedMonth) {
+            reloadImportedCalendarEvents()
+        }
+        .onAppear {
+            reloadImportedCalendarEvents()
+        }
+        .onChange(of: calendarImportAppleEvents) { _, _ in
+            reloadImportedCalendarEvents()
+        }
     }
 
     private var monthHeader: some View {
@@ -125,7 +144,7 @@ struct CalendarView: View {
 
     private func dayCell(date: Date) -> some View {
         let sod = calendar.startOfDay(for: date)
-        let count = taskCount(on: sod)
+        let count = dayItemCount(on: sod)
         let isSelected = calendar.isDate(date, inSameDayAs: selectedDate)
         let isToday = calendar.isDateInToday(date)
 
@@ -179,19 +198,26 @@ struct CalendarView: View {
             Text(selectedDate, format: Date.FormatStyle().weekday(.wide).month(.abbreviated).day().locale(locale))
                 .font(typography.sectionHeader)
 
-            let items = tasks(on: selectedDate)
+            let items = combinedDayItems(for: selectedDate)
             if items.isEmpty {
                 Text(s.noTasksThisDay)
                     .font(typography.body)
                     .foregroundStyle(.secondary)
             } else {
                 VStack(spacing: 8) {
-                    ForEach(items) { task in
-                        TaskNavigableRow(
-                            task: task,
-                            emphasizeCompleted: false,
-                            scheduleContext: .calendar
-                        )
+                    ForEach(items) { row in
+                        switch row {
+                        case .task(let task):
+                            TaskNavigableRow(
+                                task: task,
+                                emphasizeCompleted: false,
+                                scheduleContext: .calendar
+                            )
+                        case .imported(let item):
+                            ImportedCalendarEventRow(item: item, typography: typography) {
+                                importedDetailItem = item
+                            }
+                        }
                     }
                 }
             }
@@ -249,10 +275,56 @@ struct CalendarView: View {
         }
     }
 
+    private func importedCount(on dayStart: Date) -> Int {
+        guard calendarImportAppleEvents else { return 0 }
+        return importedCalendarItems.filter { calendar.isDate(calendar.startOfDay(for: $0.startDate), inSameDayAs: dayStart) }.count
+    }
+
+    private func dayItemCount(on dayStart: Date) -> Int {
+        taskCount(on: dayStart) + importedCount(on: dayStart)
+    }
+
+    private func reloadImportedCalendarEvents() {
+        guard calendarImportAppleEvents,
+              let interval = CalendarSyncService.fetchInterval(for: displayedMonth, calendar: calendar)
+        else {
+            importedCalendarItems = []
+            return
+        }
+        importedCalendarItems = CalendarSyncService.shared.loadImportedDisplayItems(
+            in: interval,
+            excludingChatTaskEventIDs: Set(allTasks.compactMap(\.calendarEventIdentifier))
+        )
+    }
+
+    private enum CalendarDayRow: Identifiable {
+        case task(TaskItem)
+        case imported(CalendarDisplayItem)
+
+        var id: String {
+            switch self {
+            case .task(let t): return "t-\(t.id.uuidString)"
+            case .imported(let i): return "i-\(i.id)"
+            }
+        }
+    }
+
     private func tasks(on day: Date) -> [TaskItem] {
         let sod = calendar.startOfDay(for: day)
         let filtered = allTasks.filter { calendar.isDate(anchorDayStart(for: $0), inSameDayAs: sod) }
         return sortedDayList(filtered)
+    }
+
+    private func combinedDayItems(for day: Date) -> [CalendarDayRow] {
+        var rows: [CalendarDayRow] = tasks(on: day).map { .task($0) }
+        if calendarImportAppleEvents {
+            let sod = calendar.startOfDay(for: day)
+            let imported = importedCalendarItems
+                .filter { calendar.isDate(calendar.startOfDay(for: $0.startDate), inSameDayAs: sod) }
+                .sorted { $0.startDate < $1.startDate }
+            rows.append(contentsOf: imported.map { .imported($0) })
+        }
+        return rows
     }
 
     private func sortedDayList(_ items: [TaskItem]) -> [TaskItem] {
@@ -305,6 +377,112 @@ struct CalendarView: View {
 
     private static let gridColumns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 7)
     private static let cellHeight: CGFloat = 52
+}
+
+// MARK: - Imported Apple Calendar (read-only)
+
+private struct ImportedCalendarEventRow: View {
+    let item: CalendarDisplayItem
+    let typography: AppTypography
+    var onTap: () -> Void
+
+    @Environment(\.appUILanguage) private var appUILanguage
+
+    var body: some View {
+        let s = appUILanguage.strings
+        Button(action: onTap) {
+            HStack(alignment: .top, spacing: 12) {
+                RoundedRectangle(cornerRadius: 2, style: .continuous)
+                    .fill(item.swiftUIColor.opacity(0.55))
+                    .frame(width: 4)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(item.title)
+                        .font(typography.body)
+                        .foregroundStyle(.primary)
+                        .multilineTextAlignment(.leading)
+
+                    HStack(spacing: 8) {
+                        Text(timeLabel)
+                            .font(typography.caption)
+                            .foregroundStyle(.secondary)
+                        Text(s.calendarAppleEventBadge)
+                            .font(.caption2.weight(.medium))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(Capsule().fill(Color.secondary.opacity(0.14)))
+                    }
+                }
+
+                Spacer(minLength: 0)
+            }
+            .padding(12)
+            .background {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(Color(uiColor: .secondarySystemBackground).opacity(0.45))
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var timeLabel: String {
+        let fmt = Date.FormatStyle(date: .omitted, time: .shortened)
+        if item.endDate.timeIntervalSince(item.startDate) > 60 {
+            return "\(item.startDate.formatted(fmt))–\(item.endDate.formatted(fmt))"
+        }
+        return item.startDate.formatted(fmt)
+    }
+}
+
+private struct ImportedAppleCalendarEventSheet: View {
+    let item: CalendarDisplayItem
+    @Environment(\.appUILanguage) private var appUILanguage
+    @Environment(\.locale) private var locale
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        let s = appUILanguage.strings
+        NavigationStack {
+            Form {
+                Section {
+                    LabeledContent(s.calendarImportedEventDetailTitle) {
+                        Text(item.title)
+                    }
+                    if let calName = item.calendarName {
+                        LabeledContent(s.settingsCalendarPickerLabel) {
+                            Text(calName)
+                        }
+                    }
+                    LabeledContent(s.timePickerLabel) {
+                        Text(timeRangeText)
+                    }
+                    if let notes = item.notes, !notes.isEmpty {
+                        Text(notes)
+                            .font(.body)
+                    }
+                } footer: {
+                    Text(s.calendarImportedEventReadOnlyHint)
+                        .font(.footnote)
+                }
+            }
+            .navigationTitle(s.calendarImportedEventDetailTitle)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(s.dismissDone) { dismiss() }
+                }
+            }
+        }
+    }
+
+    private var timeRangeText: String {
+        let df = DateIntervalFormatter()
+        df.locale = locale
+        df.dateStyle = .none
+        df.timeStyle = .short
+        return df.string(from: item.startDate, to: item.endDate) ?? ""
+    }
 }
 
 #Preview {

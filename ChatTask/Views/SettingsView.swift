@@ -19,6 +19,12 @@ struct SettingsView: View {
     @AppStorage(AppColorTheme.storageKey) private var themeRaw: String = AppColorTheme.white.rawValue
     @AppStorage(AppTextSize.storageKey) private var textSizeRaw: String = AppTextSize.default.rawValue
     @AppStorage(ReminderOffset.defaultsKey) private var reminderDefaultMinutes: Int = 0
+    @AppStorage(CalendarSyncSettings.AppStorageKeys.master) private var calendarSyncMaster = false
+    @AppStorage(CalendarSyncSettings.AppStorageKeys.timedTasks) private var calendarSyncTimedTasks = false
+    @AppStorage(CalendarSyncSettings.AppStorageKeys.importApple) private var calendarImportAppleEvents = false
+
+    @State private var writableCalendarCount: Int = 0
+
     #if DEBUG
     @AppStorage(FirstLaunchOnboarding.completedKey) private var firstLaunchOnboardingCompleted = false
     @AppStorage(FirstLaunchOnboarding.paywallSuppressedUntilTaskCountKey) private var paywallSuppressedUntilTaskCount = 0
@@ -103,6 +109,76 @@ struct SettingsView: View {
                 Text(s.settingsSectionReminders)
             } footer: {
                 Text(s.settingsReminderDefaultFooter)
+            }
+
+            Section {
+                Toggle(isOn: $calendarSyncMaster) {
+                    Text(s.settingsCalendarSyncEnable)
+                        .font(typography.body)
+                }
+                .onChange(of: calendarSyncMaster) { _, new in
+                    handleCalendarSyncMasterChange(enabled: new)
+                }
+
+                Toggle(isOn: $calendarSyncTimedTasks) {
+                    Text(s.settingsCalendarSyncTimedTasks)
+                        .font(typography.body)
+                }
+                .disabled(!calendarSyncMaster)
+                .onChange(of: calendarSyncTimedTasks) { _, new in
+                    Self.log.info("calendarSyncEnabled syncTimedTasks=\(new, privacy: .public)")
+                }
+
+                if calendarSyncMaster, isPermissionEnabled(permissionService.status(for: .calendar)) {
+                    if writableCalendarCount == 0 {
+                        Text(s.settingsCalendarNoWritable)
+                            .font(typography.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        NavigationLink {
+                            CalendarPickerView()
+                                .environment(\.appUILanguage, appUILanguage)
+                        } label: {
+                            LabeledContent(s.settingsCalendarPickerLabel) {
+                                Text(calendarDisplayName(strings: s))
+                                    .font(typography.caption)
+                                    .foregroundStyle(.secondary)
+                                    .multilineTextAlignment(.trailing)
+                            }
+                        }
+                    }
+                } else if calendarSyncMaster {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(s.settingsCalendarPermissionFooter)
+                            .font(typography.caption)
+                            .foregroundStyle(.secondary)
+                        Button {
+                            openSystemSettings()
+                        } label: {
+                            Text(s.settingsCalendarOpenSettings)
+                        }
+                        .font(typography.body)
+                    }
+                    .padding(.vertical, 4)
+                }
+
+                Toggle(isOn: $calendarImportAppleEvents) {
+                    Text(s.settingsCalendarSyncImport)
+                        .font(typography.body)
+                }
+                .onChange(of: calendarImportAppleEvents) { _, new in
+                    handleCalendarImportChange(enabled: new)
+                }
+
+                Text(s.settingsCalendarGoogleHint)
+                    .font(typography.caption)
+                    .foregroundStyle(.secondary)
+            } header: {
+                Text(s.settingsSectionCalendarSync)
+            } footer: {
+                Text(s.settingsCalendarSectionFooter)
+                    .font(typography.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section {
@@ -241,6 +317,7 @@ struct SettingsView: View {
         }
         .task {
             await permissionService.refreshAll()
+            refreshWritableCalendarCount()
         }
         .onChange(of: subscriptionManager.purchaseState) { _, newValue in
             if case .failed(let msg) = newValue {
@@ -427,6 +504,58 @@ struct SettingsView: View {
         case .granted, .provisional: return true
         case .notDetermined, .denied, .restricted, .unknown: return false
         }
+    }
+
+    private func handleCalendarSyncMasterChange(enabled: Bool) {
+        guard enabled else {
+            Self.log.info("calendarSyncEnabled master=false")
+            return
+        }
+        Task {
+            await permissionService.request(.calendar, language: appUILanguage)
+            await permissionService.refreshAll()
+            let ok = isPermissionEnabled(permissionService.status(for: .calendar))
+            await MainActor.run {
+                refreshWritableCalendarCount()
+                if !ok {
+                    calendarSyncMaster = false
+                } else {
+                    Self.log.info("calendarSyncEnabled master=true")
+                }
+            }
+        }
+    }
+
+    private func handleCalendarImportChange(enabled: Bool) {
+        guard enabled else { return }
+        guard !isPermissionEnabled(permissionService.status(for: .calendar)) else {
+            refreshWritableCalendarCount()
+            return
+        }
+        Task {
+            await permissionService.request(.calendar, language: appUILanguage)
+            await permissionService.refreshAll()
+            let ok = isPermissionEnabled(permissionService.status(for: .calendar))
+            await MainActor.run {
+                refreshWritableCalendarCount()
+                if !ok {
+                    calendarImportAppleEvents = false
+                }
+            }
+        }
+    }
+
+    private func refreshWritableCalendarCount() {
+        guard CalendarSyncService.shared.hasCalendarAccess else {
+            writableCalendarCount = 0
+            return
+        }
+        writableCalendarCount = CalendarSyncService.shared.loadWritableCalendars().count
+    }
+
+    private func calendarDisplayName(strings: AppStrings) -> String {
+        CalendarSyncService.shared.selectedOrFirstCalendarTitle()
+            ?? strings.settingsCalendarPickPrompt
     }
 
     private func openSystemSettings() {

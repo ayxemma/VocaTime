@@ -8,5 +8,7 @@
 	<string>ChatTask uses the microphone to capture your voice commands for creating and managing tasks.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>ChatTask converts your speech into text to understand and schedule your tasks.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>ChatTask can add your timed tasks to the calendar you choose and show your Apple Calendar events in the app when you enable Calendar Sync.</string>
 </dict>
 </plist>

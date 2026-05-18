@@ -1,6 +1,7 @@
 import AVFoundation
 import EventKit
 import Foundation
+import os.log
 import Speech
 import UserNotifications
 
@@ -59,6 +60,7 @@ enum PermissionStatus: Equatable {
 @Observable
 final class PermissionService {
     private let eventStore = EKEventStore()
+    private static let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "ChatTask", category: "Permission")
 
     private(set) var microphoneStatus: PermissionStatus = .unknown
     private(set) var speechStatus: PermissionStatus = .unknown
@@ -208,13 +210,18 @@ final class PermissionService {
     }
 
     private func requestCalendar(strings: AppStrings) async {
+        Self.log.info("calendarPermissionRequested")
         do {
             let granted = try await eventStore.requestFullAccessToEvents()
             await refreshCalendar()
-            if !granted {
+            if granted {
+                Self.log.info("calendarPermissionGranted")
+            } else {
+                Self.log.info("calendarPermissionDenied")
                 lastErrorMessage = strings.permissionCalendarDenied
             }
         } catch {
+            Self.log.info("calendarPermissionDenied")
             lastErrorMessage = "\(strings.permissionCalendarErrorPrefix) \(error.localizedDescription)"
             await refreshCalendar()
         }

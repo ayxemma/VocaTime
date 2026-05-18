@@ -1510,6 +1510,7 @@ final class VoiceCommandViewModel {
         task.updatedAt = Date()
         try? persistenceContext?.save()
         TaskReminderService.shared.schedule(for: task)
+        syncCalendarIfNeeded(for: task)
         let timeStr = shortTimeFormatter.string(from: newDate)
         let msg = String(format: s.chatRescheduleSuccess, task.title, timeStr)
         emitAssistantResponse(msg, nextState: .success, stream: true)
@@ -1529,6 +1530,7 @@ final class VoiceCommandViewModel {
         }
         task.updatedAt = Date()
         try? persistenceContext?.save()
+        syncCalendarIfNeeded(for: task)
         emitAssistantResponse(String(format: s.chatAppendSuccess, task.title), nextState: .success, stream: true)
         refreshActiveContext(from: task)
         recordFreeAIUsageIfNeeded(usageCommand)
@@ -1542,6 +1544,7 @@ final class VoiceCommandViewModel {
         task.title = newTitle
         task.updatedAt = Date()
         try? persistenceContext?.save()
+        syncCalendarIfNeeded(for: task)
         emitAssistantResponse(String(format: s.chatRenameSuccess, newTitle), nextState: .success, stream: true)
         refreshActiveContext(from: task)
         recordFreeAIUsageIfNeeded(usageCommand)
@@ -1591,6 +1594,7 @@ final class VoiceCommandViewModel {
             task.updatedAt = Date()
             try? persistenceContext?.save()
             TaskReminderService.shared.schedule(for: task)
+            syncCalendarIfNeeded(for: task)
             emitAssistantResponse("Removed repeat schedule for \(task.title).", nextState: .success, stream: true)
             refreshActiveContext(from: task)
             recordFreeAIUsageIfNeeded(usageCommand)
@@ -1622,6 +1626,7 @@ final class VoiceCommandViewModel {
 
         try? persistenceContext?.save()
         TaskReminderService.shared.schedule(for: task)
+        syncCalendarIfNeeded(for: task)
         let label = TaskRecurrenceFormatting.label(for: task, locale: uiLanguage.locale) ?? "repeat schedule"
         emitAssistantResponse("Updated \(task.title): \(label).", nextState: .success, stream: true)
         refreshActiveContext(from: task)
@@ -1679,6 +1684,12 @@ final class VoiceCommandViewModel {
         return Calendar.current.startOfDay(for: base)
     }
 
+    private func syncCalendarIfNeeded(for task: TaskItem) {
+        guard let ctx = persistenceContext else { return }
+        CalendarSyncService.shared.applyOutboundEligibility(for: task)
+        CalendarSyncService.shared.syncOutbound(for: task, modelContext: ctx)
+    }
+
     // MARK: - Delete confirmation (unchanged)
 
     func chatConfirmDelete() {
@@ -1691,6 +1702,7 @@ final class VoiceCommandViewModel {
         Self.log.info("[VoiceChat] deleteConfirmed title=\(title, privacy: .public)")
         if let ctx = persistenceContext {
             TaskReminderService.shared.cancel(taskID: task.id)
+            CalendarSyncService.shared.removeCalendarEvent(for: task, modelContext: ctx, logDeletion: true)
             ctx.delete(task)
             try? ctx.save()
             recordSuccessfulAIActionForAppReview()

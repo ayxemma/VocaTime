@@ -370,6 +370,21 @@ struct AppStrings {
     let onboardingSuccessMessage: String
     let onboardingReminderPreviewIntro: String
     let onboardingReminderPreviewBody: String
+    let settingsSectionCalendarSync: String
+    let settingsCalendarSyncEnable: String
+    let settingsCalendarSyncTimedTasks: String
+    let settingsCalendarSyncImport: String
+    let settingsCalendarPickerLabel: String
+    let settingsCalendarPickPrompt: String
+    let settingsCalendarGoogleHint: String
+    let settingsCalendarPermissionFooter: String
+    let settingsCalendarOpenSettings: String
+    let settingsCalendarNoWritable: String
+    let settingsCalendarPickerTitle: String
+    let settingsCalendarSectionFooter: String
+    let calendarAppleEventBadge: String
+    let calendarImportedEventDetailTitle: String
+    let calendarImportedEventReadOnlyHint: String
     let onboardingFollowUpHint: String
 
     static let english = AppStrings(
@@ -576,6 +591,21 @@ struct AppStrings {
         onboardingSuccessMessage: "✅ Reminder set for 20 minutes from now",
         onboardingReminderPreviewIntro: "You’ll get a reminder like this:",
         onboardingReminderPreviewBody: "🔔 It’s time — Take a walk",
+        settingsSectionCalendarSync: "Calendar Sync",
+        settingsCalendarSyncEnable: "Enable Calendar Sync",
+        settingsCalendarSyncTimedTasks: "Sync new timed tasks to Calendar",
+        settingsCalendarSyncImport: "Import Apple Calendar events into ChatTask calendar",
+        settingsCalendarPickerLabel: "Calendar",
+        settingsCalendarPickPrompt: "Choose a calendar",
+        settingsCalendarGoogleHint: "Google Calendar events can appear here if your Google account is added to the iOS Calendar app.",
+        settingsCalendarPermissionFooter: "Calendar access is used only when you turn on sync or import. You can enable it anytime in Settings › ChatTask.",
+        settingsCalendarOpenSettings: "Open Settings",
+        settingsCalendarNoWritable: "No writable calendars found. Add a calendar in the Calendar app.",
+        settingsCalendarPickerTitle: "Choose Calendar",
+        settingsCalendarSectionFooter: "ChatTask can add timed tasks to the calendar you choose and show your Apple Calendar events in the in-app calendar (read-only).",
+        calendarAppleEventBadge: "Apple Calendar",
+        calendarImportedEventDetailTitle: "Calendar event",
+        calendarImportedEventReadOnlyHint: "This event is read-only. Edit it in the Calendar app.",
         onboardingFollowUpHint: "Try saying: also add a note"
     )
 
@@ -783,6 +813,21 @@ struct AppStrings {
         onboardingSuccessMessage: "✅ 已设置 20 分钟后的提醒",
         onboardingReminderPreviewIntro: "你会收到这样的提醒：",
         onboardingReminderPreviewBody: "🔔 时间到了 — 去散步",
+        settingsSectionCalendarSync: "日历同步",
+        settingsCalendarSyncEnable: "启用日历同步",
+        settingsCalendarSyncTimedTasks: "将新建定时任务同步到日历",
+        settingsCalendarSyncImport: "将 Apple 日历日程导入到 ChatTask 日历",
+        settingsCalendarPickerLabel: "日历",
+        settingsCalendarPickPrompt: "选择日历",
+        settingsCalendarGoogleHint: "若在 iOS 日历中添加了 Google 账户，Google 日历事件也会显示在这里。",
+        settingsCalendarPermissionFooter: "仅在你开启同步或导入时使用日历权限。可在 设置 › ChatTask 中随时授权。",
+        settingsCalendarOpenSettings: "打开设置",
+        settingsCalendarNoWritable: "没有可写入的日历。请在“日历”应用中添加日历。",
+        settingsCalendarPickerTitle: "选择日历",
+        settingsCalendarSectionFooter: "ChatTask 可将定时任务写入你选择的日历，并在应用内日历中只读显示 Apple 日历事件。",
+        calendarAppleEventBadge: "Apple 日历",
+        calendarImportedEventDetailTitle: "日历日程",
+        calendarImportedEventReadOnlyHint: "此为只读日程。请在“日历”应用中编辑。",
         onboardingFollowUpHint: "试试说：再加一条备注"
     )
 
@@ -990,6 +1035,21 @@ struct AppStrings {
         onboardingSuccessMessage: "✅ Recordatorio programado para dentro de 20 minutos",
         onboardingReminderPreviewIntro: "Recibirás un recordatorio como este:",
         onboardingReminderPreviewBody: "🔔 Es hora — Dar un paseo",
+        settingsSectionCalendarSync: "Sincronización de calendario",
+        settingsCalendarSyncEnable: "Activar sincronización con Calendario",
+        settingsCalendarSyncTimedTasks: "Sincronizar tareas con hora al Calendario",
+        settingsCalendarSyncImport: "Importar eventos del Calendario de Apple a ChatTask",
+        settingsCalendarPickerLabel: "Calendario",
+        settingsCalendarPickPrompt: "Elegir un calendario",
+        settingsCalendarGoogleHint: "Los eventos de Google Calendar pueden aparecer aquí si añades tu cuenta de Google a la app Calendario de iOS.",
+        settingsCalendarPermissionFooter: "El acceso al calendario solo se usa si activas la sincronización o la importación. Puedes cambiarlo en Ajustes › ChatTask.",
+        settingsCalendarOpenSettings: "Abrir Ajustes",
+        settingsCalendarNoWritable: "No hay calendarios editables. Añade un calendario en la app Calendario.",
+        settingsCalendarPickerTitle: "Elegir calendario",
+        settingsCalendarSectionFooter: "ChatTask puede añadir tareas con hora al calendario que elijas y mostrar eventos de Apple (solo lectura) en el calendario de la app.",
+        calendarAppleEventBadge: "Calendario de Apple",
+        calendarImportedEventDetailTitle: "Evento de calendario",
+        calendarImportedEventReadOnlyHint: "Este evento es de solo lectura. Edítalo en la app Calendario.",
         onboardingFollowUpHint: "Prueba a decir: también añade una nota"
     )
 }

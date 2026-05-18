@@ -152,6 +152,7 @@ struct TaskDetailView: View {
 
             Section {
                 Button(role: .destructive) {
+                    CalendarSyncService.shared.removeCalendarEvent(for: task, modelContext: modelContext, logDeletion: true)
                     TaskReminderService.shared.cancel(taskID: task.id)
                     modelContext.delete(task)
                     try? modelContext.save()
@@ -174,6 +175,7 @@ struct TaskDetailView: View {
             set: { new in
                 task.title = new
                 task.updatedAt = Date()
+                touchCalendarSync()
             }
         )
     }
@@ -214,6 +216,7 @@ struct TaskDetailView: View {
                 let trimmed = new.trimmingCharacters(in: .whitespacesAndNewlines)
                 task.notes = trimmed.isEmpty ? nil : trimmed
                 task.updatedAt = Date()
+                touchCalendarSync()
             }
         )
     }
@@ -241,6 +244,7 @@ struct TaskDetailView: View {
             clearRecurrence()
             task.updatedAt = Date()
             TaskReminderService.shared.cancel(taskID: task.id)
+            touchCalendarSync()
             return
         }
         if recurrenceEnabled && !specificTimeEnabled {
@@ -272,6 +276,13 @@ struct TaskDetailView: View {
         }
         task.updatedAt = Date()
         TaskReminderService.shared.schedule(for: task)
+        touchCalendarSync()
+    }
+
+    private func touchCalendarSync() {
+        CalendarSyncService.shared.applyOutboundEligibility(for: task)
+        CalendarSyncService.shared.syncOutbound(for: task, modelContext: modelContext)
+        try? modelContext.save()
     }
 
     private var sanitizedSelectedWeekdays: [Int] {

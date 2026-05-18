@@ -56,6 +56,15 @@ final class TaskItem {
     var recurrenceStartDate: Date?
     var recurrenceEndDate: Date?
 
+    /// Apple Calendar / EventKit event identifier when this task is synced out.
+    var calendarEventIdentifier: String?
+    /// `EKCalendar.calendarIdentifier` used for the synced event.
+    var calendarIdentifier: String?
+    /// When true and global sync is on, this timed task may create/update a calendar event.
+    var calendarSyncEnabled: Bool = false
+    /// e.g. `"apple"` for EventKit-created events from ChatTask.
+    var externalCalendarSource: String?
+
     var kind: TaskKind {
         TaskKind(rawValue: kindRaw) ?? .task
     }
@@ -107,7 +116,11 @@ final class TaskItem {
         recurrenceTimeMinutes: Int? = nil,
         recurrenceTimeZoneIdentifier: String? = nil,
         recurrenceStartDate: Date? = nil,
-        recurrenceEndDate: Date? = nil
+        recurrenceEndDate: Date? = nil,
+        calendarEventIdentifier: String? = nil,
+        calendarIdentifier: String? = nil,
+        calendarSyncEnabled: Bool = false,
+        externalCalendarSource: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -129,6 +142,10 @@ final class TaskItem {
         self.recurrenceTimeZoneIdentifier = recurrenceTimeZoneIdentifier
         self.recurrenceStartDate = recurrenceStartDate
         self.recurrenceEndDate = recurrenceEndDate
+        self.calendarEventIdentifier = calendarEventIdentifier
+        self.calendarIdentifier = calendarIdentifier
+        self.calendarSyncEnabled = calendarSyncEnabled
+        self.externalCalendarSource = externalCalendarSource
     }
 
     @MainActor
@@ -164,6 +181,8 @@ final class TaskItem {
         context.insert(item)
         try? context.save()
         TaskReminderService.shared.schedule(for: item)
+        CalendarSyncService.shared.applyOutboundEligibility(for: item)
+        CalendarSyncService.shared.syncOutbound(for: item, modelContext: context)
         return item
     }
 

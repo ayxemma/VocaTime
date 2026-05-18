@@ -207,6 +207,21 @@ extension AppStrings {
         onboardingSuccessMessage: "✅ 20 मिनट बाद का अनुस्मारक सेट हो गया",
         onboardingReminderPreviewIntro: "आपको ऐसा अनुस्मारक मिलेगा:",
         onboardingReminderPreviewBody: "🔔 समय हो गया — टहलने जाना",
+        settingsSectionCalendarSync: "कैलेंडर सिंक",
+        settingsCalendarSyncEnable: "कैलेंडर सिंक चालू करें",
+        settingsCalendarSyncTimedTasks: "नए समय वाले कार्य को कैलेंडर में सिंक करें",
+        settingsCalendarSyncImport: "Apple कैलेंडर इवेंट ChatTask कैलेंडर में दिखाएँ",
+        settingsCalendarPickerLabel: "कैलेंडर",
+        settingsCalendarPickPrompt: "कैलेंडर चुनें",
+        settingsCalendarGoogleHint: "यदि आपका Google खाता iOS कैलेंडर ऐप में जोड़ा है तो Google कैलेंडर इवेंट यहाँ दिख सकते हैं।",
+        settingsCalendarPermissionFooter: "कैलेंडर ऐक्सेस तभी उपयोग होता है जब आप सिंक या आयात चालू करते हैं। सेटिंग्स › ChatTask में बदल सकते हैं।",
+        settingsCalendarOpenSettings: "सेटिंग्स खोलें",
+        settingsCalendarNoWritable: "कोई लिखने योग्य कैलेंडर नहीं। कैलेंडर ऐप में कैलेंडर जोड़ें।",
+        settingsCalendarPickerTitle: "कैलेंडर चुनें",
+        settingsCalendarSectionFooter: "ChatTask समय वाले कार्य को आपके चुने कैलेंडर में जोड़ सकता है और Apple इवेंट ऐप कैलेंडर में केवल पढ़ने योग्य दिखा सकता है।",
+        calendarAppleEventBadge: "Apple कैलेंडर",
+        calendarImportedEventDetailTitle: "कैलेंडर इवेंट",
+        calendarImportedEventReadOnlyHint: "यह इवेंट केवल पढ़ने योग्य है। इसे कैलेंडर ऐप में संपादित करें।",
         onboardingFollowUpHint: "यह आज़माएँ: एक नोट भी जोड़ें"
     )
 }

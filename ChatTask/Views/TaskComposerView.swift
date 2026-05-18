@@ -265,6 +265,8 @@ struct TaskComposerView: View {
         """)
 
         TaskReminderService.shared.schedule(for: item)
+        CalendarSyncService.shared.applyOutboundEligibility(for: item)
+        CalendarSyncService.shared.syncOutbound(for: item, modelContext: modelContext)
         dismiss()
     }
 }

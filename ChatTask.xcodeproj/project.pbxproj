@@ -60,6 +60,10 @@
 		A1000000000000000000003C /* ReviewPromptManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000003C /* ReviewPromptManager.swift */; };
 		A1000000000000000000003D /* TaskTargetResolverService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000003D /* TaskTargetResolverService.swift */; };
 		A1000000000000000000003E /* CommandInterpreterService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000003E /* CommandInterpreterService.swift */; };
+		A1000000000000000000003F /* CalendarSyncService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000003F /* CalendarSyncService.swift */; };
+		A10000000000000000000040 /* CalendarSyncSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000040 /* CalendarSyncSettings.swift */; };
+		A10000000000000000000041 /* CalendarDisplayItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000041 /* CalendarDisplayItem.swift */; };
+		A10000000000000000000042 /* CalendarPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000042 /* CalendarPickerView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -117,6 +121,10 @@
 		A2000000000000000000003C /* ReviewPromptManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewPromptManager.swift; sourceTree = "<group>"; };
 		A2000000000000000000003D /* TaskTargetResolverService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskTargetResolverService.swift; sourceTree = "<group>"; };
 		A2000000000000000000003E /* CommandInterpreterService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandInterpreterService.swift; sourceTree = "<group>"; };
+		A2000000000000000000003F /* CalendarSyncService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarSyncService.swift; sourceTree = "<group>"; };
+		A20000000000000000000040 /* CalendarSyncSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarSyncSettings.swift; sourceTree = "<group>"; };
+		A20000000000000000000041 /* CalendarDisplayItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarDisplayItem.swift; sourceTree = "<group>"; };
+		A20000000000000000000042 /* CalendarPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarPickerView.swift; sourceTree = "<group>"; };
 		A30000000000000000000001 /* ChatTask.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ChatTask.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -178,6 +186,7 @@
 				A20000000000000000000017 /* ChatSheetView.swift */,
 				A2000000000000000000002B /* SettingsView.swift */,
 				A2000000000000000000002E /* PaywallView.swift */,
+				A20000000000000000000042 /* CalendarPickerView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -206,6 +215,8 @@
 				A20000000000000000000027 /* TranscriptionRouter.swift */,
 				A20000000000000000000028 /* LocalTranscriptEvaluator.swift */,
 				A20000000000000000000029 /* TaskReminderService.swift */,
+				A2000000000000000000003F /* CalendarSyncService.swift */,
+				A20000000000000000000040 /* CalendarSyncSettings.swift */,
 				A2000000000000000000002D /* SubscriptionManager.swift */,
 				A2000000000000000000003C /* ReviewPromptManager.swift */,
 			);
@@ -240,6 +251,7 @@
 				A2000000000000000000001D /* LLMTaskParseResponse.swift */,
 				A20000000000000000000011 /* ReminderItem.swift */,
 				A20000000000000000000012 /* CalendarEventItem.swift */,
+				A20000000000000000000041 /* CalendarDisplayItem.swift */,
 				A20000000000000000000018 /* TaskItem.swift */,
 				A2000000000000000000002A /* ReminderOffset.swift */,
 				A2000000000000000000002C /* SubscriptionConfig.swift */,
@@ -334,6 +346,7 @@
 				A10000000000000000000010 /* ParsedCommand.swift in Sources */,
 				A10000000000000000000011 /* ReminderItem.swift in Sources */,
 				A10000000000000000000012 /* CalendarEventItem.swift in Sources */,
+				A10000000000000000000041 /* CalendarDisplayItem.swift in Sources */,
 				A10000000000000000000013 /* DateParser.swift in Sources */,
 				A10000000000000000000014 /* IntentParserService.swift in Sources */,
 				A10000000000000000000017 /* ChatSheetView.swift in Sources */,
@@ -362,8 +375,11 @@
 				A10000000000000000000027 /* TranscriptionRouter.swift in Sources */,
 				A10000000000000000000028 /* LocalTranscriptEvaluator.swift in Sources */,
 				A10000000000000000000029 /* TaskReminderService.swift in Sources */,
+				A1000000000000000000003F /* CalendarSyncService.swift in Sources */,
+				A10000000000000000000040 /* CalendarSyncSettings.swift in Sources */,
 				A1000000000000000000002A /* ReminderOffset.swift in Sources */,
 				A1000000000000000000002B /* SettingsView.swift in Sources */,
+				A10000000000000000000042 /* CalendarPickerView.swift in Sources */,
 				A1000000000000000000002C /* SubscriptionConfig.swift in Sources */,
 				5F2DD8002F9BEF81004030AF /* ChatActiveTaskContext.swift in Sources */,
 				A1000000000000000000002D /* SubscriptionManager.swift in Sources */,
