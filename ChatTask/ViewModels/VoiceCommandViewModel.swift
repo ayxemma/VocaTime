@@ -206,6 +206,41 @@ final class VoiceCommandViewModel {
         persistenceContext = context
     }
 
+    private var canUseAssistant: Bool {
+        subscriptionManager?.canUseAssistant ?? true
+    }
+
+    private func showAssistantPaywall() {
+        NotificationCenter.default.post(name: .chatTaskPresentPaywall, object: nil)
+    }
+
+    private func assistantAccessAllowed(logContext: String) -> Bool {
+        let allowed = canUseAssistant
+        Self.log.info("[PaywallGate] assistantAccessAllowed=\(allowed, privacy: .public) context=\(logContext, privacy: .public)")
+        return allowed
+    }
+
+    private func handleAssistantAccessBlocked(context: String) async {
+        Self.log.info("[PaywallGate] assistantAccessBlocked context=\(context, privacy: .public)")
+        cancelAutoRelisten(reason: "paywallLocked")
+        cancelMaxRecordingTimer()
+        _ = cancelFollowUpNoSpeechTimer(reason: "paywallLocked")
+        speechService.onPartialTranscript = nil
+        speechService.onSpeechDetected = nil
+        if chatFlowState == .listening {
+            await speechService.cancelForReset()
+            Self.log.info("[VoiceChat] voiceStartBlockedByPaywall")
+        }
+        isStoppingListening = false
+        voiceFollowUpAutoStartsRemaining = 0
+        currentListeningIsAutoFollowUp = false
+        currentSubmitCameFromVoiceDraft = false
+        removePendingAssistantSlotIfEmpty()
+        pendingAssistantSlotId = nil
+        chatFlowState = .idle
+        showAssistantPaywall()
+    }
+
     // MARK: - Status text
 
     var chatStatusDescription: String {
@@ -237,6 +272,11 @@ final class VoiceCommandViewModel {
     func chatSheetDidAppear() {
         isChatSheetPresented = true
         cancelAutoRelisten(reason: "sheetAppeared")
+        guard assistantAccessAllowed(logContext: "chatSheetDidAppear") else {
+            Self.log.info("[VoiceChat] voiceStartBlockedByPaywall")
+            Task { await handleAssistantAccessBlocked(context: "chatSheetDidAppear") }
+            return
+        }
         Self.log.info("[VoiceChat] chatSheetPresented=true — starting initial listening")
         Task { await chatBeginListening(startReason: "sheetOpen") }
     }
@@ -249,6 +289,10 @@ final class VoiceCommandViewModel {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         guard chatFlowState == .idle || chatFlowState == .success || chatFlowState == .error else { return }
+        guard assistantAccessAllowed(logContext: "typedSubmit") else {
+            await handleAssistantAccessBlocked(context: "typedSubmit")
+            return
+        }
 
         isTextEditing = false
         currentSubmitCameFromVoiceDraft = voiceDraftAwaitingSubmit
@@ -300,6 +344,11 @@ final class VoiceCommandViewModel {
         cancelAutoRelisten(reason: "micTapped")
         switch chatFlowState {
         case .idle, .success, .error:
+            guard assistantAccessAllowed(logContext: "manualMicTap") else {
+                Self.log.info("[VoiceChat] voiceStartBlockedByPaywall")
+                Task { await handleAssistantAccessBlocked(context: "manualMicTap") }
+                return
+            }
             Task { await chatBeginListening(startReason: "manual") }
         case .listening:
             Self.log.info("[VoiceChat] manualStopTriggered")
@@ -549,6 +598,7 @@ final class VoiceCommandViewModel {
     }
 
     private func autoRelistenSkipReason() -> String? {
+        guard canUseAssistant else { return "paywallLocked" }
         guard isChatSheetPresented else { return "sheetNotPresented" }
         guard isAppActive else { return "appInactive" }
         guard !isTextEditing else { return "textEditing" }
@@ -582,6 +632,11 @@ final class VoiceCommandViewModel {
     // MARK: - Begin listening
 
     func chatBeginListening(startReason: String = "manual") async {
+        guard assistantAccessAllowed(logContext: "beginListening:\(startReason)") else {
+            Self.log.info("[VoiceChat] voiceStartBlockedByPaywall")
+            await handleAssistantAccessBlocked(context: "beginListening")
+            return
+        }
         guard chatFlowState == .idle || chatFlowState == .success || chatFlowState == .error else {
             Self.log.info("[VoiceChat] listenStartSkipped reason=stateNotReady state=\(String(describing: self.chatFlowState), privacy: .public) startReason=\(startReason, privacy: .public)")
             return
@@ -656,6 +711,10 @@ final class VoiceCommandViewModel {
     // MARK: - Finalize listening (orchestrator)
 
     func chatFinalizeListening(stopReason: VoiceStopReason = .manual) async {
+        guard assistantAccessAllowed(logContext: "finalizeListening") else {
+            await handleAssistantAccessBlocked(context: "finalizeListening")
+            return
+        }
         guard !isStoppingListening else {
             Self.log.info("[VoiceChat] stopIgnored reason=alreadyStopping stopReason=\(stopReason.rawValue, privacy: .public)")
             return
@@ -772,6 +831,11 @@ final class VoiceCommandViewModel {
 
     private func handleCloudFallback(audioURL: URL, strings: AppStrings) async {
         defer { deleteAudioFile(audioURL) }
+        guard assistantAccessAllowed(logContext: "cloudTranscription") else {
+            Self.log.info("[VoiceChat] cloudTranscriptionBlockedByPaywall")
+            await handleAssistantAccessBlocked(context: "cloudTranscription")
+            return
+        }
         // Cloud STT is user-typed draft data only: no assistant row, no streaming, no emitAssistantResponse.
         let cloudT0 = CFAbsoluteTimeGetCurrent()
 
@@ -860,6 +924,10 @@ final class VoiceCommandViewModel {
     // MARK: - Parse + route to task actions (largely unchanged)
 
     func applyChatParse(transcript: String) async {
+        guard assistantAccessAllowed(logContext: "applyChatParse") else {
+            await handleAssistantAccessBlocked(context: "applyChatParse")
+            return
+        }
         guard ensureAIParseAllowed() else {
             handlePaywallBlockedParse()
             return
@@ -1008,7 +1076,7 @@ final class VoiceCommandViewModel {
         #if DEBUG
         print("[PaywallGate] pre-parse isSubscribed=\(sm.isPremium) freeUsage=\(sm.freeAIParseSuccessCount)/\(SubscriptionConfig.freeAIParseAllowance)")
         #endif
-        if sm.canUseFreeAIParseSlot() { return true }
+        if sm.canUseAssistant { return true }
         #if DEBUG
         print("[PaywallGate] parse blocked — presenting paywall (free tier exhausted or not subscribed)")
         #endif
@@ -1018,6 +1086,9 @@ final class VoiceCommandViewModel {
 
     private func handlePaywallBlockedParse() {
         Self.log.info("[PaywallGate] paywallBlockedParse — AI parse not started")
+        cancelAutoRelisten(reason: "paywallLocked")
+        cancelMaxRecordingTimer()
+        _ = cancelFollowUpNoSpeechTimer(reason: "paywallLocked")
         removePendingAssistantSlotIfEmpty()
         chatFlowState = .idle
         currentSubmitCameFromVoiceDraft = false
@@ -1028,7 +1099,15 @@ final class VoiceCommandViewModel {
 
     private func recordFreeAIUsageIfNeeded(_ command: ParsedCommand?) {
         guard let command, command.parserSource == .llm else { return }
-        subscriptionManager?.recordSuccessfulFreeAIParseIfNeeded()
+        recordSuccessfulAssistantUseIfNeeded()
+    }
+
+    private func recordSuccessfulAssistantUseIfNeeded() {
+        guard let subscriptionManager else { return }
+        subscriptionManager.recordSuccessfulFreeAIParseIfNeeded()
+        guard !subscriptionManager.canUseAssistant else { return }
+        Self.log.info("[PaywallGate] assistantLimitReachedAfterSuccessfulUse")
+        Task { await handleAssistantAccessBlocked(context: "freeLimitReachedAfterSuccess") }
     }
 
     /// After an AI parse path has visibly persisted a task change (create/update/delete).
@@ -1191,7 +1270,7 @@ final class VoiceCommandViewModel {
             return
         }
         if action != "createReminder" && action != "createEvent" {
-            subscriptionManager?.recordSuccessfulFreeAIParseIfNeeded()
+            recordSuccessfulAssistantUseIfNeeded()
         }
         Self.log.info("[VoiceChat] commandExecutionCompleted action=\(action, privacy: .public)")
     }

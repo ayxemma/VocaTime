@@ -10,6 +10,7 @@ struct RootTabView: View {
     @Environment(\.appUILanguage) private var appUILanguage
     @Environment(\.themePalette) private var themePalette
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(SubscriptionManager.self) private var subscriptionManager
     @AppStorage(AppUILanguage.storageKey) private var languageRaw: String = AppUILanguage.defaultForDevice().rawValue
     @AppStorage(FirstLaunchOnboarding.completedKey) private var firstLaunchOnboardingCompleted = false
 
@@ -77,11 +78,24 @@ struct RootTabView: View {
         .onChange(of: scenePhase) { _, newPhase in
             chatViewModel.handleAppScenePhaseChange(newPhase)
         }
+        .onReceive(NotificationCenter.default.publisher(for: .chatTaskPresentPaywall)) { _ in
+            guard chatSheetSession != nil else { return }
+            Self.log.info("[RootTab] chatSheetClosed reason=paywallPresented")
+            chatSheetSession = nil
+        }
     }
 
     private func requestChatPresentation(source: String) {
         guard source == "FAB" else {
             Self.log.error("[RootTab] unexpectedChatPresentation source=\(source, privacy: .public)")
+            return
+        }
+        Self.log.info("[RootTab] chatOpenRequested source=\(source, privacy: .public)")
+        let allowed = subscriptionManager.canUseAssistant
+        Self.log.info("[RootTab] assistantAccessAllowed=\(allowed, privacy: .public)")
+        guard allowed else {
+            Self.log.info("[RootTab] chatOpenBlockedShowingPaywall")
+            NotificationCenter.default.post(name: .chatTaskPresentPaywall, object: nil)
             return
         }
         BackendWarmup.scheduleSessionWarmup()

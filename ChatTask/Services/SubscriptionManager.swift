@@ -208,9 +208,22 @@ final class SubscriptionManager {
 
     var isPremium: Bool { isProUnlocked }
 
+    var remainingFreeAssistantUses: Int {
+        guard !isProUnlocked else { return Int.max }
+        return max(0, SubscriptionConfig.freeAIParseAllowance - freeAIParseSuccessCount)
+    }
+
+    var canUseAssistant: Bool {
+        isProUnlocked || remainingFreeAssistantUses > 0
+    }
+
+    var shouldShowAssistantPaywall: Bool {
+        !canUseAssistant
+    }
+
     /// `true` when the user may run another AI parse (LLM) without subscribing.
     func canUseFreeAIParseSlot() -> Bool {
-        isProUnlocked || freeAIParseSuccessCount < SubscriptionConfig.freeAIParseAllowance
+        canUseAssistant
     }
 
     /// Call after a **successful** chat outcome driven by an LLM-backed `ParsedCommand`.

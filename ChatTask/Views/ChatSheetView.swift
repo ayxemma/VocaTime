@@ -53,6 +53,12 @@ struct ChatSheetView: View {
                 viewModel.attachPersistence(modelContext)
                 viewModel.subscriptionManager = subscriptionManager
                 viewModel.uiLanguage = appUILanguage
+                guard subscriptionManager.canUseAssistant else {
+                    Self.log.info("[ChatSheet] chatAutoStartBlocked reason=paywallLocked")
+                    NotificationCenter.default.post(name: .chatTaskPresentPaywall, object: nil)
+                    dismiss()
+                    return
+                }
                 BackendWarmup.scheduleSessionWarmup()
                 Self.log.info("[ChatSheet] chatAutoStart — sheet opened, beginning recording")
                 if showsStarterPrompt {
@@ -243,6 +249,12 @@ struct ChatSheetView: View {
         let isEnabled   = viewModel.chatFlowState != .processing
 
         return Button {
+            guard subscriptionManager.canUseAssistant else {
+                Self.log.info("[ChatSheet] voiceStartBlockedByPaywall source=micButton")
+                NotificationCenter.default.post(name: .chatTaskPresentPaywall, object: nil)
+                dismiss()
+                return
+            }
             isTextFieldFocused = false
             completeOnboardingFromInput()
             showStarterPrompt = false
@@ -287,6 +299,12 @@ struct ChatSheetView: View {
     private func submitTypedText() {
         let trimmed = typedText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+        guard subscriptionManager.canUseAssistant else {
+            Self.log.info("[ChatSheet] typedSubmitBlockedByPaywall")
+            NotificationCenter.default.post(name: .chatTaskPresentPaywall, object: nil)
+            dismiss()
+            return
+        }
         let textToSend = trimmed
         completeOnboardingFromInput()
         showStarterPrompt = false
