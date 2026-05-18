@@ -12,6 +12,22 @@ enum TaskSource: String, Codable, CaseIterable {
     case manual
 }
 
+enum ReminderAlertStyle: String, Codable, CaseIterable, Identifiable {
+    case silent
+    case `default`
+    case important
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .silent: return "Silent"
+        case .default: return "Default"
+        case .important: return "Important"
+        }
+    }
+}
+
 @Model
 final class TaskItem {
     @Attribute(.unique) var id: UUID
@@ -27,6 +43,9 @@ final class TaskItem {
     var kindRaw: String
     /// Per-task reminder lead time in minutes. `nil` means use the global default.
     var reminderOffsetMinutes: Int?
+    /// Product-facing alert importance. Nil/unknown preserves the app's previous default sound behavior.
+    var alertStyleRaw: String?
+    var alertSoundName: String?
     /// Optional recurrence metadata. Nil means this task is a one-off task/reminder.
     var recurrenceFrequencyRaw: String?
     /// ISO weekdays stored as a comma-separated list: Monday = 1 ... Sunday = 7.
@@ -50,6 +69,16 @@ final class TaskItem {
         return RecurrenceFrequency(rawValue: recurrenceFrequencyRaw)
     }
 
+    var alertStyle: ReminderAlertStyle {
+        get {
+            guard let alertStyleRaw else { return .default }
+            return ReminderAlertStyle(rawValue: alertStyleRaw) ?? .default
+        }
+        set {
+            alertStyleRaw = newValue.rawValue
+        }
+    }
+
     var recurrenceWeekdays: [Int] {
         Self.decodeRecurrenceWeekdays(recurrenceWeekdaysRaw)
     }
@@ -71,6 +100,8 @@ final class TaskItem {
         source: TaskSource = .voice,
         kind: TaskKind = .task,
         reminderOffsetMinutes: Int? = nil,
+        alertStyle: ReminderAlertStyle = .default,
+        alertSoundName: String? = nil,
         recurrenceFrequency: RecurrenceFrequency? = nil,
         recurrenceWeekdays: [Int] = [],
         recurrenceTimeMinutes: Int? = nil,
@@ -90,6 +121,8 @@ final class TaskItem {
         self.sourceRaw = source.rawValue
         self.kindRaw = kind.rawValue
         self.reminderOffsetMinutes = reminderOffsetMinutes
+        self.alertStyleRaw = alertStyle.rawValue
+        self.alertSoundName = alertSoundName
         self.recurrenceFrequencyRaw = recurrenceFrequency?.rawValue
         self.recurrenceWeekdaysRaw = Self.encodeRecurrenceWeekdays(recurrenceWeekdays)
         self.recurrenceTimeMinutes = recurrenceTimeMinutes
@@ -105,7 +138,7 @@ final class TaskItem {
         switch command.actionType {
         case .reminder: kind = .reminder
         case .calendarEvent: kind = .event
-            case .unknown, .deleteTask, .rescheduleTask, .appendToTask, .updateTaskTitle, .updateRecurrence: kind = .task
+            case .unknown, .deleteTask, .rescheduleTask, .appendToTask, .updateTaskTitle, .updateRecurrence, .updateAlertStyle: kind = .task
         }
         let now = Date()
         let item = TaskItem(
@@ -120,6 +153,7 @@ final class TaskItem {
             source: .voice,
             kind: kind,
             reminderOffsetMinutes: ReminderOffset.globalDefault.rawValue,
+            alertStyle: command.alertStyle ?? .default,
             recurrenceFrequency: command.recurrence?.frequency,
             recurrenceWeekdays: command.recurrence?.weekdays ?? [],
             recurrenceTimeMinutes: command.recurrence?.timeMinutes,

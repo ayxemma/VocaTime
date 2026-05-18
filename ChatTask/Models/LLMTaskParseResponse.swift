@@ -41,6 +41,7 @@ struct LLMTaskParseResponse: Decodable {
     let languageCode: String?
     let confidence: Double?
     let recurrence: Recurrence?
+    let alertStyle: String?
 
     // ── Edit-command fields ───────────────────────────────────
     /// ISO8601 time reference for the existing task to act on.
@@ -66,6 +67,7 @@ struct LLMTaskParseResponse: Decodable {
         case hasSpecificTime = "has_specific_time"
         case languageCode   = "language_code"
         case recurrence
+        case alertStyle     = "alert_style"
         case targetTime     = "target_time"
         case newScheduledAt = "new_scheduled_at"
         case appendText     = "append_text"

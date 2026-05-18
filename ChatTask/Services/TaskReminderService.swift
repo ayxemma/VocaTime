@@ -90,7 +90,11 @@ final class TaskReminderService: NSObject, UNUserNotificationCenterDelegate {
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
         print("[Reminder] willPresent foreground notification — id=\(notification.request.identifier) title='\(notification.request.content.title)'")
-        completionHandler([.banner, .sound, .list])
+        var options: UNNotificationPresentationOptions = [.banner, .list]
+        if notification.request.content.sound != nil {
+            options.insert(.sound)
+        }
+        completionHandler(options)
     }
 
     func userNotificationCenter(
@@ -200,17 +204,17 @@ final class TaskReminderService: NSObject, UNUserNotificationCenterDelegate {
             print("[Reminder] done action — task marked complete id=\(taskId)")
             cancel(taskID: taskId)
         } else if action == Self.actionSnooze10 {
-            scheduleSnoozeNotification(taskId: taskId, taskTitle: item.title, base: taskId.uuidString)
+            scheduleSnoozeNotification(taskId: taskId, taskTitle: item.title, base: taskId.uuidString, alertStyle: item.alertStyle)
         }
     }
 
-    private func scheduleSnoozeNotification(taskId: UUID, taskTitle: String, base: String) {
+    private func scheduleSnoozeNotification(taskId: UUID, taskTitle: String, base: String, alertStyle: ReminderAlertStyle) {
         let ts = Int64(Date().timeIntervalSince1970 * 1_000)
         let notifId = base + "_snooze_\(ts)"
         let content = UNMutableNotificationContent()
         content.title = Self.snoozedReminderTitle
         content.body = taskTitle
-        content.sound = .default
+        applyAlertStyle(alertStyle, to: content)
         // Intentionally no category (no follow-up snooze/done on snoozed alerts).
         content.userInfo = ["taskId": base]
         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 10 * 60, repeats: false)
@@ -265,7 +269,8 @@ final class TaskReminderService: NSObject, UNUserNotificationCenterDelegate {
                     taskID: ids.base,
                     taskTitle: task.title,
                     fireDate: preFire,
-                    calendar: .current
+                    calendar: .current,
+                    alertStyle: task.alertStyle
                 )
             } else {
                 print("[Reminder] skipped due to past time — kind=pre id=\(ids.pre) taskId=\(ids.base) triggerDate=\(preFire) now=\(now)")
@@ -278,7 +283,8 @@ final class TaskReminderService: NSObject, UNUserNotificationCenterDelegate {
                 taskID: ids.base,
                 taskTitle: task.title,
                 fireDate: scheduledDate,
-                calendar: .current
+                calendar: .current,
+                alertStyle: task.alertStyle
             )
         } else {
             print("[Reminder] skipped due to past time — kind=exact id=\(ids.exact) taskId=\(ids.base) triggerDate=\(scheduledDate) now=\(now)")
@@ -333,7 +339,8 @@ final class TaskReminderService: NSObject, UNUserNotificationCenterDelegate {
                         taskID: ids.base,
                         taskTitle: task.title,
                         fireDate: preFire,
-                        calendar: calendar
+                        calendar: calendar,
+                        alertStyle: task.alertStyle
                     )
                 } else {
                     print("[Reminder] recurring skipped due to past time — kind=pre taskId=\(ids.base) occurrence=\(occurrence) triggerDate=\(preFire) now=\(now)")
@@ -345,7 +352,8 @@ final class TaskReminderService: NSObject, UNUserNotificationCenterDelegate {
                 taskID: ids.base,
                 taskTitle: task.title,
                 fireDate: occurrence,
-                calendar: calendar
+                calendar: calendar,
+                alertStyle: task.alertStyle
             )
         }
     }
@@ -403,12 +411,13 @@ final class TaskReminderService: NSObject, UNUserNotificationCenterDelegate {
         taskID: String,
         taskTitle: String,
         fireDate: Date,
-        calendar: Calendar
+        calendar: Calendar,
+        alertStyle: ReminderAlertStyle
     ) {
         let content = UNMutableNotificationContent()
         content.title = taskTitle
         content.body = Self.preReminderBody
-        content.sound = .default
+        applyAlertStyle(alertStyle, to: content)
         let comps = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: fireDate)
         let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
         let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
@@ -427,13 +436,14 @@ final class TaskReminderService: NSObject, UNUserNotificationCenterDelegate {
         taskID: String,
         taskTitle: String,
         fireDate: Date,
-        calendar: Calendar
+        calendar: Calendar,
+        alertStyle: ReminderAlertStyle
     ) {
         let content = UNMutableNotificationContent()
         content.title = Self.exactTimeTitle
         content.body = taskTitle
         content.categoryIdentifier = Self.categoryExact
-        content.sound = .default
+        applyAlertStyle(alertStyle, to: content)
         content.userInfo = ["taskId": taskID]
         let comps = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: fireDate)
         let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
@@ -445,6 +455,21 @@ final class TaskReminderService: NSObject, UNUserNotificationCenterDelegate {
                 print("[Reminder] exact reminder scheduled — id=\(identifier) taskId=\(taskID) fireDate=\(fireDate)")
                 self?.verifyPendingRequest(identifier: identifier, kind: "exact")
             }
+        }
+    }
+
+    private func applyAlertStyle(_ style: ReminderAlertStyle, to content: UNMutableNotificationContent) {
+        print("[Reminder] notificationAlertStyleApplied style=\(style.rawValue)")
+        switch style {
+        case .silent:
+            content.sound = nil
+            print("[Reminder] notificationSoundApplied sound=none")
+        case .default:
+            content.sound = .default
+            print("[Reminder] notificationSoundApplied sound=default")
+        case .important:
+            content.sound = .default
+            print("[Reminder] notificationSoundApplied sound=default importantFallback=true")
         }
     }
 

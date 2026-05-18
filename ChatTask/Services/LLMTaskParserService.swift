@@ -120,12 +120,13 @@ struct LLMTaskParserService: TaskParsing {
         let targetTaskID = parsed.targetTaskID.flatMap(UUID.init(uuidString:))
         let recurrence = Self.mapRecurrence(parsed.recurrence, fallbackTimeZoneIdentifier: timeZoneIdentifier)
         let recurrenceUpdate = Self.mapRecurrenceUpdate(parsed.recurrenceUpdate, fallbackTimeZoneIdentifier: timeZoneIdentifier)
+        let alertStyle = Self.mapAlertStyle(parsed.alertStyle)
         if actionTypeUnmapped {
             Self.log.warning("[Parse] action_type unmapped raw=\(parsed.actionType ?? "nil", privacy: .public)")
         }
         Self.log.info("[Parse] backend intent_type=\(parsed.actionType ?? "nil", privacy: .public) target.reference_type=\(parsed.targetReferenceType ?? "nil", privacy: .public) target.task_id=\(parsed.targetTaskID ?? "nil", privacy: .public)")
 
-        if actionType == .deleteTask || actionType == .rescheduleTask || actionType == .appendToTask || actionType == .updateTaskTitle || actionType == .updateRecurrence {
+        if actionType == .deleteTask || actionType == .rescheduleTask || actionType == .appendToTask || actionType == .updateTaskTitle || actionType == .updateRecurrence || actionType == .updateAlertStyle {
             let targetDate = parsed.targetTime.flatMap { Self.parseISO8601($0, timeZone: tz) }
             let newScheduledDate = parsed.newScheduledAt.flatMap { Self.parseISO8601($0, timeZone: tz) }
 
@@ -141,6 +142,7 @@ struct LLMTaskParserService: TaskParsing {
                 parserSource: .llm,
                 languageCode: parsed.languageCode,
                 recurrence: recurrence,
+                alertStyle: alertStyle,
                 targetDate: targetDate,
                 newScheduledDate: newScheduledDate,
                 appendText: parsed.appendText,
@@ -187,6 +189,7 @@ struct LLMTaskParserService: TaskParsing {
             parserSource: .llm,
             languageCode: parsed.languageCode,
             recurrence: recurrence,
+            alertStyle: alertStyle,
             targetReferenceType: targetReferenceType,
             targetTaskID: targetTaskID,
             recurrenceUpdate: recurrenceUpdate
@@ -257,6 +260,7 @@ struct LLMTaskParserService: TaskParsing {
         case "appendtotask":   return (.appendToTask, false)
         case "updatetasktitle": return (.updateTaskTitle, false)
         case "updaterecurrence": return (.updateRecurrence, false)
+        case "updatealertstyle": return (.updateAlertStyle, false)
         default:
             if let t = ActionType(rawValue: raw) { return (t, false) }
             return (.unknown, true)
@@ -279,6 +283,27 @@ struct LLMTaskParserService: TaskParsing {
             return .title
         default:
             return .unknown
+        }
+    }
+
+    private static func mapAlertStyle(_ raw: String?) -> ReminderAlertStyle? {
+        guard let raw = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
+            return nil
+        }
+        let collapsed = raw
+            .replacingOccurrences(of: "_", with: "")
+            .replacingOccurrences(of: "-", with: "")
+            .replacingOccurrences(of: " ", with: "")
+            .lowercased()
+        switch collapsed {
+        case "silent", "quiet", "nosound", "mute", "muted", "静音", "不要声音":
+            return .silent
+        case "default", "normal", "standard", "普通", "普通提醒":
+            return .default
+        case "important", "loud", "strong", "alarmlike", "重要", "重要提醒", "明显一点", "聲音大一點", "声音大一点":
+            return .important
+        default:
+            return ReminderAlertStyle(rawValue: raw)
         }
     }
 

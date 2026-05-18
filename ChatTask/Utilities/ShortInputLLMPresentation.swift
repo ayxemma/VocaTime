@@ -57,7 +57,7 @@ enum ShortInputLLMPresentation {
             return outcome(command, isShort: false, reason: "nonLLM")
         }
         switch command.actionType {
-        case .deleteTask, .rescheduleTask, .appendToTask, .updateTaskTitle, .updateRecurrence:
+        case .deleteTask, .rescheduleTask, .appendToTask, .updateTaskTitle, .updateRecurrence, .updateAlertStyle:
             return outcome(command, isShort: false, reason: "editActionNoChange")
         default:
             break

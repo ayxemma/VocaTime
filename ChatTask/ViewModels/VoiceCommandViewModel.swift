@@ -107,6 +107,7 @@ final class VoiceCommandViewModel {
         case appendNote(text: String)
         case rename(to: String)
         case updateRecurrence(ParsedRecurrenceUpdate)
+        case updateAlertStyle(ReminderAlertStyle)
     }
 
     private struct PendingEditAction {
@@ -908,6 +909,9 @@ final class VoiceCommandViewModel {
         case .updateRecurrence:
             await handleUpdateRecurrenceIntent(command)
             return
+        case .updateAlertStyle:
+            await handleUpdateAlertStyleIntent(command)
+            return
         default:
             break
         }
@@ -1130,6 +1134,9 @@ final class VoiceCommandViewModel {
                 return
             }
             applyReschedule(task: task, newDate: newDate, strings: uiLanguage.strings, usageCommand: nil)
+            if let style = alertStyle(from: result.edit?.alertStyle) {
+                applyAlertStyle(task: task, style: style, strings: uiLanguage.strings, usageCommand: nil, emitResponse: false)
+            }
         case "renameTask":
             guard let task = selectedTaskOverride ?? taskForInterpretedTarget(result),
                   let newTitle = result.edit?.newTitle?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -1142,6 +1149,9 @@ final class VoiceCommandViewModel {
                 return
             }
             applyRename(task: task, newTitle: newTitle, strings: uiLanguage.strings, usageCommand: nil)
+            if let style = alertStyle(from: result.edit?.alertStyle) {
+                applyAlertStyle(task: task, style: style, strings: uiLanguage.strings, usageCommand: nil, emitResponse: false)
+            }
         case "appendToTask":
             guard let task = selectedTaskOverride ?? taskForInterpretedTarget(result),
                   let text = result.edit?.appendText?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -1150,6 +1160,9 @@ final class VoiceCommandViewModel {
                 return
             }
             applyAppend(task: task, text: text, strings: uiLanguage.strings, usageCommand: nil)
+            if let style = alertStyle(from: result.edit?.alertStyle) {
+                applyAlertStyle(task: task, style: style, strings: uiLanguage.strings, usageCommand: nil, emitResponse: false)
+            }
         case "deleteTask":
             guard let task = selectedTaskOverride ?? taskForInterpretedTarget(result) else {
                 blockInterpretedExecution(reason: "missingField")
@@ -1163,6 +1176,16 @@ final class VoiceCommandViewModel {
                 return
             }
             applyRecurrenceUpdate(task: task, update: update, strings: uiLanguage.strings, usageCommand: nil)
+            if let style = alertStyle(from: result.edit?.alertStyle) {
+                applyAlertStyle(task: task, style: style, strings: uiLanguage.strings, usageCommand: nil, emitResponse: false)
+            }
+        case "updateAlertStyle":
+            guard let task = selectedTaskOverride ?? taskForInterpretedTarget(result),
+                  let style = alertStyle(from: result.edit?.alertStyle) else {
+                blockInterpretedExecution(reason: "missingField")
+                return
+            }
+            applyAlertStyle(task: task, style: style, strings: uiLanguage.strings, usageCommand: nil)
         default:
             emitAssistantResponse(result.assistantMessage ?? unclearCommandMessage(), nextState: .error, stream: false)
             return
@@ -1246,6 +1269,18 @@ final class VoiceCommandViewModel {
         }
         await routeResolvedEditTarget(command, editType: .updateRecurrence(update), strings: s) { task, usageCommand in
             applyRecurrenceUpdate(task: task, update: update, strings: s, usageCommand: usageCommand)
+        }
+    }
+
+    private func handleUpdateAlertStyleIntent(_ command: ParsedCommand) async {
+        let s = uiLanguage.strings
+        guard let style = command.alertStyle else {
+            Self.log.warning("[VoiceChat] updateAlertStyleIntent — alertStyle is nil")
+            emitAssistantResponse(s.chatEditNoTaskFound, nextState: .error, stream: false)
+            return
+        }
+        await routeResolvedEditTarget(command, editType: .updateAlertStyle(style), strings: s) { task, usageCommand in
+            applyAlertStyle(task: task, style: style, strings: s, usageCommand: usageCommand)
         }
     }
 
@@ -1376,6 +1411,8 @@ final class VoiceCommandViewModel {
             applyRename(task: task, newTitle: newTitle, strings: s, usageCommand: usageCommand)
         case .updateRecurrence(let update):
             applyRecurrenceUpdate(task: task, update: update, strings: s, usageCommand: usageCommand)
+        case .updateAlertStyle(let style):
+            applyAlertStyle(task: task, style: style, strings: s, usageCommand: usageCommand)
         }
     }
 
@@ -1508,6 +1545,24 @@ final class VoiceCommandViewModel {
         TaskReminderService.shared.schedule(for: task)
         let label = TaskRecurrenceFormatting.label(for: task, locale: uiLanguage.locale) ?? "repeat schedule"
         emitAssistantResponse("Updated \(task.title): \(label).", nextState: .success, stream: true)
+        refreshActiveContext(from: task)
+        recordFreeAIUsageIfNeeded(usageCommand)
+        if persistenceContext != nil {
+            recordSuccessfulAIActionForAppReview()
+        }
+    }
+
+    private func applyAlertStyle(task: TaskItem, style: ReminderAlertStyle, strings s: AppStrings, usageCommand: ParsedCommand?, emitResponse: Bool = true) {
+        Self.log.info("[VoiceChat] finalFrontendAction=updateAlertStyle finalTargetTaskID=\(task.id.uuidString, privacy: .public) title=\(task.title, privacy: .public) style=\(style.rawValue, privacy: .public)")
+        print("[VoiceChat] alertStyleSelected task=\(task.id.uuidString) style=\(style.rawValue)")
+        task.alertStyle = style
+        task.updatedAt = Date()
+        try? persistenceContext?.save()
+        TaskReminderService.shared.schedule(for: task)
+        print("[VoiceChat] notificationRescheduledAfterAlertStyleChange")
+        if emitResponse {
+            emitAssistantResponse("Updated \(task.title): Alert \(style.displayName).", nextState: .success, stream: true)
+        }
         refreshActiveContext(from: task)
         recordFreeAIUsageIfNeeded(usageCommand)
         if persistenceContext != nil {
@@ -1832,6 +1887,27 @@ final class VoiceCommandViewModel {
         return nil
     }
 
+    private func alertStyle(from raw: String?) -> ReminderAlertStyle? {
+        guard let raw = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
+            return nil
+        }
+        let compact = raw
+            .replacingOccurrences(of: "_", with: "")
+            .replacingOccurrences(of: "-", with: "")
+            .replacingOccurrences(of: " ", with: "")
+            .lowercased()
+        switch compact {
+        case "silent", "quiet", "nosound", "mute", "muted", "静音", "不要声音":
+            return .silent
+        case "default", "normal", "standard", "普通", "普通提醒":
+            return .default
+        case "important", "loud", "strong", "alarmlike", "重要", "重要提醒", "明显一点", "聲音大一點", "声音大一点":
+            return .important
+        default:
+            return ReminderAlertStyle(rawValue: raw)
+        }
+    }
+
     private func parsedCommand(from result: CommandInterpretResponse) -> ParsedCommand? {
         guard let create = result.create,
               let title = create.title?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -1851,7 +1927,8 @@ final class VoiceCommandViewModel {
             confidence: result.confidence,
             parserSource: .llm,
             languageCode: uiLanguage.uiLocaleIdentifier,
-            recurrence: recurrence
+            recurrence: recurrence,
+            alertStyle: alertStyle(from: create.alertStyle)
         )
     }
 

@@ -11,6 +11,7 @@ enum ActionType: String, CaseIterable, Equatable {
     case appendToTask
     case updateTaskTitle
     case updateRecurrence
+    case updateAlertStyle
 }
 
 enum ParserSource: String, Codable, Equatable {
@@ -77,6 +78,7 @@ struct ParsedCommand: Equatable {
     var parserSource: ParserSource
     var languageCode: String?
     var recurrence: ParsedRecurrence? = nil
+    var alertStyle: ReminderAlertStyle? = nil
 
     // Edit-command fields (nil for create commands)
     /// The time reference used to identify an existing task.

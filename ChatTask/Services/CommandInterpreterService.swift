@@ -58,6 +58,7 @@ struct CommandInterpretResponse: Decodable {
         let recurrenceType: String?
         let recurrenceWeekdays: [Int]?
         let recurrenceEndAt: String?
+        let alertStyle: String?
 
         enum CodingKeys: String, CodingKey {
             case title, notes
@@ -67,6 +68,7 @@ struct CommandInterpretResponse: Decodable {
             case recurrenceType = "recurrence_type"
             case recurrenceWeekdays = "recurrence_weekdays"
             case recurrenceEndAt = "recurrence_end_at"
+            case alertStyle = "alert_style"
         }
     }
 
@@ -76,6 +78,7 @@ struct CommandInterpretResponse: Decodable {
         let appendText: String?
         let newRecurrenceType: String?
         let newRecurrenceWeekdays: [Int]?
+        let alertStyle: String?
         let applyScope: String?
 
         enum CodingKeys: String, CodingKey {
@@ -84,6 +87,7 @@ struct CommandInterpretResponse: Decodable {
             case appendText = "append_text"
             case newRecurrenceType = "new_recurrence_type"
             case newRecurrenceWeekdays = "new_recurrence_weekdays"
+            case alertStyle = "alert_style"
             case applyScope = "apply_scope"
         }
     }

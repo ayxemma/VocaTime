@@ -15,6 +15,7 @@ struct TaskDetailView: View {
     @State private var specificTimeEnabled: Bool
     @State private var timeSelection: Date
     @State private var reminderOffset: ReminderOffset
+    @State private var alertStyle: ReminderAlertStyle
     @State private var recurrenceEnabled: Bool
     @State private var selectedWeekdays: Set<Int>
 
@@ -38,6 +39,7 @@ struct TaskDetailView: View {
         }
         let offsetMinutes = task.reminderOffsetMinutes ?? ReminderOffset.globalDefault.rawValue
         _reminderOffset = State(initialValue: ReminderOffset.nearest(to: offsetMinutes))
+        _alertStyle = State(initialValue: task.alertStyle)
         _recurrenceEnabled = State(initialValue: task.isRecurring)
         _selectedWeekdays = State(initialValue: Set(task.recurrenceWeekdays))
     }
@@ -98,6 +100,25 @@ struct TaskDetailView: View {
                             task.reminderOffsetMinutes = new.rawValue
                             task.updatedAt = Date()
                             TaskReminderService.shared.schedule(for: task)
+                        }
+
+                        Picker("Alert", selection: $alertStyle) {
+                            ForEach(ReminderAlertStyle.allCases) { style in
+                                Text(style.displayName).tag(style)
+                            }
+                        }
+                        .onChange(of: alertStyle) { _, new in
+                            task.alertStyle = new
+                            task.updatedAt = Date()
+                            print("[TaskDetail] alertStyleSelected task=\(task.id.uuidString) style=\(new.rawValue)")
+                            TaskReminderService.shared.schedule(for: task)
+                            print("[TaskDetail] notificationRescheduledAfterAlertStyleChange")
+                        }
+
+                        if alertStyle == .important {
+                            Text("Uses a stronger reminder style when available.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
 
                         Toggle("Repeat weekly", isOn: $recurrenceEnabled)
