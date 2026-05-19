@@ -133,6 +133,11 @@ final class TaskItem {
         recurrenceFrequency != nil
     }
 
+    /// True when the task uses the Important reminder alert style (UI priority indicator).
+    var hasImportantPriority: Bool {
+        alertStyle == .important
+    }
+
     init(
         id: UUID = UUID(),
         title: String,

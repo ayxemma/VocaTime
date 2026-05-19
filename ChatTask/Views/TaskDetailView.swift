@@ -7,6 +7,7 @@ struct TaskDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.locale) private var locale
     @Environment(\.appUILanguage) private var appUILanguage
+    @Environment(\.themePalette) private var themePalette
 
     @FocusState private var titleFocused: Bool
 
@@ -102,9 +103,16 @@ struct TaskDetailView: View {
                             TaskReminderService.shared.schedule(for: task)
                         }
 
-                        Picker("Alert", selection: $alertStyle) {
+                        Picker(selection: $alertStyle) {
                             ForEach(ReminderAlertStyle.allCases) { style in
-                                Text(style.displayName).tag(style)
+                                alertStylePickerRow(style)
+                                    .tag(style)
+                            }
+                        } label: {
+                            HStack {
+                                Text("Alert")
+                                Spacer()
+                                alertStylePickerValue
                             }
                         }
                         .onChange(of: alertStyle) { _, new in
@@ -166,6 +174,27 @@ struct TaskDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             titleFocused = true
+        }
+    }
+
+    @ViewBuilder
+    private func alertStylePickerRow(_ style: ReminderAlertStyle) -> some View {
+        HStack(spacing: 8) {
+            Text(style.displayName)
+            if style == .important {
+                ImportantPriorityBadge(size: .compact)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var alertStylePickerValue: some View {
+        HStack(spacing: 6) {
+            if alertStyle == .important {
+                ImportantPriorityBadge(size: .compact)
+            }
+            Text(alertStyle.displayName)
+                .foregroundStyle(alertStyle.pickerValueColor(theme: themePalette))
         }
     }
 

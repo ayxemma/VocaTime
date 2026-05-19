@@ -484,9 +484,14 @@ struct ChatSheetView: View {
                     if !isUser, message.text.isEmpty {
                         ChatTypingIndicatorView(foreground: p.textPrimary.opacity(0.7))
                     } else {
-                        Text(message.text)
-                            .font(typography.body)
-                            .foregroundStyle(isUser ? p.userBubbleForeground : p.textPrimary)
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(message.text)
+                                .font(typography.body)
+                                .foregroundStyle(isUser ? p.userBubbleForeground : p.textPrimary)
+                            if !isUser, message.showsImportantPriorityBadge {
+                                ImportantPriorityBadge(size: .compact)
+                            }
+                        }
                     }
                 }
                 .font(typography.body)

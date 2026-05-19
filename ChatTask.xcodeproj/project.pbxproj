@@ -64,6 +64,7 @@
 		A10000000000000000000040 /* CalendarSyncSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000040 /* CalendarSyncSettings.swift */; };
 		A10000000000000000000041 /* CalendarDisplayItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000041 /* CalendarDisplayItem.swift */; };
 		A10000000000000000000042 /* CalendarPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000042 /* CalendarPickerView.swift */; };
+		A10000000000000000000043 /* ImportantPriorityIndicator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000043 /* ImportantPriorityIndicator.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -125,6 +126,7 @@
 		A20000000000000000000040 /* CalendarSyncSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarSyncSettings.swift; sourceTree = "<group>"; };
 		A20000000000000000000041 /* CalendarDisplayItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarDisplayItem.swift; sourceTree = "<group>"; };
 		A20000000000000000000042 /* CalendarPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarPickerView.swift; sourceTree = "<group>"; };
+		A20000000000000000000043 /* ImportantPriorityIndicator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportantPriorityIndicator.swift; sourceTree = "<group>"; };
 		A30000000000000000000001 /* ChatTask.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ChatTask.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -187,6 +189,7 @@
 				A2000000000000000000002B /* SettingsView.swift */,
 				A2000000000000000000002E /* PaywallView.swift */,
 				A20000000000000000000042 /* CalendarPickerView.swift */,
+				A20000000000000000000043 /* ImportantPriorityIndicator.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -380,6 +383,7 @@
 				A1000000000000000000002A /* ReminderOffset.swift in Sources */,
 				A1000000000000000000002B /* SettingsView.swift in Sources */,
 				A10000000000000000000042 /* CalendarPickerView.swift in Sources */,
+				A10000000000000000000043 /* ImportantPriorityIndicator.swift in Sources */,
 				A1000000000000000000002C /* SubscriptionConfig.swift in Sources */,
 				5F2DD8002F9BEF81004030AF /* ChatActiveTaskContext.swift in Sources */,
 				A1000000000000000000002D /* SubscriptionManager.swift in Sources */,

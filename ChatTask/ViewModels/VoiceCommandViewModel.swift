@@ -19,12 +19,21 @@ struct ChatMessage: Identifiable, Equatable {
     let role: ChatMessageRole
     var text: String
     let timestamp: Date
+    /// Shows the Important priority badge on assistant confirmations (e.g. alert style updates).
+    var showsImportantPriorityBadge: Bool
 
-    init(id: UUID = UUID(), role: ChatMessageRole, text: String, timestamp: Date = .now) {
+    init(
+        id: UUID = UUID(),
+        role: ChatMessageRole,
+        text: String,
+        timestamp: Date = .now,
+        showsImportantPriorityBadge: Bool = false
+    ) {
         self.id = id
         self.role = role
         self.text = text
         self.timestamp = timestamp
+        self.showsImportantPriorityBadge = showsImportantPriorityBadge
     }
 }
 
@@ -486,10 +495,18 @@ final class VoiceCommandViewModel {
     }
 
     /// Inserts or replaces the pending assistant slot, optionally with a streaming “typing” reveal.
-    private func emitAssistantResponse(_ text: String, nextState: VoiceFlowState, stream: Bool) {
+    private func emitAssistantResponse(
+        _ text: String,
+        nextState: VoiceFlowState,
+        stream: Bool,
+        showsImportantPriorityBadge: Bool = false
+    ) {
         if stream, !text.isEmpty {
             if let slot = pendingAssistantSlotId, chatMessages.contains(where: { $0.id == slot && $0.role == .assistant }) {
                 pendingAssistantSlotId = nil
+                if let idx = chatMessages.firstIndex(where: { $0.id == slot }) {
+                    chatMessages[idx].showsImportantPriorityBadge = showsImportantPriorityBadge
+                }
                 startStreamingText(into: slot, fullText: text) { [weak self] in
                     guard let self else { return }
                     self.chatFlowState = nextState
@@ -497,7 +514,12 @@ final class VoiceCommandViewModel {
                 }
             } else {
                 let slot = UUID()
-                chatMessages.append(ChatMessage(id: slot, role: .assistant, text: ""))
+                chatMessages.append(ChatMessage(
+                    id: slot,
+                    role: .assistant,
+                    text: "",
+                    showsImportantPriorityBadge: showsImportantPriorityBadge
+                ))
                 startStreamingText(into: slot, fullText: text) { [weak self] in
                     guard let self else { return }
                     self.chatFlowState = nextState
@@ -510,8 +532,13 @@ final class VoiceCommandViewModel {
             if let slot = pendingAssistantSlotId, let idx = chatMessages.firstIndex(where: { $0.id == slot && $0.role == .assistant }) {
                 pendingAssistantSlotId = nil
                 chatMessages[idx].text = text
+                chatMessages[idx].showsImportantPriorityBadge = showsImportantPriorityBadge
             } else {
-                chatMessages.append(ChatMessage(role: .assistant, text: text))
+                chatMessages.append(ChatMessage(
+                    role: .assistant,
+                    text: text,
+                    showsImportantPriorityBadge: showsImportantPriorityBadge
+                ))
             }
             chatFlowState = nextState
             scheduleFollowUpListeningAfterSuccessIfNeeded()
@@ -1645,7 +1672,12 @@ final class VoiceCommandViewModel {
         TaskReminderService.shared.schedule(for: task)
         print("[VoiceChat] notificationRescheduledAfterAlertStyleChange")
         if emitResponse {
-            emitAssistantResponse("Updated \(task.title): Alert \(style.displayName).", nextState: .success, stream: true)
+            emitAssistantResponse(
+                "Updated \(task.title): Alert \(style.displayName).",
+                nextState: .success,
+                stream: true,
+                showsImportantPriorityBadge: style == .important
+            )
         }
         refreshActiveContext(from: task)
         recordFreeAIUsageIfNeeded(usageCommand)

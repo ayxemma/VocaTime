@@ -58,12 +58,20 @@ struct TaskRowMainContent: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            // Title — most prominent element
-            Text(task.title)
-                .font(typography.taskTitle)
-                .foregroundStyle(titleForegroundColor)
-                .strikethrough(task.isCompleted)
-                .fixedSize(horizontal: false, vertical: true)
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(task.title)
+                    .font(typography.taskTitle)
+                    .foregroundStyle(titleForegroundColor)
+                    .strikethrough(task.isCompleted)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if task.hasImportantPriority {
+                    ImportantPriorityBadge(size: .compact)
+                        .padding(.top, 2)
+                }
+
+                Spacer(minLength: 0)
+            }
 
             // Time + notes on a single metadata line
             HStack(spacing: 5) {
@@ -237,6 +245,7 @@ enum TaskRecurrenceFormatting {
 private struct TaskCardModifier: ViewModifier {
     @Environment(\.themePalette) private var themePalette
     var dimmed: Bool
+    var isImportant: Bool = false
 
     func body(content: Content) -> some View {
         let shadowOpacity = themePalette.isMinimal ? 0.06 : 0.05
@@ -258,6 +267,7 @@ private struct TaskCardModifier: ViewModifier {
                     )
             )
             .opacity(dimmed ? 0.6 : 1)
+            .importantTaskCardAccent(isImportant)
     }
 }
 
@@ -280,7 +290,10 @@ struct TaskRowView: View {
                 .padding(.top, 2)
             TaskRowMainContent(task: task, scheduleContext: scheduleContext)
         }
-        .modifier(TaskCardModifier(dimmed: emphasizeCompleted && task.isCompleted))
+        .modifier(TaskCardModifier(
+            dimmed: emphasizeCompleted && task.isCompleted,
+            isImportant: task.hasImportantPriority
+        ))
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityLabelText)
     }
@@ -288,6 +301,9 @@ struct TaskRowView: View {
     private var accessibilityLabelText: String {
         let s = strings
         var parts: [String] = []
+        if task.hasImportantPriority {
+            parts.append(ReminderAlertStyle.important.displayName)
+        }
         if let d = task.scheduledDate, TaskScheduleFormatting.hasWallClockTime(d, calendar: calendar) {
             parts.append(d.formatted(Date.FormatStyle(date: .omitted, time: .shortened).locale(locale)))
         } else {
@@ -321,7 +337,10 @@ struct TaskNavigableRow: View {
             .buttonStyle(.plain)
             .accessibilityHint(strings.editTaskDetails)
         }
-        .modifier(TaskCardModifier(dimmed: emphasizeCompleted && task.isCompleted))
+        .modifier(TaskCardModifier(
+            dimmed: emphasizeCompleted && task.isCompleted,
+            isImportant: task.hasImportantPriority
+        ))
         .accessibilityElement(children: .combine)
     }
 }
