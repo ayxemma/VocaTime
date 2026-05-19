@@ -1672,8 +1672,11 @@ final class VoiceCommandViewModel {
         TaskReminderService.shared.schedule(for: task)
         print("[VoiceChat] notificationRescheduledAfterAlertStyleChange")
         if emitResponse {
+            let confirmation = style == .important
+                ? "Updated \(task.title): Marked as Important."
+                : "Updated \(task.title): Normal reminder."
             emitAssistantResponse(
-                "Updated \(task.title): Alert \(style.displayName).",
+                confirmation,
                 nextState: .success,
                 stream: true,
                 showsImportantPriorityBadge: style == .important

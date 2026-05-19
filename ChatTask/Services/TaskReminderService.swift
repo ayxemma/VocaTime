@@ -511,12 +511,7 @@ final class TaskReminderService: NSObject, UNUserNotificationCenterDelegate {
     private func applyAlertStyle(_ style: ReminderAlertStyle, to content: UNMutableNotificationContent) {
         print("[Reminder] notificationAlertStyleApplied style=\(style.rawValue)")
         switch style {
-        case .silent:
-            content.sound = nil
-            content.interruptionLevel = .passive
-            print("[Reminder] notificationSoundApplied sound=nil")
-            logInterruptionLevel(.passive)
-        case .default:
+        case .normal:
             content.sound = .default
             content.interruptionLevel = .active
             print("[Reminder] notificationSoundApplied sound=default")

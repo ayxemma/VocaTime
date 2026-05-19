@@ -57,9 +57,7 @@ struct ImportantPrefixedTitle: View {
 extension ReminderAlertStyle {
     func pickerValueColor(theme: AppThemePalette) -> Color {
         switch self {
-        case .silent:
-            return .secondary
-        case .default:
+        case .normal:
             return theme.accentColor
         case .important:
             return .primary

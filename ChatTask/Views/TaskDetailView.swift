@@ -7,8 +7,6 @@ struct TaskDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.locale) private var locale
     @Environment(\.appUILanguage) private var appUILanguage
-    @Environment(\.themePalette) private var themePalette
-
     @FocusState private var titleFocused: Bool
 
     @State private var scheduleEnabled: Bool
@@ -108,28 +106,12 @@ struct TaskDetailView: View {
                             TaskReminderService.shared.schedule(for: task)
                         }
 
-                        Picker(selection: $alertStyle) {
-                            ForEach(ReminderAlertStyle.allCases) { style in
-                                alertStylePickerRow(style)
-                                    .tag(style)
-                            }
-                        } label: {
-                            HStack {
-                                Text("Alert")
-                                Spacer()
-                                alertStylePickerValue
-                            }
-                        }
-                        .onChange(of: alertStyle) { _, new in
-                            task.alertStyle = new
-                            task.updatedAt = Date()
-                            print("[TaskDetail] alertStyleSelected task=\(task.id.uuidString) style=\(new.rawValue)")
-                            TaskReminderService.shared.schedule(for: task)
-                            print("[TaskDetail] notificationRescheduledAfterAlertStyleChange")
+                        Toggle(isOn: importantReminderBinding) {
+                            Text("Mark as Important")
                         }
 
                         if alertStyle == .important {
-                            Text("Uses Time Sensitive delivery when your device allows. Still respects Silent Mode and Focus.")
+                            Text("Time Sensitive when allowed. Still respects Silent Mode and Focus.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -182,25 +164,19 @@ struct TaskDetailView: View {
         }
     }
 
-    @ViewBuilder
-    private func alertStylePickerRow(_ style: ReminderAlertStyle) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 5) {
-            if style == .important {
-                ImportantPriorityMark(font: .body.weight(.semibold))
+    private var importantReminderBinding: Binding<Bool> {
+        Binding(
+            get: { alertStyle == .important },
+            set: { isImportant in
+                let newStyle: ReminderAlertStyle = isImportant ? .important : .normal
+                alertStyle = newStyle
+                task.alertStyle = newStyle
+                task.updatedAt = Date()
+                print("[TaskDetail] alertStyleSelected task=\(task.id.uuidString) style=\(newStyle.rawValue)")
+                TaskReminderService.shared.schedule(for: task)
+                print("[TaskDetail] notificationRescheduledAfterAlertStyleChange")
             }
-            Text(style.displayName)
-        }
-    }
-
-    @ViewBuilder
-    private var alertStylePickerValue: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 5) {
-            if alertStyle == .important {
-                ImportantPriorityMark(font: .subheadline.weight(.semibold))
-            }
-            Text(alertStyle.displayName)
-                .foregroundStyle(alertStyle.pickerValueColor(theme: themePalette))
-        }
+        )
     }
 
     private var titleBinding: Binding<String> {

@@ -13,35 +13,39 @@ enum TaskSource: String, Codable, CaseIterable {
 }
 
 enum ReminderAlertStyle: String, Codable, CaseIterable, Identifiable {
-    case silent
-    case `default`
+    case normal
     case important
 
     var id: String { rawValue }
 
     var displayName: String {
         switch self {
-        case .silent: return "Silent"
-        case .default: return "Default"
+        case .normal: return "Normal"
         case .important: return "Important"
         }
     }
 
-    /// Stored `alertStyleRaw` and legacy values → one of the three product-facing styles.
+    /// Stored `alertStyleRaw` and legacy values → `normal` or `important`.
     static func resolved(fromRaw raw: String?) -> ReminderAlertStyle {
         guard let raw = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
-            return .default
+            return .normal
+        }
+        if let legacy = migrateLegacyStoredRawValue(raw) {
+            return legacy
         }
         if let style = ReminderAlertStyle(rawValue: raw) {
             return style
         }
-        return parsed(fromRaw: raw) ?? .default
+        return parsed(fromRaw: raw) ?? .normal
     }
 
     /// Parses voice/LLM aliases; returns nil when the string is not a known alert style.
     static func parsed(fromRaw raw: String?) -> ReminderAlertStyle? {
         guard let raw = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
             return nil
+        }
+        if let legacy = migrateLegacyStoredRawValue(raw) {
+            return legacy
         }
         if let style = ReminderAlertStyle(rawValue: raw) {
             return style
@@ -52,15 +56,23 @@ enum ReminderAlertStyle: String, Codable, CaseIterable, Identifiable {
             .replacingOccurrences(of: " ", with: "")
             .lowercased()
         switch collapsed {
-        case "silent", "quiet", "nosound", "mute", "muted", "静音", "不要声音":
-            return .silent
-        case "default", "normal", "standard", "普通", "普通提醒",
+        case "silent", "quiet", "nosound", "mute", "muted", "静音", "不要声音",
+             "default", "normal", "standard", "普通", "普通提醒",
              "sound", "soundonly", "vibration", "vibrate", "vibrationonly", "vibrateonly":
-            return .default
+            return .normal
         case "important", "loud", "strong", "alarmlike",
              "soundandvibration", "soundvibration", "sound+vibration",
              "重要", "重要提醒", "明显一点", "聲音大一點", "声音大一点":
             return .important
+        default:
+            return nil
+        }
+    }
+
+    private static func migrateLegacyStoredRawValue(_ raw: String) -> ReminderAlertStyle? {
+        switch raw {
+        case "silent", "default":
+            return .normal
         default:
             return nil
         }
@@ -151,7 +163,7 @@ final class TaskItem {
         source: TaskSource = .voice,
         kind: TaskKind = .task,
         reminderOffsetMinutes: Int? = nil,
-        alertStyle: ReminderAlertStyle = .default,
+        alertStyle: ReminderAlertStyle = .normal,
         alertSoundName: String? = nil,
         recurrenceFrequency: RecurrenceFrequency? = nil,
         recurrenceWeekdays: [Int] = [],
@@ -212,7 +224,7 @@ final class TaskItem {
             source: .voice,
             kind: kind,
             reminderOffsetMinutes: ReminderOffset.globalDefault.rawValue,
-            alertStyle: command.alertStyle ?? .default,
+            alertStyle: command.alertStyle ?? .normal,
             recurrenceFrequency: command.recurrence?.frequency,
             recurrenceWeekdays: command.recurrence?.weekdays ?? [],
             recurrenceTimeMinutes: command.recurrence?.timeMinutes,
