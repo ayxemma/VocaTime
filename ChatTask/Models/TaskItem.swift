@@ -26,6 +26,45 @@ enum ReminderAlertStyle: String, Codable, CaseIterable, Identifiable {
         case .important: return "Important"
         }
     }
+
+    /// Stored `alertStyleRaw` and legacy values → one of the three product-facing styles.
+    static func resolved(fromRaw raw: String?) -> ReminderAlertStyle {
+        guard let raw = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
+            return .default
+        }
+        if let style = ReminderAlertStyle(rawValue: raw) {
+            return style
+        }
+        return parsed(fromRaw: raw) ?? .default
+    }
+
+    /// Parses voice/LLM aliases; returns nil when the string is not a known alert style.
+    static func parsed(fromRaw raw: String?) -> ReminderAlertStyle? {
+        guard let raw = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
+            return nil
+        }
+        if let style = ReminderAlertStyle(rawValue: raw) {
+            return style
+        }
+        let collapsed = raw
+            .replacingOccurrences(of: "_", with: "")
+            .replacingOccurrences(of: "-", with: "")
+            .replacingOccurrences(of: " ", with: "")
+            .lowercased()
+        switch collapsed {
+        case "silent", "quiet", "nosound", "mute", "muted", "静音", "不要声音":
+            return .silent
+        case "default", "normal", "standard", "普通", "普通提醒",
+             "sound", "soundonly", "vibration", "vibrate", "vibrationonly", "vibrateonly":
+            return .default
+        case "important", "loud", "strong", "alarmlike",
+             "soundandvibration", "soundvibration", "sound+vibration",
+             "重要", "重要提醒", "明显一点", "聲音大一點", "声音大一点":
+            return .important
+        default:
+            return nil
+        }
+    }
 }
 
 @Model
@@ -79,12 +118,10 @@ final class TaskItem {
     }
 
     var alertStyle: ReminderAlertStyle {
-        get {
-            guard let alertStyleRaw else { return .default }
-            return ReminderAlertStyle(rawValue: alertStyleRaw) ?? .default
-        }
+        get { ReminderAlertStyle.resolved(fromRaw: alertStyleRaw) }
         set {
             alertStyleRaw = newValue.rawValue
+            alertSoundName = nil
         }
     }
 

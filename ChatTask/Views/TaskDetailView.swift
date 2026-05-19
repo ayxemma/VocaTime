@@ -116,7 +116,7 @@ struct TaskDetailView: View {
                         }
 
                         if alertStyle == .important {
-                            Text("Uses a stronger reminder style when available.")
+                            Text("Uses Time Sensitive delivery when your device allows. Still respects Silent Mode and Focus.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }

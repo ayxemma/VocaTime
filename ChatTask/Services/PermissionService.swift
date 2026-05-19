@@ -163,13 +163,17 @@ final class PermissionService {
 
     // MARK: - Notifications
 
+    private static var notificationAuthorizationOptions: UNAuthorizationOptions {
+        [.alert, .sound, .timeSensitive]
+    }
+
     /// Silently requests notification permission on first app launch.
     /// Does nothing if the user has already made a decision.
     func requestNotificationsIfNeeded() async {
         await refreshNotifications()
         guard notificationStatus == .notDetermined else { return }
         _ = try? await UNUserNotificationCenter.current()
-            .requestAuthorization(options: [.alert, .sound])
+            .requestAuthorization(options: Self.notificationAuthorizationOptions)
         await refreshNotifications()
     }
 
@@ -180,7 +184,8 @@ final class PermissionService {
 
     private func requestNotifications(strings: AppStrings) async {
         do {
-            let granted = try await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])
+            let granted = try await UNUserNotificationCenter.current()
+                .requestAuthorization(options: Self.notificationAuthorizationOptions.union([.badge]))
             await refreshNotifications()
             if !granted {
                 lastErrorMessage = strings.permissionNotificationsDenied

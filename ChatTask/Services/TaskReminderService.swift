@@ -23,6 +23,7 @@ import UserNotifications
 /// - **Recurring** (`<uuid>_rec_<n>_pre`, `<uuid>_rec_<n>_exact`) — next 14 weekly
 ///   occurrences only, still using exact + pre behavior.
 /// - **Snoozed** (`<uuid>_snooze_<ts>`) — one-off follow-up from a snooze; title "Reminder", no pre / no actions.
+/// - **Important follow-up** (`<exact-id>_followup`) — optional second alert 2 min after an exact fire time when alert style is Important.
 ///
 /// **Delegate:** This class also acts as `UNUserNotificationCenterDelegate`.
 /// `setup()` must be called once at app launch (from `ChatTaskApp.init`) to
@@ -89,9 +90,14 @@ final class TaskReminderService: NSObject, UNUserNotificationCenterDelegate {
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
-        print("[Reminder] willPresent foreground notification — id=\(notification.request.identifier) title='\(notification.request.content.title)'")
+        let content = notification.request.content
+        print("""
+        [Reminder] willPresent foreground notification — id=\(notification.request.identifier) \
+        title='\(content.title)' sound=\(content.sound == nil ? "nil" : "default") \
+        interruptionLevel=\(content.interruptionLevel.rawValue)
+        """)
         var options: UNNotificationPresentationOptions = [.banner, .list]
-        if notification.request.content.sound != nil {
+        if content.sound != nil {
             options.insert(.sound)
         }
         completionHandler(options)
@@ -235,7 +241,8 @@ final class TaskReminderService: NSObject, UNUserNotificationCenterDelegate {
         print("""
         [Reminder] schedule() — id=\(ids.base) title='\(task.title)' \
         scheduledDate=\(String(describing: task.scheduledDate)) \
-        reminderOffsetMinutes=\(String(describing: task.reminderOffsetMinutes))
+        reminderOffsetMinutes=\(String(describing: task.reminderOffsetMinutes)) \
+        alertStyle=\(task.alertStyle.rawValue)
         """)
 
         guard !task.isCompleted else {
@@ -364,6 +371,8 @@ final class TaskReminderService: NSObject, UNUserNotificationCenterDelegate {
     private static let exactTimeTitle = "It's time"
     private static let snoozedReminderTitle = "Reminder"
     private static let recurrenceOccurrenceLimit = 14
+    /// Extra nudge for Important reminders (after the exact-time notification).
+    private static let importantFollowUpDelay: TimeInterval = 2 * 60
 
     private struct NotificationIDs {
         let base: String
@@ -456,6 +465,47 @@ final class TaskReminderService: NSObject, UNUserNotificationCenterDelegate {
                 self?.verifyPendingRequest(identifier: identifier, kind: "exact")
             }
         }
+
+        scheduleImportantFollowUpIfNeeded(
+            exactIdentifier: identifier,
+            taskID: taskID,
+            taskTitle: taskTitle,
+            fireDate: fireDate,
+            calendar: calendar,
+            alertStyle: alertStyle
+        )
+    }
+
+    private func scheduleImportantFollowUpIfNeeded(
+        exactIdentifier: String,
+        taskID: String,
+        taskTitle: String,
+        fireDate: Date,
+        calendar: Calendar,
+        alertStyle: ReminderAlertStyle
+    ) {
+        guard alertStyle == .important else { return }
+        let followUpFire = fireDate.addingTimeInterval(Self.importantFollowUpDelay)
+        guard followUpFire > Date() else {
+            print("[Reminder] important follow-up skipped — past fireDate=\(followUpFire)")
+            return
+        }
+        let identifier = exactIdentifier + "_followup"
+        let content = UNMutableNotificationContent()
+        content.title = Self.snoozedReminderTitle
+        content.body = taskTitle
+        applyAlertStyle(alertStyle, to: content)
+        content.userInfo = ["taskId": taskID]
+        let comps = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: followUpFire)
+        let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
+        let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
+        center.add(request) { error in
+            if let error {
+                print("[Reminder] ERROR important follow-up add — id=\(identifier) error=\(error)")
+            } else {
+                print("[Reminder] important follow-up scheduled — id=\(identifier) taskId=\(taskID) fireDate=\(followUpFire)")
+            }
+        }
     }
 
     private func applyAlertStyle(_ style: ReminderAlertStyle, to content: UNMutableNotificationContent) {
@@ -463,14 +513,32 @@ final class TaskReminderService: NSObject, UNUserNotificationCenterDelegate {
         switch style {
         case .silent:
             content.sound = nil
-            print("[Reminder] notificationSoundApplied sound=none")
+            content.interruptionLevel = .passive
+            print("[Reminder] notificationSoundApplied sound=nil")
+            logInterruptionLevel(.passive)
         case .default:
             content.sound = .default
+            content.interruptionLevel = .active
             print("[Reminder] notificationSoundApplied sound=default")
+            logInterruptionLevel(.active)
         case .important:
             content.sound = .default
-            print("[Reminder] notificationSoundApplied sound=default importantFallback=true")
+            content.interruptionLevel = .timeSensitive
+            print("[Reminder] notificationSoundApplied sound=default")
+            logInterruptionLevel(.timeSensitive)
         }
+    }
+
+    private func logInterruptionLevel(_ level: UNNotificationInterruptionLevel) {
+        let label: String
+        switch level {
+        case .passive: label = "passive"
+        case .active: label = "active"
+        case .timeSensitive: label = "timeSensitive"
+        case .critical: label = "critical"
+        @unknown default: label = "unknown(\(level.rawValue))"
+        }
+        print("[Reminder] notificationInterruptionLevelApplied level=\(label)")
     }
 
     private func verifyPendingRequest(identifier: String, kind: String) {
@@ -571,7 +639,8 @@ final class TaskReminderService: NSObject, UNUserNotificationCenterDelegate {
             soundSetting=\(settings.soundSetting.rawValue) \
             badgeSetting=\(settings.badgeSetting.rawValue) \
             lockScreenSetting=\(settings.lockScreenSetting.rawValue) \
-            notificationCenterSetting=\(settings.notificationCenterSetting.rawValue)
+            notificationCenterSetting=\(settings.notificationCenterSetting.rawValue) \
+            timeSensitiveSetting=\(settings.timeSensitiveSetting.rawValue)
             """)
         }
     }

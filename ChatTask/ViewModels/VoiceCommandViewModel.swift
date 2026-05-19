@@ -1979,24 +1979,7 @@ final class VoiceCommandViewModel {
     }
 
     private func alertStyle(from raw: String?) -> ReminderAlertStyle? {
-        guard let raw = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
-            return nil
-        }
-        let compact = raw
-            .replacingOccurrences(of: "_", with: "")
-            .replacingOccurrences(of: "-", with: "")
-            .replacingOccurrences(of: " ", with: "")
-            .lowercased()
-        switch compact {
-        case "silent", "quiet", "nosound", "mute", "muted", "静音", "不要声音":
-            return .silent
-        case "default", "normal", "standard", "普通", "普通提醒":
-            return .default
-        case "important", "loud", "strong", "alarmlike", "重要", "重要提醒", "明显一点", "聲音大一點", "声音大一点":
-            return .important
-        default:
-            return ReminderAlertStyle(rawValue: raw)
-        }
+        ReminderAlertStyle.parsed(fromRaw: raw)
     }
 
     private func parsedCommand(from result: CommandInterpretResponse) -> ParsedCommand? {
