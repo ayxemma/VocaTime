@@ -58,20 +58,14 @@ struct TaskRowMainContent: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(task.title)
-                    .font(typography.taskTitle)
-                    .foregroundStyle(titleForegroundColor)
-                    .strikethrough(task.isCompleted)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                if task.hasImportantPriority {
-                    ImportantPriorityBadge(size: .compact)
-                        .padding(.top, 2)
-                }
-
-                Spacer(minLength: 0)
-            }
+            ImportantPrefixedTitle(
+                title: task.title,
+                isImportant: task.hasImportantPriority,
+                font: typography.taskTitle,
+                foreground: titleForegroundColor,
+                markOpacity: task.isCompleted ? 0.45 : 1,
+                strikethrough: task.isCompleted
+            )
 
             // Time + notes on a single metadata line
             HStack(spacing: 5) {
@@ -245,7 +239,6 @@ enum TaskRecurrenceFormatting {
 private struct TaskCardModifier: ViewModifier {
     @Environment(\.themePalette) private var themePalette
     var dimmed: Bool
-    var isImportant: Bool = false
 
     func body(content: Content) -> some View {
         let shadowOpacity = themePalette.isMinimal ? 0.06 : 0.05
@@ -267,7 +260,6 @@ private struct TaskCardModifier: ViewModifier {
                     )
             )
             .opacity(dimmed ? 0.6 : 1)
-            .importantTaskCardAccent(isImportant)
     }
 }
 
@@ -290,10 +282,7 @@ struct TaskRowView: View {
                 .padding(.top, 2)
             TaskRowMainContent(task: task, scheduleContext: scheduleContext)
         }
-        .modifier(TaskCardModifier(
-            dimmed: emphasizeCompleted && task.isCompleted,
-            isImportant: task.hasImportantPriority
-        ))
+        .modifier(TaskCardModifier(dimmed: emphasizeCompleted && task.isCompleted))
         .accessibilityElement(children: .combine)
         .accessibilityLabel(accessibilityLabelText)
     }
@@ -337,10 +326,7 @@ struct TaskNavigableRow: View {
             .buttonStyle(.plain)
             .accessibilityHint(strings.editTaskDetails)
         }
-        .modifier(TaskCardModifier(
-            dimmed: emphasizeCompleted && task.isCompleted,
-            isImportant: task.hasImportantPriority
-        ))
+        .modifier(TaskCardModifier(dimmed: emphasizeCompleted && task.isCompleted))
         .accessibilityElement(children: .combine)
     }
 }

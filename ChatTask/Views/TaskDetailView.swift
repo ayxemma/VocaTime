@@ -49,8 +49,13 @@ struct TaskDetailView: View {
         let s = strings
         Form {
             Section(s.taskSection) {
-                TextField(s.titlePlaceholder, text: titleBinding)
-                    .focused($titleFocused)
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    if alertStyle == .important {
+                        ImportantPriorityMark(font: .body.weight(.semibold))
+                    }
+                    TextField(s.titlePlaceholder, text: titleBinding)
+                        .focused($titleFocused)
+                }
 
                 TextField(s.notesPlaceholder, text: notesBinding, axis: .vertical)
                     .lineLimit(3...8)
@@ -179,19 +184,19 @@ struct TaskDetailView: View {
 
     @ViewBuilder
     private func alertStylePickerRow(_ style: ReminderAlertStyle) -> some View {
-        HStack(spacing: 8) {
-            Text(style.displayName)
+        HStack(alignment: .firstTextBaseline, spacing: 5) {
             if style == .important {
-                ImportantPriorityBadge(size: .compact)
+                ImportantPriorityMark(font: .body.weight(.semibold))
             }
+            Text(style.displayName)
         }
     }
 
     @ViewBuilder
     private var alertStylePickerValue: some View {
-        HStack(spacing: 6) {
+        HStack(alignment: .firstTextBaseline, spacing: 5) {
             if alertStyle == .important {
-                ImportantPriorityBadge(size: .compact)
+                ImportantPriorityMark(font: .subheadline.weight(.semibold))
             }
             Text(alertStyle.displayName)
                 .foregroundStyle(alertStyle.pickerValueColor(theme: themePalette))
