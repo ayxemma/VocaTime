@@ -37,7 +37,7 @@ enum PurchaseState: Equatable {
 @Observable
 final class SubscriptionManager {
 
-    private static let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "ChatTask", category: "Subscription")
+    private static let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "ChatTask", category: "StoreKit")
 
     // MARK: - Products
 
@@ -103,36 +103,31 @@ final class SubscriptionManager {
         monthlyProduct = nil
         yearlyProduct = nil
 
-        let requestedIDs = [
-            SubscriptionConfig.monthlyProductID,
-            SubscriptionConfig.yearlyProductID,
-        ]
+        let requestedIDs = SubscriptionProductID.all
+        Self.log.info("[StoreKit] productsRequested ids=\(Self.jsonIDs(requestedIDs), privacy: .public)")
 
         do {
             let products = try await Product.products(for: requestedIDs)
             let loadedIDs = products.map(\.id)
             let missing = Set(requestedIDs).subtracting(loadedIDs)
 
-            Self.log.info("[Store] loadProducts requestedIDs=\(requestedIDs.joined(separator: ", "), privacy: .public)")
-            Self.log.info("[Store] loadProducts loadedProductIDs=\(loadedIDs.joined(separator: ", "), privacy: .public)")
-            if missing.isEmpty {
-                Self.log.info("[Store] loadProducts missingProductIDs=none")
-            } else {
-                Self.log.warning("[Store] loadProducts missingProductIDs=\(missing.sorted().joined(separator: ", "), privacy: .public)")
+            Self.log.info("[StoreKit] productsLoaded ids=\(Self.jsonIDs(loadedIDs), privacy: .public)")
+            for id in missing.sorted() {
+                Self.log.warning("[StoreKit] productMissing id=\(id, privacy: .public)")
             }
 
             for product in products {
                 switch product.id {
-                case SubscriptionConfig.monthlyProductID:
+                case SubscriptionProductID.monthly:
                     monthlyProduct = product
-                case SubscriptionConfig.yearlyProductID:
+                case SubscriptionProductID.yearly:
                     yearlyProduct = product
                 default:
-                    Self.log.warning("[Store] loadProducts unexpectedProductID=\(product.id, privacy: .public)")
+                    Self.log.warning("[StoreKit] unexpectedProduct id=\(product.id, privacy: .public)")
                 }
             }
         } catch {
-            Self.log.error("[Store] loadProducts failed error=\(String(describing: error), privacy: .public)")
+            Self.log.error("[StoreKit] productsLoadFailed error=\(String(describing: error), privacy: .public)")
         }
     }
 
@@ -158,6 +153,7 @@ final class SubscriptionManager {
     /// Initiate a purchase for `product`.
     /// Updates `purchaseState` and `isProUnlocked` on the main actor.
     func purchase(_ product: Product) async {
+        Self.log.info("[StoreKit] purchaseStarted productID=\(product.id, privacy: .public)")
         purchaseState = .purchasing
         do {
             let result = try await product.purchase()
@@ -270,7 +266,11 @@ final class SubscriptionManager {
     }
 
     private func isProProduct(_ id: String) -> Bool {
-        id == SubscriptionConfig.monthlyProductID || id == SubscriptionConfig.yearlyProductID
+        SubscriptionProductID.all.contains(id)
+    }
+
+    private static func jsonIDs(_ ids: [String]) -> String {
+        "[\"" + ids.joined(separator: "\",\"") + "\"]"
     }
 
     private enum Keys {

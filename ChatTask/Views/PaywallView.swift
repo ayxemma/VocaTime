@@ -1,3 +1,4 @@
+import os.log
 import StoreKit
 import SwiftUI
 
@@ -12,6 +13,8 @@ enum SubscriptionPlan: String, CaseIterable, Identifiable {
 // MARK: - PaywallView
 
 struct PaywallView: View {
+    private static let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "ChatTask", category: "StoreKit")
+
     @Environment(SubscriptionManager.self) private var subscriptionManager
     @Environment(\.appUILanguage) private var appUILanguage
     @Environment(\.dismiss) private var dismiss
@@ -233,7 +236,7 @@ struct PaywallView: View {
                 isSelected: selectedPlan == .monthly,
                 isPurchaseAvailable: subscriptionManager.monthlyProduct != nil,
                 unavailableLabel: s.paywallPlanUnavailable
-            ) { selectedPlan = .monthly }
+            ) { selectPlan(.monthly) }
 
             PlanCard(
                 label: s.paywallPlanYearly,
@@ -244,7 +247,7 @@ struct PaywallView: View {
                 isSelected: selectedPlan == .yearly,
                 isPurchaseAvailable: subscriptionManager.yearlyProduct != nil,
                 unavailableLabel: s.paywallPlanUnavailable
-            ) { selectedPlan = .yearly }
+            ) { selectPlan(.yearly) }
         }
     }
 
@@ -338,15 +341,36 @@ struct PaywallView: View {
 
     // MARK: - Purchase action
 
+    private func selectPlan(_ plan: SubscriptionPlan) {
+        selectedPlan = plan
+        logPlanSelected(plan)
+    }
+
+    private func logPlanSelected(_ plan: SubscriptionPlan) {
+        let productID: String
+        let exists: Bool
+        switch plan {
+        case .monthly:
+            productID = SubscriptionProductID.monthly
+            exists = subscriptionManager.monthlyProduct != nil
+        case .yearly:
+            productID = SubscriptionProductID.yearly
+            exists = subscriptionManager.yearlyProduct != nil
+        }
+        Self.log.info(
+            "[StoreKit] paywallPlanSelected plan=\(plan.rawValue, privacy: .public) productID=\(productID, privacy: .public) exists=\(exists, privacy: .public)"
+        )
+    }
+
     private func rebalanceSelectedPlanAfterProductLoad() {
         switch selectedPlan {
         case .monthly:
             if subscriptionManager.monthlyProduct == nil, subscriptionManager.yearlyProduct != nil {
-                selectedPlan = .yearly
+                selectPlan(.yearly)
             }
         case .yearly:
             if subscriptionManager.yearlyProduct == nil, subscriptionManager.monthlyProduct != nil {
-                selectedPlan = .monthly
+                selectPlan(.monthly)
             }
         }
     }
