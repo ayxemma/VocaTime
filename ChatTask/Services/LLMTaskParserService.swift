@@ -145,7 +145,7 @@ struct LLMTaskParserService: TaskParsing {
                 alertStyle: alertStyle,
                 targetDate: targetDate,
                 newScheduledDate: newScheduledDate,
-                appendText: parsed.appendText,
+                appendText: parsed.appendText ?? parsed.notes,
                 newTitle: parsed.newTitle,
                 targetReferenceType: targetReferenceType,
                 targetTaskID: targetTaskID,

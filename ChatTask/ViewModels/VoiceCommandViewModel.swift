@@ -1455,8 +1455,12 @@ final class VoiceCommandViewModel {
             emitAssistantResponse(s.chatEditNoTaskFound, nextState: .error, stream: false)
             return
         }
+        let appendText = command.appendText?.trimmingCharacters(in: .whitespacesAndNewlines)
         await routeResolvedEditTarget(command, editType: .reschedule(newDate: newDate), strings: s) { task, usageCommand in
             applyReschedule(task: task, newDate: newDate, strings: s, usageCommand: usageCommand)
+            if let appendText, !appendText.isEmpty {
+                applyAppend(task: task, text: appendText, strings: s, usageCommand: nil, emitResponse: false, countUsage: false)
+            }
         }
     }
 
