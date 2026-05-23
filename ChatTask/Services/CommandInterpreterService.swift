@@ -7,14 +7,12 @@ struct CommandInterpretTaskSnapshot: Codable {
     let scheduledAt: String?
     let isRecurring: Bool
     let recurrenceLabel: String?
-    let notesSnippet: String?
 
     enum CodingKeys: String, CodingKey {
         case id, title
         case scheduledAt = "scheduled_at"
         case isRecurring = "is_recurring"
         case recurrenceLabel = "recurrence_label"
-        case notesSnippet = "notes_snippet"
     }
 }
 
@@ -94,26 +92,6 @@ struct CommandInterpretResponse: Decodable {
         }
     }
 
-    struct Action: Decodable {
-        let actionType: String?
-        let confidence: Double
-        let requiresConfirmation: Bool
-        let confirmationKind: String?
-        let assistantMessage: String?
-        let target: Target?
-        let create: Create?
-        let edit: Edit?
-
-        enum CodingKeys: String, CodingKey {
-            case actionType = "action_type"
-            case confidence
-            case requiresConfirmation = "requires_confirmation"
-            case confirmationKind = "confirmation_kind"
-            case assistantMessage = "assistant_message"
-            case target, create, edit
-        }
-    }
-
     let actionType: String?
     let confidence: Double
     let requiresConfirmation: Bool
@@ -122,7 +100,6 @@ struct CommandInterpretResponse: Decodable {
     let target: Target?
     let create: Create?
     let edit: Edit?
-    let actions: [Action]?
 
     enum CodingKeys: String, CodingKey {
         case actionType = "action_type"
@@ -130,23 +107,7 @@ struct CommandInterpretResponse: Decodable {
         case requiresConfirmation = "requires_confirmation"
         case confirmationKind = "confirmation_kind"
         case assistantMessage = "assistant_message"
-        case target, create, edit, actions
-    }
-
-    var effectiveActions: [Action] {
-        if let actions, !actions.isEmpty { return actions }
-        return [
-            Action(
-                actionType: actionType,
-                confidence: confidence,
-                requiresConfirmation: requiresConfirmation,
-                confirmationKind: confirmationKind,
-                assistantMessage: assistantMessage,
-                target: target,
-                create: create,
-                edit: edit
-            )
-        ]
+        case target, create, edit
     }
 }
 
@@ -162,9 +123,7 @@ struct CommandInterpreterService {
         request.timeoutInterval = 90
 
         Self.log.info("[CommandInterpreter] commandInterpretStart requestId=\(body.requestID, privacy: .public) candidateTasksBuilt count=\(body.candidateTasks.count, privacy: .public)")
-        let start = CFAbsoluteTimeGetCurrent()
         let (data, response) = try await BackendFetchRetry.data(for: request, isIdempotent: false)
-        Self.log.info("[CommandInterpreter] interpretRequestDurationMs=\(Int((CFAbsoluteTimeGetCurrent() - start) * 1000), privacy: .public)")
         let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
         guard (200...299).contains(statusCode) else {
             let bodyText = String(data: data, encoding: .utf8) ?? "<non-utf8>"
@@ -172,21 +131,7 @@ struct CommandInterpreterService {
             throw LLMError.invalidResponse(requestId: UUID(uuidString: body.requestID) ?? UUID())
         }
         let decoded = try JSONDecoder().decode(CommandInterpretResponse.self, from: data)
-        Self.log.info("[CommandInterpreter] commandInterpretResult action=\(decoded.actionType ?? "nil", privacy: .public) actionsCount=\(decoded.effectiveActions.count, privacy: .public) confidence=\(decoded.confidence, privacy: .public) confirmation=\(decoded.confirmationKind ?? "nil", privacy: .public)")
+        Self.log.info("[CommandInterpreter] commandInterpretResult action=\(decoded.actionType ?? "nil", privacy: .public) confidence=\(decoded.confidence, privacy: .public) confirmation=\(decoded.confirmationKind ?? "nil", privacy: .public)")
         return decoded
-    }
-}
-
-extension CommandInterpretResponse {
-    init(action: Action, assistantMessage overallMessage: String?) {
-        self.actionType = action.actionType
-        self.confidence = action.confidence
-        self.requiresConfirmation = action.requiresConfirmation
-        self.confirmationKind = action.confirmationKind
-        self.assistantMessage = action.assistantMessage ?? overallMessage
-        self.target = action.target
-        self.create = action.create
-        self.edit = action.edit
-        self.actions = [action]
     }
 }
