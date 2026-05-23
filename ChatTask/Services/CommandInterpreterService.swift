@@ -7,12 +7,14 @@ struct CommandInterpretTaskSnapshot: Codable {
     let scheduledAt: String?
     let isRecurring: Bool
     let recurrenceLabel: String?
+    let notesSnippet: String?
 
     enum CodingKeys: String, CodingKey {
         case id, title
         case scheduledAt = "scheduled_at"
         case isRecurring = "is_recurring"
         case recurrenceLabel = "recurrence_label"
+        case notesSnippet = "notes_snippet"
     }
 }
 
@@ -92,6 +94,27 @@ struct CommandInterpretResponse: Decodable {
         }
     }
 
+    struct Action: Decodable {
+        let actionType: String?
+        let confidence: Double
+        let requiresConfirmation: Bool
+        let confirmationKind: String?
+        let assistantMessage: String?
+        let target: Target?
+        let create: Create?
+        let edit: Edit?
+
+        enum CodingKeys: String, CodingKey {
+            case actionType = "action_type"
+            case confidence
+            case requiresConfirmation = "requires_confirmation"
+            case confirmationKind = "confirmation_kind"
+            case assistantMessage = "assistant_message"
+            case target, create, edit
+        }
+    }
+
+    let actions: [Action]?
     let actionType: String?
     let confidence: Double
     let requiresConfirmation: Bool
@@ -102,12 +125,32 @@ struct CommandInterpretResponse: Decodable {
     let edit: Edit?
 
     enum CodingKeys: String, CodingKey {
+        case actions
         case actionType = "action_type"
         case confidence
         case requiresConfirmation = "requires_confirmation"
         case confirmationKind = "confirmation_kind"
         case assistantMessage = "assistant_message"
         case target, create, edit
+    }
+
+    var multiActions: [Action] {
+        guard let actions, actions.count > 1 else { return [] }
+        return actions
+    }
+}
+
+extension CommandInterpretResponse {
+    init(action: Action, assistantMessage overallMessage: String?) {
+        self.actions = nil
+        self.actionType = action.actionType
+        self.confidence = action.confidence
+        self.requiresConfirmation = action.requiresConfirmation
+        self.confirmationKind = action.confirmationKind
+        self.assistantMessage = action.assistantMessage ?? overallMessage
+        self.target = action.target
+        self.create = action.create
+        self.edit = action.edit
     }
 }
 
@@ -131,7 +174,7 @@ struct CommandInterpreterService {
             throw LLMError.invalidResponse(requestId: UUID(uuidString: body.requestID) ?? UUID())
         }
         let decoded = try JSONDecoder().decode(CommandInterpretResponse.self, from: data)
-        Self.log.info("[CommandInterpreter] commandInterpretResult action=\(decoded.actionType ?? "nil", privacy: .public) confidence=\(decoded.confidence, privacy: .public) confirmation=\(decoded.confirmationKind ?? "nil", privacy: .public)")
+        Self.log.info("[CommandInterpreter] commandInterpretResult action=\(decoded.actionType ?? "nil", privacy: .public) confidence=\(decoded.confidence, privacy: .public) confirmation=\(decoded.confirmationKind ?? "nil", privacy: .public) actionsCount=\(decoded.actions?.count ?? 0, privacy: .public)")
         return decoded
     }
 }
