@@ -1183,9 +1183,14 @@ final class VoiceCommandViewModel {
     }
 
     private func handleCommandInterpretation(_ result: CommandInterpretResponse, transcript: String) async {
-        Self.log.info("[VoiceChat] commandInterpretResult action=\(result.actionType ?? "nil", privacy: .public) confidence=\(result.confidence, privacy: .public) confirmation=\(result.confirmationKind ?? "nil", privacy: .public)")
-        guard result.actionType != nil else {
+        let actions = result.effectiveActions
+        Self.log.info("[VoiceChat] commandInterpretResult action=\(result.actionType ?? "nil", privacy: .public) actionsCount=\(actions.count, privacy: .public) confidence=\(result.confidence, privacy: .public) confirmation=\(result.confirmationKind ?? "nil", privacy: .public)")
+        guard !actions.isEmpty, actions.contains(where: { $0.actionType != nil }) else {
             emitAssistantResponse(result.assistantMessage ?? unclearCommandMessage(), nextState: .error, stream: false)
+            return
+        }
+        if actions.count > 1 {
+            await executeInterpretedActions(actions, overallMessage: result.assistantMessage, transcript: transcript)
             return
         }
         if result.requiresConfirmation {
@@ -1193,6 +1198,31 @@ final class VoiceCommandViewModel {
             return
         }
         await executeInterpretedCommand(result, selectedTaskOverride: nil, transcript: transcript)
+    }
+
+    private func executeInterpretedActions(_ actions: [CommandInterpretResponse.Action], overallMessage: String?, transcript: String) async {
+        guard !actions.contains(where: { $0.requiresConfirmation }) else {
+            Self.log.info("[VoiceChat] confirmationShown kind=multi_action")
+            emitAssistantResponse(overallMessage ?? "Please confirm the requested changes.", nextState: .error, stream: false)
+            return
+        }
+        Self.log.info("[VoiceChat] multiActionExecutionStarted count=\(actions.count, privacy: .public)")
+        var failures: [Int] = []
+        for (index, action) in actions.enumerated() {
+            let response = CommandInterpretResponse(action: action, assistantMessage: overallMessage)
+            let ok = await executeInterpretedCommand(response, selectedTaskOverride: nil, transcript: transcript, emitResponse: false, countUsage: false)
+            if !ok {
+                failures.append(index + 1)
+                Self.log.info("[VoiceChat] multiActionPartFailed index=\(index, privacy: .public) action=\(action.actionType ?? "nil", privacy: .public)")
+            }
+        }
+        if failures.isEmpty {
+            emitAssistantResponse(overallMessage ?? "Done.", nextState: .success, stream: true)
+            recordSuccessfulAssistantUseIfNeeded()
+            Self.log.info("[VoiceChat] multiActionExecutionCompleted count=\(actions.count, privacy: .public)")
+        } else {
+            emitAssistantResponse("I completed part of that, but couldn't finish action \(failures.map(String.init).joined(separator: ", ")).", nextState: .error, stream: false)
+        }
     }
 
     private func showInterpretedConfirmation(_ result: CommandInterpretResponse, transcript: String) {
@@ -1222,24 +1252,31 @@ final class VoiceCommandViewModel {
         }
     }
 
-    private func executeInterpretedCommand(_ result: CommandInterpretResponse, selectedTaskOverride: TaskItem?, transcript: String) async {
-        guard let action = result.actionType else { return }
+    @discardableResult
+    private func executeInterpretedCommand(
+        _ result: CommandInterpretResponse,
+        selectedTaskOverride: TaskItem?,
+        transcript: String,
+        emitResponse: Bool = true,
+        countUsage: Bool = true
+    ) async -> Bool {
+        guard let action = result.actionType else { return false }
         Self.log.info("[VoiceChat] commandExecutionStarted action=\(action, privacy: .public)")
         switch action {
         case "createReminder", "createEvent":
             guard let command = parsedCommand(from: result) else {
-                blockInterpretedExecution(reason: "missingField")
-                return
+                blockInterpretedExecution(reason: "missingField", emitResponse: emitResponse)
+                return false
             }
-            commitCreateWithConflictCheck(command)
+            commitCreateWithConflictCheck(command, emitResponse: emitResponse)
         case "rescheduleTask":
             guard let task = selectedTaskOverride ?? taskForInterpretedTarget(result),
                   let raw = result.edit?.newScheduledAt,
                   let newDate = parseInterpretedDate(raw) else {
-                blockInterpretedExecution(reason: "missingField")
-                return
+                blockInterpretedExecution(reason: "missingField", emitResponse: emitResponse)
+                return false
             }
-            applyReschedule(task: task, newDate: newDate, strings: uiLanguage.strings, usageCommand: nil)
+            applyReschedule(task: task, newDate: newDate, strings: uiLanguage.strings, usageCommand: nil, emitResponse: emitResponse)
             if let style = alertStyle(from: result.edit?.alertStyle) {
                 applyAlertStyle(task: task, style: style, strings: uiLanguage.strings, usageCommand: nil, emitResponse: false)
             }
@@ -1247,14 +1284,14 @@ final class VoiceCommandViewModel {
             guard let task = selectedTaskOverride ?? taskForInterpretedTarget(result),
                   let newTitle = result.edit?.newTitle?.trimmingCharacters(in: .whitespacesAndNewlines),
                   !newTitle.isEmpty else {
-                blockInterpretedExecution(reason: "missingField")
-                return
+                blockInterpretedExecution(reason: "missingField", emitResponse: emitResponse)
+                return false
             }
             guard isExplicitRenameRequest(transcript) else {
-                blockInterpretedExecution(reason: "renameWithoutExplicitRequest")
-                return
+                blockInterpretedExecution(reason: "renameWithoutExplicitRequest", emitResponse: emitResponse)
+                return false
             }
-            applyRename(task: task, newTitle: newTitle, strings: uiLanguage.strings, usageCommand: nil)
+            applyRename(task: task, newTitle: newTitle, strings: uiLanguage.strings, usageCommand: nil, emitResponse: emitResponse)
             if let style = alertStyle(from: result.edit?.alertStyle) {
                 applyAlertStyle(task: task, style: style, strings: uiLanguage.strings, usageCommand: nil, emitResponse: false)
             }
@@ -1262,49 +1299,60 @@ final class VoiceCommandViewModel {
             guard let task = selectedTaskOverride ?? taskForInterpretedTarget(result),
                   let text = result.edit?.appendText?.trimmingCharacters(in: .whitespacesAndNewlines),
                   !text.isEmpty else {
-                blockInterpretedExecution(reason: "missingField")
-                return
+                blockInterpretedExecution(reason: "missingField", emitResponse: emitResponse)
+                return false
             }
-            applyAppend(task: task, text: text, strings: uiLanguage.strings, usageCommand: nil)
+            applyAppend(task: task, text: text, strings: uiLanguage.strings, usageCommand: nil, emitResponse: emitResponse)
             if let style = alertStyle(from: result.edit?.alertStyle) {
                 applyAlertStyle(task: task, style: style, strings: uiLanguage.strings, usageCommand: nil, emitResponse: false)
             }
         case "deleteTask":
             guard let task = selectedTaskOverride ?? taskForInterpretedTarget(result) else {
-                blockInterpretedExecution(reason: "missingField")
-                return
+                blockInterpretedExecution(reason: "missingField", emitResponse: emitResponse)
+                return false
             }
-            enterDeleteConfirmation(for: task, strings: uiLanguage.strings, usageCommand: nil)
+            if emitResponse {
+                enterDeleteConfirmation(for: task, strings: uiLanguage.strings, usageCommand: nil)
+            } else {
+                TaskReminderService.shared.cancel(taskID: task.id)
+                persistenceContext?.delete(task)
+                try? persistenceContext?.save()
+            }
         case "updateRecurrence":
             guard let task = selectedTaskOverride ?? taskForInterpretedTarget(result),
                   let update = recurrenceUpdate(from: result) else {
-                blockInterpretedExecution(reason: "missingField")
-                return
+                blockInterpretedExecution(reason: "missingField", emitResponse: emitResponse)
+                return false
             }
-            applyRecurrenceUpdate(task: task, update: update, strings: uiLanguage.strings, usageCommand: nil)
+            applyRecurrenceUpdate(task: task, update: update, strings: uiLanguage.strings, usageCommand: nil, emitResponse: emitResponse)
             if let style = alertStyle(from: result.edit?.alertStyle) {
                 applyAlertStyle(task: task, style: style, strings: uiLanguage.strings, usageCommand: nil, emitResponse: false)
             }
         case "updateAlertStyle":
             guard let task = selectedTaskOverride ?? taskForInterpretedTarget(result),
                   let style = alertStyle(from: result.edit?.alertStyle) else {
-                blockInterpretedExecution(reason: "missingField")
-                return
+                blockInterpretedExecution(reason: "missingField", emitResponse: emitResponse)
+                return false
             }
-            applyAlertStyle(task: task, style: style, strings: uiLanguage.strings, usageCommand: nil)
+            applyAlertStyle(task: task, style: style, strings: uiLanguage.strings, usageCommand: nil, emitResponse: emitResponse)
         default:
-            emitAssistantResponse(result.assistantMessage ?? unclearCommandMessage(), nextState: .error, stream: false)
-            return
+            if emitResponse {
+                emitAssistantResponse(result.assistantMessage ?? unclearCommandMessage(), nextState: .error, stream: false)
+            }
+            return false
         }
-        if action != "createReminder" && action != "createEvent" {
+        if countUsage && action != "createReminder" && action != "createEvent" {
             recordSuccessfulAssistantUseIfNeeded()
         }
         Self.log.info("[VoiceChat] commandExecutionCompleted action=\(action, privacy: .public)")
+        return true
     }
 
-    private func blockInterpretedExecution(reason: String) {
+    private func blockInterpretedExecution(reason: String, emitResponse: Bool = true) {
         Self.log.info("[VoiceChat] commandExecutionBlocked reason=\(reason, privacy: .public)")
-        emitAssistantResponse(unclearCommandMessage(), nextState: .error, stream: false)
+        if emitResponse {
+            emitAssistantResponse(unclearCommandMessage(), nextState: .error, stream: false)
+        }
     }
 
     private func isExplicitRenameRequest(_ transcript: String) -> Bool {
@@ -1531,7 +1579,7 @@ final class VoiceCommandViewModel {
         emitAssistantResponse(prompt, nextState: .deletePending, stream: true)
     }
 
-    private func applyReschedule(task: TaskItem, newDate: Date, strings s: AppStrings, usageCommand: ParsedCommand?) {
+    private func applyReschedule(task: TaskItem, newDate: Date, strings s: AppStrings, usageCommand: ParsedCommand?, emitResponse: Bool = true) {
         Self.log.info("[VoiceChat] finalFrontendAction=rescheduleTask activeContextUsed=true finalTargetTaskID=\(task.id.uuidString, privacy: .public) title=\(task.title, privacy: .public) newDate=\(newDate, privacy: .public)")
         task.scheduledDate = newDate
         task.updatedAt = Date()
@@ -1540,7 +1588,9 @@ final class VoiceCommandViewModel {
         syncCalendarIfNeeded(for: task)
         let timeStr = shortTimeFormatter.string(from: newDate)
         let msg = String(format: s.chatRescheduleSuccess, task.title, timeStr)
-        emitAssistantResponse(msg, nextState: .success, stream: true)
+        if emitResponse {
+            emitAssistantResponse(msg, nextState: .success, stream: true)
+        }
         refreshActiveContext(from: task)
         recordFreeAIUsageIfNeeded(usageCommand)
         if persistenceContext != nil {
@@ -1548,7 +1598,7 @@ final class VoiceCommandViewModel {
         }
     }
 
-    private func applyAppend(task: TaskItem, text: String, strings s: AppStrings, usageCommand: ParsedCommand?) {
+    private func applyAppend(task: TaskItem, text: String, strings s: AppStrings, usageCommand: ParsedCommand?, emitResponse: Bool = true) {
         Self.log.info("[VoiceChat] finalFrontendAction=appendToTask activeContextUsed=true finalTargetTaskID=\(task.id.uuidString, privacy: .public) title=\(task.title, privacy: .public)")
         if let existing = task.notes, !existing.isEmpty {
             task.notes = existing + "\n" + text
@@ -1558,7 +1608,9 @@ final class VoiceCommandViewModel {
         task.updatedAt = Date()
         try? persistenceContext?.save()
         syncCalendarIfNeeded(for: task)
-        emitAssistantResponse(String(format: s.chatAppendSuccess, task.title), nextState: .success, stream: true)
+        if emitResponse {
+            emitAssistantResponse(String(format: s.chatAppendSuccess, task.title), nextState: .success, stream: true)
+        }
         refreshActiveContext(from: task)
         recordFreeAIUsageIfNeeded(usageCommand)
         if persistenceContext != nil {
@@ -1566,13 +1618,15 @@ final class VoiceCommandViewModel {
         }
     }
 
-    private func applyRename(task: TaskItem, newTitle: String, strings s: AppStrings, usageCommand: ParsedCommand?) {
+    private func applyRename(task: TaskItem, newTitle: String, strings s: AppStrings, usageCommand: ParsedCommand?, emitResponse: Bool = true) {
         Self.log.info("[VoiceChat] finalFrontendAction=updateTaskTitle activeContextUsed=true finalTargetTaskID=\(task.id.uuidString, privacy: .public) newTitle=\(newTitle, privacy: .public)")
         task.title = newTitle
         task.updatedAt = Date()
         try? persistenceContext?.save()
         syncCalendarIfNeeded(for: task)
-        emitAssistantResponse(String(format: s.chatRenameSuccess, newTitle), nextState: .success, stream: true)
+        if emitResponse {
+            emitAssistantResponse(String(format: s.chatRenameSuccess, newTitle), nextState: .success, stream: true)
+        }
         refreshActiveContext(from: task)
         recordFreeAIUsageIfNeeded(usageCommand)
         if persistenceContext != nil {
@@ -1580,7 +1634,7 @@ final class VoiceCommandViewModel {
         }
     }
 
-    private func applyRecurrenceUpdate(task: TaskItem, update: ParsedRecurrenceUpdate, strings s: AppStrings, usageCommand: ParsedCommand?) {
+    private func applyRecurrenceUpdate(task: TaskItem, update: ParsedRecurrenceUpdate, strings s: AppStrings, usageCommand: ParsedCommand?, emitResponse: Bool = true) {
         Self.log.info("[VoiceChat] finalFrontendAction=updateRecurrence activeContextPreferred=true finalTargetTaskID=\(task.id.uuidString, privacy: .public) title=\(task.title, privacy: .public) operation=\(String(describing: update.operation), privacy: .public) weekdays=\(String(describing: update.weekdays), privacy: .public)")
 
         var weekdays = Set(task.recurrenceWeekdays)
@@ -1590,19 +1644,19 @@ final class VoiceCommandViewModel {
         switch update.operation {
         case .setWeekdays:
             guard !updateWeekdays.isEmpty else {
-                emitAssistantResponse(s.chatEditNoTaskFound, nextState: .error, stream: false)
+                if emitResponse { emitAssistantResponse(s.chatEditNoTaskFound, nextState: .error, stream: false) }
                 return
             }
             weekdays = updateWeekdays
         case .addWeekdays:
             guard !updateWeekdays.isEmpty else {
-                emitAssistantResponse(s.chatEditNoTaskFound, nextState: .error, stream: false)
+                if emitResponse { emitAssistantResponse(s.chatEditNoTaskFound, nextState: .error, stream: false) }
                 return
             }
             weekdays.formUnion(updateWeekdays)
         case .removeWeekdays:
             guard !updateWeekdays.isEmpty else {
-                emitAssistantResponse(s.chatEditNoTaskFound, nextState: .error, stream: false)
+                if emitResponse { emitAssistantResponse(s.chatEditNoTaskFound, nextState: .error, stream: false) }
                 return
             }
             weekdays.subtract(updateWeekdays)
@@ -1612,7 +1666,7 @@ final class VoiceCommandViewModel {
         case .clearRecurrence:
             shouldClearRecurrence = true
         case .unknown:
-            emitAssistantResponse(s.chatEditNoTaskFound, nextState: .error, stream: false)
+            if emitResponse { emitAssistantResponse(s.chatEditNoTaskFound, nextState: .error, stream: false) }
             return
         }
 
@@ -1622,7 +1676,9 @@ final class VoiceCommandViewModel {
             try? persistenceContext?.save()
             TaskReminderService.shared.schedule(for: task)
             syncCalendarIfNeeded(for: task)
-            emitAssistantResponse("Removed repeat schedule for \(task.title).", nextState: .success, stream: true)
+            if emitResponse {
+                emitAssistantResponse("Removed repeat schedule for \(task.title).", nextState: .success, stream: true)
+            }
             refreshActiveContext(from: task)
             recordFreeAIUsageIfNeeded(usageCommand)
             if persistenceContext != nil {
@@ -1633,13 +1689,13 @@ final class VoiceCommandViewModel {
 
         let sortedWeekdays = Array(weekdays).filter { (1...7).contains($0) }.sorted()
         guard !sortedWeekdays.isEmpty else {
-            emitAssistantResponse(s.chatEditNoTaskFound, nextState: .error, stream: false)
+            if emitResponse { emitAssistantResponse(s.chatEditNoTaskFound, nextState: .error, stream: false) }
             return
         }
 
         let timeMinutes = update.timeMinutes ?? task.recurrenceTimeMinutes ?? scheduledDateClockMinutes(task.scheduledDate)
         guard let timeMinutes else {
-            emitAssistantResponse(s.chatEditNoTaskFound, nextState: .error, stream: false)
+            if emitResponse { emitAssistantResponse(s.chatEditNoTaskFound, nextState: .error, stream: false) }
             return
         }
 
@@ -1655,7 +1711,9 @@ final class VoiceCommandViewModel {
         TaskReminderService.shared.schedule(for: task)
         syncCalendarIfNeeded(for: task)
         let label = TaskRecurrenceFormatting.label(for: task, locale: uiLanguage.locale) ?? "repeat schedule"
-        emitAssistantResponse("Updated \(task.title): \(label).", nextState: .success, stream: true)
+        if emitResponse {
+            emitAssistantResponse("Updated \(task.title): \(label).", nextState: .success, stream: true)
+        }
         refreshActiveContext(from: task)
         recordFreeAIUsageIfNeeded(usageCommand)
         if persistenceContext != nil {
@@ -1981,7 +2039,8 @@ final class VoiceCommandViewModel {
             title: task.title,
             scheduledAt: task.scheduledDate.map { ISO8601DateFormatter().string(from: $0) },
             isRecurring: task.isRecurring,
-            recurrenceLabel: TaskRecurrenceFormatting.label(for: task, locale: uiLanguage.locale)
+            recurrenceLabel: TaskRecurrenceFormatting.label(for: task, locale: uiLanguage.locale),
+            notesSnippet: task.notes.map { String($0.prefix(240)) }
         )
     }
 
@@ -2145,7 +2204,7 @@ final class VoiceCommandViewModel {
         commitCreateWithConflictCheck(command, reply: reply)
     }
 
-    private func commitCreateWithConflictCheck(_ command: ParsedCommand, reply: String? = nil) {
+    private func commitCreateWithConflictCheck(_ command: ParsedCommand, reply: String? = nil, emitResponse: Bool = true) {
         let reply = reply ?? (command.actionType == .calendarEvent ? "Added \(command.title)." : confirmationMessage(for: command, userTranscript: command.originalText))
         var didPersistNewTask = false
         if let ctx = persistenceContext {
@@ -2167,7 +2226,9 @@ final class VoiceCommandViewModel {
                 actionType=\(String(describing: command.actionType), privacy: .public)
                 """)
         }
-        emitAssistantResponse(reply, nextState: .success, stream: true)
+        if emitResponse {
+            emitAssistantResponse(reply, nextState: .success, stream: true)
+        }
         recordFreeAIUsageIfNeeded(command)
         if didPersistNewTask {
             recordSuccessfulAIActionForAppReview()
