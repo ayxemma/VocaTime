@@ -129,7 +129,7 @@ final class VoiceCommandViewModel {
     }
 
     private struct InterpretedActionExecutionResult {
-        let summary: String
+        let summaries: [String]
     }
 
     private enum EditTargetConfidence: String {
@@ -1212,6 +1212,7 @@ final class VoiceCommandViewModel {
             Self.log.info("[VoiceChat] confirmationShown kind=multi_action")
             return
         }
+        Self.log.info("[VoiceChat] executionSummaryStart actionsCount=\(actions.count, privacy: .public)")
         Self.log.info("[VoiceChat] multiActionExecutionStarted count=\(actions.count, privacy: .public)")
         Self.log.info("[VoiceChat] actionsReceived count=\(actions.count, privacy: .public)")
         Self.log.info("[VoiceChat] multiActionSummaryStarted count=\(actions.count, privacy: .public)")
@@ -1221,6 +1222,7 @@ final class VoiceCommandViewModel {
         for (index, action) in actions.enumerated() {
             let single = CommandInterpretResponse(action: action, assistantMessage: overallMessage)
             Self.log.info("[VoiceChat] executingAction index=\(index, privacy: .public) type=\(action.actionType ?? "nil", privacy: .public)")
+            Self.log.info("[VoiceChat] actionExecutionStarted index=\(index, privacy: .public) type=\(action.actionType ?? "nil", privacy: .public)")
             if let result = await executeInterpretedCommand(
                 single,
                 selectedTaskOverride: nil,
@@ -1228,9 +1230,11 @@ final class VoiceCommandViewModel {
                 emitResponse: false,
                 countUsage: false
             ) {
-                summaries.append(result.summary)
+                summaries.append(contentsOf: result.summaries)
                 Self.log.info("[VoiceChat] actionSucceeded index=\(index, privacy: .public)")
-                Self.log.info("[VoiceChat] actionResultSummary index=\(index, privacy: .public) summary=\(result.summary, privacy: .public)")
+                for summary in result.summaries {
+                    Self.log.info("[VoiceChat] actionResultSummary index=\(index, privacy: .public) summary=\(summary, privacy: .public)")
+                }
             } else {
                 failedIndexes.append(index)
                 failedDescriptions.append(failureDescription(for: action))
@@ -1239,11 +1243,13 @@ final class VoiceCommandViewModel {
             }
         }
         Self.log.info("[VoiceChat] executedActionsCount=\(summaries.count, privacy: .public)")
+        Self.log.info("[VoiceChat] executionSummaryItems count=\(summaries.count, privacy: .public)")
         if failedIndexes.isEmpty {
             let final = combinedMultiActionSummary(summaries)
             emitAssistantResponse(final, nextState: .success, stream: true)
             recordSuccessfulAssistantUseIfNeeded()
             Self.log.info("[VoiceChat] multiActionSummaryFinal text=\(final, privacy: .public)")
+            Self.log.info("[VoiceChat] executionFinalAssistantMessage text=\(final, privacy: .public)")
             Self.log.info("[VoiceChat] multiActionExecutionCompleted count=\(actions.count, privacy: .public)")
         } else if failedIndexes.count == actions.count {
             emitAssistantResponse(unclearCommandMessage(), nextState: .error, stream: false)
@@ -1254,7 +1260,9 @@ final class VoiceCommandViewModel {
             emitAssistantResponse(final, nextState: .success, stream: true)
             recordSuccessfulAssistantUseIfNeeded()
             Self.log.info("[VoiceChat] multiActionSummaryFinal text=\(final, privacy: .public)")
+            Self.log.info("[VoiceChat] executionFinalAssistantMessage text=\(final, privacy: .public)")
             Self.log.info("[VoiceChat] multiActionPartialFailure successCount=\(summaries.count, privacy: .public) failedCount=\(failedIndexes.count, privacy: .public)")
+            Self.log.info("[VoiceChat] executionPartialFailure successCount=\(summaries.count, privacy: .public) failedCount=\(failedIndexes.count, privacy: .public)")
             Self.log.info("[VoiceChat] multiActionExecutionCompleted partialFailures=\(failedIndexes.count, privacy: .public)")
         }
     }
@@ -1406,7 +1414,7 @@ final class VoiceCommandViewModel {
     private func executeInterpretedCommand(_ result: CommandInterpretResponse, selectedTaskOverride: TaskItem?, transcript: String, emitResponse: Bool = true, countUsage: Bool = true) async -> InterpretedActionExecutionResult? {
         guard let action = result.actionType else { return nil }
         Self.log.info("[VoiceChat] commandExecutionStarted action=\(action, privacy: .public)")
-        var summary: String?
+        var summaries: [String] = []
         switch action {
         case "createReminder", "createEvent":
             guard let command = parsedCommand(from: result) else {
@@ -1415,9 +1423,11 @@ final class VoiceCommandViewModel {
             }
             commitCreateWithConflictCheck(command, emitResponse: emitResponse, countUsage: countUsage)
             let timeSuffix = interpretedCreateTimeSuffix(for: command)
-            summary = action == "createEvent"
+            let summary = action == "createEvent"
                 ? "added event '\(command.title)'\(timeSuffix)"
                 : "added reminder '\(command.title)'\(timeSuffix)"
+            summaries.append(summary)
+            Self.log.info("[VoiceChat] effectApplied type=\(action, privacy: .public) summary=\(summary, privacy: .public)")
         case "rescheduleTask":
             guard let task = selectedTaskOverride ?? taskForInterpretedTarget(result),
                   let raw = result.edit?.newScheduledAt,
@@ -1426,7 +1436,16 @@ final class VoiceCommandViewModel {
                 return nil
             }
             applyReschedule(task: task, newDate: newDate, strings: uiLanguage.strings, usageCommand: nil, emitResponse: emitResponse, countUsage: countUsage)
-            summary = "moved '\(task.title)' to \(shortTimeFormatter.string(from: newDate))"
+            let moveSummary = "moved '\(task.title)' to \(shortTimeFormatter.string(from: newDate))"
+            summaries.append(moveSummary)
+            Self.log.info("[VoiceChat] effectApplied type=rescheduleTask summary=\(moveSummary, privacy: .public)")
+            if let appendText = result.edit?.appendText?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !appendText.isEmpty {
+                applyAppend(task: task, text: appendText, strings: uiLanguage.strings, usageCommand: nil, emitResponse: false, countUsage: false)
+                let noteSummary = "added a note: '\(appendText)'"
+                summaries.append(noteSummary)
+                Self.log.info("[VoiceChat] effectApplied type=appendNote summary=\(noteSummary, privacy: .public)")
+            }
             if let style = alertStyle(from: result.edit?.alertStyle) {
                 applyAlertStyle(task: task, style: style, strings: uiLanguage.strings, usageCommand: nil, emitResponse: false, countUsage: false)
             }
@@ -1443,7 +1462,9 @@ final class VoiceCommandViewModel {
             }
             let oldTitle = task.title
             applyRename(task: task, newTitle: newTitle, strings: uiLanguage.strings, usageCommand: nil, emitResponse: emitResponse, countUsage: countUsage)
-            summary = "renamed '\(oldTitle)' to '\(newTitle)'"
+            let summary = "renamed '\(oldTitle)' to '\(newTitle)'"
+            summaries.append(summary)
+            Self.log.info("[VoiceChat] effectApplied type=renameTask summary=\(summary, privacy: .public)")
             if let style = alertStyle(from: result.edit?.alertStyle) {
                 applyAlertStyle(task: task, style: style, strings: uiLanguage.strings, usageCommand: nil, emitResponse: false, countUsage: false)
             }
@@ -1455,7 +1476,9 @@ final class VoiceCommandViewModel {
                 return nil
             }
             applyAppend(task: task, text: text, strings: uiLanguage.strings, usageCommand: nil, emitResponse: emitResponse, countUsage: countUsage)
-            summary = "added a note: '\(text)'"
+            let summary = "added a note: '\(text)'"
+            summaries.append(summary)
+            Self.log.info("[VoiceChat] effectApplied type=appendNote summary=\(summary, privacy: .public)")
             if let style = alertStyle(from: result.edit?.alertStyle) {
                 applyAlertStyle(task: task, style: style, strings: uiLanguage.strings, usageCommand: nil, emitResponse: false, countUsage: false)
             }
@@ -1470,7 +1493,9 @@ final class VoiceCommandViewModel {
             } else {
                 deleteTaskImmediately(task, usageCommand: nil, emitResponse: false, countUsage: countUsage)
             }
-            summary = "deleted '\(title)'"
+            let summary = "deleted '\(title)'"
+            summaries.append(summary)
+            Self.log.info("[VoiceChat] effectApplied type=deleteTask summary=\(summary, privacy: .public)")
         case "updateRecurrence":
             guard let task = selectedTaskOverride ?? taskForInterpretedTarget(result),
                   let update = recurrenceUpdate(from: result) else {
@@ -1478,7 +1503,9 @@ final class VoiceCommandViewModel {
                 return nil
             }
             applyRecurrenceUpdate(task: task, update: update, strings: uiLanguage.strings, usageCommand: nil, emitResponse: emitResponse, countUsage: countUsage)
-            summary = "updated repeat schedule for '\(task.title)'"
+            let summary = "updated repeat schedule for '\(task.title)'"
+            summaries.append(summary)
+            Self.log.info("[VoiceChat] effectApplied type=updateRecurrence summary=\(summary, privacy: .public)")
             if let style = alertStyle(from: result.edit?.alertStyle) {
                 applyAlertStyle(task: task, style: style, strings: uiLanguage.strings, usageCommand: nil, emitResponse: false, countUsage: false)
             }
@@ -1489,7 +1516,9 @@ final class VoiceCommandViewModel {
                 return nil
             }
             applyAlertStyle(task: task, style: style, strings: uiLanguage.strings, usageCommand: nil, emitResponse: emitResponse, countUsage: countUsage)
-            summary = "updated alert for '\(task.title)' to \(style.displayName)"
+            let summary = "updated alert for '\(task.title)' to \(style.displayName)"
+            summaries.append(summary)
+            Self.log.info("[VoiceChat] effectApplied type=updateAlertStyle summary=\(summary, privacy: .public)")
         default:
             if emitResponse {
                 emitAssistantResponse(result.assistantMessage ?? unclearCommandMessage(), nextState: .error, stream: false)
@@ -1500,7 +1529,7 @@ final class VoiceCommandViewModel {
             recordSuccessfulAssistantUseIfNeeded()
         }
         Self.log.info("[VoiceChat] commandExecutionCompleted action=\(action, privacy: .public)")
-        return summary.map(InterpretedActionExecutionResult.init(summary:))
+        return summaries.isEmpty ? nil : InterpretedActionExecutionResult(summaries: summaries)
     }
 
     private func blockInterpretedExecution(reason: String, emitResponse: Bool = true) {
@@ -1554,10 +1583,22 @@ final class VoiceCommandViewModel {
         }
         let appendText = command.appendText?.trimmingCharacters(in: .whitespacesAndNewlines)
         await routeResolvedEditTarget(command, editType: .reschedule(newDate: newDate), strings: s) { task, usageCommand in
-            applyReschedule(task: task, newDate: newDate, strings: s, usageCommand: usageCommand)
-            if let appendText, !appendText.isEmpty {
-                applyAppend(task: task, text: appendText, strings: s, usageCommand: nil, emitResponse: false, countUsage: false)
+            guard let appendText, !appendText.isEmpty else {
+                applyReschedule(task: task, newDate: newDate, strings: s, usageCommand: usageCommand)
+                return
             }
+            Self.log.info("[VoiceChat] executionSummaryStart actionsCount=1")
+            applyReschedule(task: task, newDate: newDate, strings: s, usageCommand: usageCommand, emitResponse: false)
+            let moveSummary = "moved '\(task.title)' to \(shortTimeFormatter.string(from: newDate))"
+            Self.log.info("[VoiceChat] effectApplied type=rescheduleTask summary=\(moveSummary, privacy: .public)")
+            applyAppend(task: task, text: appendText, strings: s, usageCommand: nil, emitResponse: false, countUsage: false)
+            let noteSummary = "added a note: '\(appendText)'"
+            Self.log.info("[VoiceChat] effectApplied type=appendNote summary=\(noteSummary, privacy: .public)")
+            let summaries = [moveSummary, noteSummary]
+            Self.log.info("[VoiceChat] executionSummaryItems count=\(summaries.count, privacy: .public)")
+            let final = combinedMultiActionSummary(summaries)
+            emitAssistantResponse(final, nextState: .success, stream: true)
+            Self.log.info("[VoiceChat] executionFinalAssistantMessage text=\(final, privacy: .public)")
         }
     }
 
