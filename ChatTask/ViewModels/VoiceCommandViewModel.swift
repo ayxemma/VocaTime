@@ -128,6 +128,10 @@ final class VoiceCommandViewModel {
         case interpreted(CommandInterpretResponse, transcript: String)
     }
 
+    private struct InterpretedActionExecutionResult {
+        let summary: String
+    }
+
     private enum EditTargetConfidence: String {
         case high
         case medium
@@ -1209,32 +1213,94 @@ final class VoiceCommandViewModel {
             return
         }
         Self.log.info("[VoiceChat] multiActionExecutionStarted count=\(actions.count, privacy: .public)")
+        Self.log.info("[VoiceChat] multiActionSummaryStarted count=\(actions.count, privacy: .public)")
         var failedIndexes: [Int] = []
+        var summaries: [String] = []
+        var failedDescriptions: [String] = []
         for (index, action) in actions.enumerated() {
             let single = CommandInterpretResponse(action: action, assistantMessage: overallMessage)
-            let ok = await executeInterpretedCommand(
+            if let result = await executeInterpretedCommand(
                 single,
                 selectedTaskOverride: nil,
                 transcript: transcript,
                 emitResponse: false,
                 countUsage: false
-            )
-            if !ok {
+            ) {
+                summaries.append(result.summary)
+                Self.log.info("[VoiceChat] actionResultSummary index=\(index, privacy: .public) summary=\(result.summary, privacy: .public)")
+            } else {
                 failedIndexes.append(index)
+                failedDescriptions.append(failureDescription(for: action))
                 Self.log.info("[VoiceChat] multiActionPartFailed index=\(index, privacy: .public) action=\(action.actionType ?? "nil", privacy: .public)")
             }
         }
         if failedIndexes.isEmpty {
-            emitAssistantResponse(overallMessage ?? "Done.", nextState: .success, stream: true)
+            let final = combinedMultiActionSummary(summaries)
+            emitAssistantResponse(final, nextState: .success, stream: true)
             recordSuccessfulAssistantUseIfNeeded()
+            Self.log.info("[VoiceChat] multiActionSummaryFinal text=\(final, privacy: .public)")
             Self.log.info("[VoiceChat] multiActionExecutionCompleted count=\(actions.count, privacy: .public)")
         } else if failedIndexes.count == actions.count {
             emitAssistantResponse(unclearCommandMessage(), nextState: .error, stream: false)
+            Self.log.info("[VoiceChat] multiActionPartialFailure successCount=0 failedCount=\(failedIndexes.count, privacy: .public)")
             Self.log.info("[VoiceChat] multiActionExecutionCompleted failedAll=true")
         } else {
-            emitAssistantResponse(overallMessage ?? "I completed part of that, but one step failed.", nextState: .success, stream: true)
+            let final = partialMultiActionSummary(summaries: summaries, failedDescriptions: failedDescriptions)
+            emitAssistantResponse(final, nextState: .success, stream: true)
             recordSuccessfulAssistantUseIfNeeded()
+            Self.log.info("[VoiceChat] multiActionSummaryFinal text=\(final, privacy: .public)")
+            Self.log.info("[VoiceChat] multiActionPartialFailure successCount=\(summaries.count, privacy: .public) failedCount=\(failedIndexes.count, privacy: .public)")
             Self.log.info("[VoiceChat] multiActionExecutionCompleted partialFailures=\(failedIndexes.count, privacy: .public)")
+        }
+    }
+
+    private func combinedMultiActionSummary(_ summaries: [String]) -> String {
+        let cleaned = summaries.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        guard !cleaned.isEmpty else { return "Done." }
+        if cleaned.count == 1 {
+            return "Done — \(cleaned[0])."
+        }
+        if cleaned.count == 2 {
+            return "Done — \(cleaned[0]) and \(cleaned[1])."
+        }
+        let lines = cleaned.enumerated().map { index, summary in
+            "\(index + 1). \(summary.prefix(1).uppercased())\(summary.dropFirst())"
+        }
+        return "Done — I completed \(cleaned.count) updates:\n" + lines.joined(separator: "\n")
+    }
+
+    private func partialMultiActionSummary(summaries: [String], failedDescriptions: [String]) -> String {
+        let base = combinedMultiActionSummary(summaries)
+        let trimmedBase = base.hasSuffix(".") ? String(base.dropLast()) : base
+        guard !failedDescriptions.isEmpty else {
+            return "\(trimmedBase), but couldn't complete the rest."
+        }
+        if failedDescriptions.count == 1 {
+            return "\(trimmedBase), but couldn't \(failedDescriptions[0])."
+        }
+        return "\(trimmedBase), but couldn't complete \(failedDescriptions.count) other actions."
+    }
+
+    private func failureDescription(for action: CommandInterpretResponse.Action) -> String {
+        switch action.actionType {
+        case "createReminder":
+            return "add the reminder"
+        case "createEvent":
+            return "add the event"
+        case "rescheduleTask":
+            return "move the task"
+        case "appendToTask":
+            return "add the note"
+        case "deleteTask":
+            return "delete the task"
+        case "renameTask":
+            return "rename the task"
+        case "updateRecurrence":
+            return "update the repeat schedule"
+        case "updateAlertStyle":
+            return "update the alert"
+        default:
+            return "complete one action"
         }
     }
 
@@ -1327,24 +1393,29 @@ final class VoiceCommandViewModel {
     }
 
     @discardableResult
-    private func executeInterpretedCommand(_ result: CommandInterpretResponse, selectedTaskOverride: TaskItem?, transcript: String, emitResponse: Bool = true, countUsage: Bool = true) async -> Bool {
-        guard let action = result.actionType else { return false }
+    private func executeInterpretedCommand(_ result: CommandInterpretResponse, selectedTaskOverride: TaskItem?, transcript: String, emitResponse: Bool = true, countUsage: Bool = true) async -> InterpretedActionExecutionResult? {
+        guard let action = result.actionType else { return nil }
         Self.log.info("[VoiceChat] commandExecutionStarted action=\(action, privacy: .public)")
+        var summary: String?
         switch action {
         case "createReminder", "createEvent":
             guard let command = parsedCommand(from: result) else {
                 blockInterpretedExecution(reason: "missingField", emitResponse: emitResponse)
-                return false
+                return nil
             }
             commitCreateWithConflictCheck(command, emitResponse: emitResponse, countUsage: countUsage)
+            summary = action == "createEvent"
+                ? "added event '\(command.title)'"
+                : "added reminder '\(command.title)'"
         case "rescheduleTask":
             guard let task = selectedTaskOverride ?? taskForInterpretedTarget(result),
                   let raw = result.edit?.newScheduledAt,
                   let newDate = parseInterpretedDate(raw) else {
                 blockInterpretedExecution(reason: "missingField", emitResponse: emitResponse)
-                return false
+                return nil
             }
             applyReschedule(task: task, newDate: newDate, strings: uiLanguage.strings, usageCommand: nil, emitResponse: emitResponse, countUsage: countUsage)
+            summary = "moved '\(task.title)' to \(shortTimeFormatter.string(from: newDate))"
             if let style = alertStyle(from: result.edit?.alertStyle) {
                 applyAlertStyle(task: task, style: style, strings: uiLanguage.strings, usageCommand: nil, emitResponse: false, countUsage: false)
             }
@@ -1353,13 +1424,15 @@ final class VoiceCommandViewModel {
                   let newTitle = result.edit?.newTitle?.trimmingCharacters(in: .whitespacesAndNewlines),
                   !newTitle.isEmpty else {
                 blockInterpretedExecution(reason: "missingField", emitResponse: emitResponse)
-                return false
+                return nil
             }
             guard isExplicitRenameRequest(transcript) else {
                 blockInterpretedExecution(reason: "renameWithoutExplicitRequest", emitResponse: emitResponse)
-                return false
+                return nil
             }
+            let oldTitle = task.title
             applyRename(task: task, newTitle: newTitle, strings: uiLanguage.strings, usageCommand: nil, emitResponse: emitResponse, countUsage: countUsage)
+            summary = "renamed '\(oldTitle)' to '\(newTitle)'"
             if let style = alertStyle(from: result.edit?.alertStyle) {
                 applyAlertStyle(task: task, style: style, strings: uiLanguage.strings, usageCommand: nil, emitResponse: false, countUsage: false)
             }
@@ -1368,29 +1441,33 @@ final class VoiceCommandViewModel {
                   let text = result.edit?.appendText?.trimmingCharacters(in: .whitespacesAndNewlines),
                   !text.isEmpty else {
                 blockInterpretedExecution(reason: "missingField", emitResponse: emitResponse)
-                return false
+                return nil
             }
             applyAppend(task: task, text: text, strings: uiLanguage.strings, usageCommand: nil, emitResponse: emitResponse, countUsage: countUsage)
+            summary = "added a note: '\(text)'"
             if let style = alertStyle(from: result.edit?.alertStyle) {
                 applyAlertStyle(task: task, style: style, strings: uiLanguage.strings, usageCommand: nil, emitResponse: false, countUsage: false)
             }
         case "deleteTask":
             guard let task = selectedTaskOverride ?? taskForInterpretedTarget(result) else {
                 blockInterpretedExecution(reason: "missingField", emitResponse: emitResponse)
-                return false
+                return nil
             }
+            let title = task.title
             if emitResponse {
                 enterDeleteConfirmation(for: task, strings: uiLanguage.strings, usageCommand: nil)
             } else {
                 deleteTaskImmediately(task, usageCommand: nil, emitResponse: false, countUsage: countUsage)
             }
+            summary = "deleted '\(title)'"
         case "updateRecurrence":
             guard let task = selectedTaskOverride ?? taskForInterpretedTarget(result),
                   let update = recurrenceUpdate(from: result) else {
                 blockInterpretedExecution(reason: "missingField", emitResponse: emitResponse)
-                return false
+                return nil
             }
             applyRecurrenceUpdate(task: task, update: update, strings: uiLanguage.strings, usageCommand: nil, emitResponse: emitResponse, countUsage: countUsage)
+            summary = "updated repeat schedule for '\(task.title)'"
             if let style = alertStyle(from: result.edit?.alertStyle) {
                 applyAlertStyle(task: task, style: style, strings: uiLanguage.strings, usageCommand: nil, emitResponse: false, countUsage: false)
             }
@@ -1398,20 +1475,21 @@ final class VoiceCommandViewModel {
             guard let task = selectedTaskOverride ?? taskForInterpretedTarget(result),
                   let style = alertStyle(from: result.edit?.alertStyle) else {
                 blockInterpretedExecution(reason: "missingField", emitResponse: emitResponse)
-                return false
+                return nil
             }
             applyAlertStyle(task: task, style: style, strings: uiLanguage.strings, usageCommand: nil, emitResponse: emitResponse, countUsage: countUsage)
+            summary = "updated alert for '\(task.title)' to \(style.displayName)"
         default:
             if emitResponse {
                 emitAssistantResponse(result.assistantMessage ?? unclearCommandMessage(), nextState: .error, stream: false)
             }
-            return false
+            return nil
         }
         if countUsage && action != "createReminder" && action != "createEvent" {
             recordSuccessfulAssistantUseIfNeeded()
         }
         Self.log.info("[VoiceChat] commandExecutionCompleted action=\(action, privacy: .public)")
-        return true
+        return summary.map(InterpretedActionExecutionResult.init(summary:))
     }
 
     private func blockInterpretedExecution(reason: String, emitResponse: Bool = true) {
