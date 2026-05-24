@@ -195,6 +195,8 @@ final class VoiceCommandViewModel {
     private var pendingAssistantSlotId: UUID?
     /// Voice draft / cloud transcription error shown in the status line; never adds a chat bubble.
     private var voiceDraftErrorMessage: String?
+    /// End-to-end latency trace for the current voice command (or voice draft → send).
+    private var activeLatencySession: VoiceCommandLatencySession?
 
     // MARK: - Init
 
@@ -316,7 +318,12 @@ final class VoiceCommandViewModel {
         currentSubmitCameFromVoiceDraft = voiceDraftAwaitingSubmit
         voiceDraftAwaitingSubmit = false
         cancelAutoRelisten(reason: "typedSubmit")
-        Self.log.info("[VoiceChat] typedTextSubmit text=\(trimmed, privacy: .public)")
+        if activeLatencySession == nil {
+            activeLatencySession = VoiceCommandLatencyTrace.beginTypedSession()
+        } else {
+            VoiceCommandLatencyTrace.attach(activeLatencySession)
+        }
+        Self.log.info("[VoiceChat] typedTextSubmit text=\(trimmed, privacy: .public) commandSessionId=\(self.activeLatencySession?.sessionTag ?? "none", privacy: .public)")
         voiceDraftErrorMessage = nil
         // Perception: user bubble + empty assistant row immediately, then non-blocking warm-up, then work.
         chatMessages.append(ChatMessage(role: .user, text: trimmed))
@@ -510,6 +517,7 @@ final class VoiceCommandViewModel {
         stream: Bool,
         showsImportantPriorityBadge: Bool = false
     ) {
+        activeLatencySession?.markAssistantMessageDisplayed(streaming: stream)
         if stream, !text.isEmpty {
             if let slot = pendingAssistantSlotId, chatMessages.contains(where: { $0.id == slot && $0.role == .assistant }) {
                 pendingAssistantSlotId = nil
@@ -691,6 +699,8 @@ final class VoiceCommandViewModel {
         cancelMaxRecordingTimer()
         currentListeningIsAutoFollowUp = startReason == "autoRelisten"
         followUpSpeechDetected = false
+        activeLatencySession = VoiceCommandLatencyTrace.beginVoiceSession(startReason: startReason)
+        BackendWarmup.scheduleSessionWarmup()
 
         let msgs = uiLanguage.speechMessages
         let wallStart = Date().timeIntervalSince1970
@@ -766,7 +776,8 @@ final class VoiceCommandViewModel {
         chatDraftText = ""
 
         let pipelineT0 = CFAbsoluteTimeGetCurrent()
-        Self.log.info("[VoiceChat] recordingStopped enteringProcessing stopReason=\(stopReason.rawValue, privacy: .public)")
+        activeLatencySession?.markUserStoppedSpeaking(reason: stopReason)
+        Self.log.info("[VoiceChat] recordingStopped enteringProcessing stopReason=\(stopReason.rawValue, privacy: .public) commandSessionId=\(self.activeLatencySession?.sessionTag ?? "none", privacy: .public)")
         let stopT0 = CFAbsoluteTimeGetCurrent()
         let captureOutcome = await speechService.stopListening(waitForLocalFinal: false)
         Self.log.info("[VoiceChat] latency stopListening ms=\(latencyMs(since: stopT0), privacy: .public)")
@@ -780,6 +791,7 @@ final class VoiceCommandViewModel {
             Self.log.info("[VoiceChat] latency chatFinalizeListening totalMs=\(latencyMs(since: pipelineT0), privacy: .public) outcome=failure")
 
         case .success(let captureResult):
+            activeLatencySession?.audioDurationSeconds = captureResult.duration
             Self.log.info("[VoiceChat] captureSuccess localTranscript=\(captureResult.transcript, privacy: .public) confidence=\(String(describing: captureResult.confidence), privacy: .public) duration=\(captureResult.duration, privacy: .public)s audioURL=\(captureResult.audioURL?.path ?? "nil", privacy: .public)")
             Self.log.info("[VoiceChat] finalAudioDuration=\(captureResult.duration, privacy: .public)s stopReason=\(stopReason.rawValue, privacy: .public)")
             await handleCloudAuthoritativeSpeechResult(captureResult, strings: strings)
@@ -947,8 +959,9 @@ final class VoiceCommandViewModel {
             chatFlowState = .idle
             return
         }
-        Self.log.info("[VoiceChat] transcriptionCompleted transcriptChars=\(trimmed.count, privacy: .public) next=idleAwaitingUserSend")
+        Self.log.info("[VoiceChat] transcriptionCompleted transcriptChars=\(trimmed.count, privacy: .public) next=idleAwaitingUserSend commandSessionId=\(self.activeLatencySession?.sessionTag ?? "none", privacy: .public)")
         Self.log.info("[VoiceChat] transcriptDeliveredToInputField=\(trimmed, privacy: .public)")
+        activeLatencySession?.markTranscriptDelivered(length: trimmed.count)
         voiceDraftErrorMessage = nil
         voiceDraftAwaitingSubmit = true
         voiceFollowUpAutoStartsRemaining = currentListeningIsAutoFollowUp ? 0 : 1
@@ -969,16 +982,17 @@ final class VoiceCommandViewModel {
             return
         }
 
-        Self.log.info("[VoiceChat] commandInterpretStart")
+        Self.log.info("[VoiceChat] commandInterpretStart commandSessionId=\(self.activeLatencySession?.sessionTag ?? "none", privacy: .public)")
         do {
             let interpretation = try await interpretChatCommand(transcript)
             await handleCommandInterpretation(interpretation, transcript: transcript)
             return
         } catch {
+            activeLatencySession?.logFallbackTriggered(reason: "interpretHttpOrNetworkError")
             Self.log.error("[VoiceChat] commandInterpretFallbackToParse error=\(String(describing: error), privacy: .public)")
         }
 
-        Self.log.info("[VoiceChat] parseStarted fallback=true")
+        Self.log.info("[VoiceChat] parseStarted fallback=true reason=interpretFailed")
 
         Self.log.info("[VoiceChat] parse input appUILanguage=\(self.uiLanguage.rawValue, privacy: .public) activeTaskID=\(self.lastActiveChatTaskContext?.taskID.uuidString ?? "nil", privacy: .public) transcript=\(transcript, privacy: .public)")
         let command = await parsingCoordinator.parse(
@@ -1186,7 +1200,8 @@ final class VoiceCommandViewModel {
             locale: uiLanguage.uiLocaleIdentifier,
             activeTask: activeInterpretTaskSnapshot(),
             candidateTasks: candidates.map(commandTaskSnapshot),
-            requestID: requestId.uuidString
+            requestID: requestId.uuidString,
+            commandSessionID: activeLatencySession?.sessionTag
         )
         return try await commandInterpreter.interpret(request)
     }
@@ -1204,6 +1219,7 @@ final class VoiceCommandViewModel {
         let actions = result.multiActions
         guard !actions.isEmpty else {
             guard result.actionType != nil else {
+                activeLatencySession?.logFallbackTriggered(reason: "interpretReturnedNoActionType")
                 Self.log.info("[VoiceChat] commandInterpretSingleActionFallbackToOriginalParse")
                 await runOriginalParsePipeline(transcript: transcript)
                 return
@@ -1250,6 +1266,10 @@ final class VoiceCommandViewModel {
 
     private func executeInterpretedActions(_ actions: [CommandInterpretResponse.Action], overallMessage: String?, transcript: String) async {
         guard !actions.isEmpty else { return }
+        let execT0 = CFAbsoluteTimeGetCurrent()
+        defer {
+            activeLatencySession?.markActionExecutionComplete(durationMs: latencyMs(since: execT0))
+        }
         if actions.contains(where: { $0.requiresConfirmation }) {
             emitAssistantResponse(overallMessage ?? "Please confirm the requested changes.", nextState: .error, stream: false)
             Self.log.info("[VoiceChat] confirmationShown kind=multi_action")
@@ -1370,7 +1390,7 @@ final class VoiceCommandViewModel {
     }
 
     private func runOriginalParsePipeline(transcript: String) async {
-        Self.log.info("[VoiceChat] parseStarted fallback=true")
+        Self.log.info("[VoiceChat] parseStarted fallback=true reason=originalParsePipeline commandSessionId=\(self.activeLatencySession?.sessionTag ?? "none", privacy: .public)")
 
         Self.log.info("[VoiceChat] parse input appUILanguage=\(self.uiLanguage.rawValue, privacy: .public) activeTaskID=\(self.lastActiveChatTaskContext?.taskID.uuidString ?? "nil", privacy: .public) transcript=\(transcript, privacy: .public)")
         let command = await parsingCoordinator.parse(

@@ -288,9 +288,11 @@ final class SpeechRecognizerService: SpeechManaging {
         Self.log.info("[Speech] engine stopped duration=\(duration, privacy: .public)s latency engineStop ms=\(Self.latencyMs(since: stopT0), privacy: .public)")
 
         // Close WAV immediately so export + disk state are valid without waiting on Apple Speech.
+        Self.log.info("[Speech] audioFinalizeStart")
         let recCloseT0 = CFAbsoluteTimeGetCurrent()
         audioFile = nil
-        Self.log.info("[Speech] latency recordingFinalize ms=\(Self.latencyMs(since: recCloseT0), privacy: .public)")
+        let finalizeMs = Self.latencyMs(since: recCloseT0)
+        Self.log.info("[Speech] audioFinalizeMs=\(finalizeMs, privacy: .public) latency recordingFinalize ms=\(finalizeMs, privacy: .public)")
 
         let speechWaitT0 = CFAbsoluteTimeGetCurrent()
         async let m4aExportTask: URL? = exportWavToM4AForUploadIfPossible(wavURL: wavURL)
@@ -366,6 +368,7 @@ final class SpeechRecognizerService: SpeechManaging {
 
     /// AAC in M4A for smaller `/transcribe` uploads; returns nil on any failure (caller keeps WAV).
     private func exportWavToM4AForUploadIfPossible(wavURL: URL) async -> URL? {
+        Self.log.info("[Speech] audioCompressionStart format=m4a")
         let t0 = CFAbsoluteTimeGetCurrent()
         let outURL = wavURL.deletingPathExtension().appendingPathExtension("m4a")
         if FileManager.default.fileExists(atPath: outURL.path) {
@@ -395,7 +398,8 @@ final class SpeechRecognizerService: SpeechManaging {
         }
         let wavBytes = (try? FileManager.default.attributesOfItem(atPath: wavURL.path)[.size] as? Int) ?? 0
         let m4aBytes = (try? FileManager.default.attributesOfItem(atPath: outURL.path)[.size] as? Int) ?? 0
-        Self.log.info("[Speech] latency wavToM4a ms=\(Self.latencyMs(since: t0), privacy: .public) wavBytes=\(wavBytes, privacy: .public) m4aBytes=\(m4aBytes, privacy: .public)")
+        let compressionMs = Self.latencyMs(since: t0)
+        Self.log.info("[Speech] audioCompressionMs=\(compressionMs, privacy: .public) latency wavToM4a ms=\(compressionMs, privacy: .public) wavBytes=\(wavBytes, privacy: .public) m4aBytes=\(m4aBytes, privacy: .public)")
         return outURL
     }
 

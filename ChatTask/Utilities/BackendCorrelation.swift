@@ -5,8 +5,21 @@ enum BackendCorrelation {
     /// Standard header for tracing a single HTTP request end-to-end.
     static let requestIDHeaderField = "X-Request-ID"
 
+    /// Ties transcribe + interpret + parse calls from one voice command into one trace.
+    static let commandSessionIDHeaderField = "X-Command-Session-ID"
+
     /// JSON field sent with `POST /parse` so server logs can match the same id as the app.
     static let requestIDJSONKey = "request_id"
+
+    /// Optional JSON field on interpret requests mirroring the command session header.
+    static let commandSessionIDJSONKey = "command_session_id"
+
+    static func applyTracingHeaders(to request: inout URLRequest, requestId: UUID, commandSessionId: String?) {
+        request.setValue(requestId.uuidString, forHTTPHeaderField: requestIDHeaderField)
+        if let commandSessionId, !commandSessionId.isEmpty {
+            request.setValue(commandSessionId, forHTTPHeaderField: commandSessionIDHeaderField)
+        }
+    }
 }
 
 enum BackendConnectionDiagnostics {

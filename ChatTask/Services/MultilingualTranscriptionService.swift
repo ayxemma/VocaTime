@@ -29,11 +29,15 @@ struct MultilingualTranscriptionService: FallbackTranscribing {
 
     /// Reads audio from disk and returns the transcript string from the backend JSON `{ "text": "..." }`.
     func transcribe(audioFileURL: URL) async throws -> String {
-        let transcribeT0 = CFAbsoluteTimeGetCurrent()
+        let cloudT0 = CFAbsoluteTimeGetCurrent()
         BackendWarmup.scheduleSessionWarmup() // coalesced with app lifecycle warm-up
         let requestId = UUID()
+        let session = await VoiceCommandLatencyTrace.active
+        let commandSessionTag = session?.sessionTag ?? "none"
+        await VoiceCommandLatencyTrace.recordTranscribeBackendCall()
+
         let endpoint = BackendConfig.transcribeURL
-        Self.log.info("[Transcription] requestId=\(requestId.uuidString, privacy: .public) requestStart backendBaseURL=\(BackendConfig.baseURL.absoluteString, privacy: .public)")
+        Self.log.info("[Transcription] requestId=\(requestId.uuidString, privacy: .public) commandSessionId=\(commandSessionTag, privacy: .public) transcriptionUploadStart backendBaseURL=\(BackendConfig.baseURL.absoluteString, privacy: .public)")
 
         // ── 1. Audio file ───────────────────────────────────────────────────────
         let audioData: Data
@@ -55,7 +59,11 @@ struct MultilingualTranscriptionService: FallbackTranscribing {
             throw MultilingualTranscriptionError.fileEmpty(requestId: requestId)
         }
 
-        Self.log.info("[Transcription] requestId=\(requestId.uuidString, privacy: .public) audioReady audioBytes=\(audioData.count, privacy: .public) path=\(audioFileURL.path, privacy: .public)")
+        await MainActor.run {
+            session?.audioFileSizeBytes = audioData.count
+        }
+        Self.log.info("[Transcription] audioFileSizeBytes=\(audioData.count, privacy: .public) commandSessionId=\(commandSessionTag, privacy: .public)")
+        Self.log.info("[Transcription] requestId=\(requestId.uuidString, privacy: .public) audioReady audioBytes=\(audioData.count, privacy: .public) path=\(audioFileURL.path, privacy: .public) ext=\(audioFileURL.pathExtension, privacy: .public)")
 
         // ── 2. Multipart body ───────────────────────────────────────────────────
         let multipartT0 = CFAbsoluteTimeGetCurrent()
@@ -86,7 +94,7 @@ struct MultilingualTranscriptionService: FallbackTranscribing {
 
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
-        request.setValue(requestId.uuidString, forHTTPHeaderField: BackendCorrelation.requestIDHeaderField)
+        BackendCorrelation.applyTracingHeaders(to: &request, requestId: requestId, commandSessionId: session?.sessionTag)
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         request.httpBody = body
         request.timeoutInterval = 120
@@ -108,13 +116,14 @@ struct MultilingualTranscriptionService: FallbackTranscribing {
             }
             throw MultilingualTranscriptionError.networkError(underlying: error, requestId: requestId)
         }
-        Self.log.info("[Transcription] latency transcribeNetwork ms=\(Int((CFAbsoluteTimeGetCurrent() - networkT0) * 1000), privacy: .public)")
+        let uploadMs = Int((CFAbsoluteTimeGetCurrent() - networkT0) * 1000)
+        Self.log.info("[Transcription] transcriptionUploadMs=\(uploadMs, privacy: .public) latency transcribeNetwork ms=\(uploadMs, privacy: .public)")
 
         let http = response as? HTTPURLResponse
         let status = http?.statusCode ?? -1
         let rawBody = String(data: data, encoding: .utf8) ?? "<non-UTF8 body, \(data.count) bytes>"
 
-        Self.log.info("[Transcription] requestId=\(requestId.uuidString, privacy: .public) httpStatus=\(status, privacy: .public) responseBytes=\(data.count, privacy: .public)")
+        Self.log.info("[Transcription] transcriptionResponseReceived requestId=\(requestId.uuidString, privacy: .public) httpStatus=\(status, privacy: .public) responseBytes=\(data.count, privacy: .public)")
 
         guard (200...299).contains(status) else {
             let truncatedBody = String(rawBody.prefix(1000))
@@ -137,8 +146,10 @@ struct MultilingualTranscriptionService: FallbackTranscribing {
         }
 
         let text = decoded.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let totalMs = Int((CFAbsoluteTimeGetCurrent() - cloudT0) * 1000)
+        Self.log.info("[Transcription] cloudTranscriptionTotalMs=\(totalMs, privacy: .public) transcriptLength=\(text.count, privacy: .public) commandSessionId=\(commandSessionTag, privacy: .public)")
         Self.log.info("[Transcription] requestId=\(requestId.uuidString, privacy: .public) requestSucceeded transcriptLength=\(text.count, privacy: .public)")
-        Self.log.info("[Transcription] latency transcribe totalMs=\(Int((CFAbsoluteTimeGetCurrent() - transcribeT0) * 1000), privacy: .public)")
+        Self.log.info("[Transcription] latency transcribe totalMs=\(totalMs, privacy: .public)")
         return text
     }
 }

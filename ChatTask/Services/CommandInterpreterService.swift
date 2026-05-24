@@ -26,12 +26,14 @@ struct CommandInterpretRequest: Encodable {
     let activeTask: CommandInterpretTaskSnapshot?
     let candidateTasks: [CommandInterpretTaskSnapshot]
     let requestID: String
+    let commandSessionID: String?
 
     enum CodingKeys: String, CodingKey {
         case text, now, timezone, locale
         case activeTask = "active_task"
         case candidateTasks = "candidate_tasks"
         case requestID = "request_id"
+        case commandSessionID = "command_session_id"
     }
 }
 
@@ -158,15 +160,26 @@ struct CommandInterpreterService {
     private static let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "VocaTime", category: "CommandInterpreter")
 
     func interpret(_ body: CommandInterpretRequest) async throws -> CommandInterpretResponse {
+        let interpretT0 = CFAbsoluteTimeGetCurrent()
+        await VoiceCommandLatencyTrace.recordInterpretBackendCall()
+        await VoiceCommandLatencyTrace.markInterpretRequestStart()
+
         var request = URLRequest(url: BackendConfig.interpretCommandURL)
         request.httpMethod = "POST"
-        request.setValue(body.requestID, forHTTPHeaderField: BackendCorrelation.requestIDHeaderField)
+        let commandSessionId = await VoiceCommandLatencyTrace.active?.sessionTag
+        BackendCorrelation.applyTracingHeaders(
+            to: &request,
+            requestId: UUID(uuidString: body.requestID) ?? UUID(),
+            commandSessionId: commandSessionId
+        )
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(body)
         request.timeoutInterval = 90
 
-        Self.log.info("[CommandInterpreter] commandInterpretStart requestId=\(body.requestID, privacy: .public) candidateTasksBuilt count=\(body.candidateTasks.count, privacy: .public)")
+        let payloadBytes = request.httpBody?.count ?? 0
+        Self.log.info("[CommandInterpreter] commandInterpretStart requestId=\(body.requestID, privacy: .public) commandSessionId=\(body.commandSessionID ?? "none", privacy: .public) candidateTasksBuilt count=\(body.candidateTasks.count, privacy: .public) requestBodyBytes=\(payloadBytes, privacy: .public)")
         let (data, response) = try await BackendFetchRetry.data(for: request, isIdempotent: false)
+        let interpretMs = Int((CFAbsoluteTimeGetCurrent() - interpretT0) * 1000)
         let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
         guard (200...299).contains(statusCode) else {
             let bodyText = String(data: data, encoding: .utf8) ?? "<non-utf8>"
@@ -174,7 +187,13 @@ struct CommandInterpreterService {
             throw LLMError.invalidResponse(requestId: UUID(uuidString: body.requestID) ?? UUID())
         }
         let decoded = try JSONDecoder().decode(CommandInterpretResponse.self, from: data)
-        Self.log.info("[CommandInterpreter] commandInterpretResult action=\(decoded.actionType ?? "nil", privacy: .public) confidence=\(decoded.confidence, privacy: .public) confirmation=\(decoded.confirmationKind ?? "nil", privacy: .public) actionsCount=\(decoded.actions?.count ?? 0, privacy: .public)")
+        await VoiceCommandLatencyTrace.markInterpretSucceeded()
+        await VoiceCommandLatencyTrace.markInterpretRequestComplete(
+            responseBytes: data.count,
+            actionsCount: decoded.actions?.count ?? (decoded.actionType != nil ? 1 : 0),
+            durationMs: interpretMs
+        )
+        Self.log.info("[CommandInterpreter] commandInterpretResult action=\(decoded.actionType ?? "nil", privacy: .public) confidence=\(decoded.confidence, privacy: .public) confirmation=\(decoded.confirmationKind ?? "nil", privacy: .public) actionsCount=\(decoded.actions?.count ?? 0, privacy: .public) interpretRequestMs=\(interpretMs, privacy: .public)")
         return decoded
     }
 }

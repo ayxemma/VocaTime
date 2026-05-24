@@ -58,6 +58,7 @@
 		A10000000000000000000039 /* BackendWarmup.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000039 /* BackendWarmup.swift */; };
 		A1000000000000000000003A /* BackendFetchRetry.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000003A /* BackendFetchRetry.swift */; };
 		A1000000000000000000003B /* ShortInputLLMPresentation.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000003B /* ShortInputLLMPresentation.swift */; };
+		A10000000000000000000045 /* VoiceCommandLatencyTrace.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000045 /* VoiceCommandLatencyTrace.swift */; };
 		A1000000000000000000003C /* ReviewPromptManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000003C /* ReviewPromptManager.swift */; };
 		A1000000000000000000003D /* TaskTargetResolverService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000003D /* TaskTargetResolverService.swift */; };
 		A1000000000000000000003E /* CommandInterpreterService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000003E /* CommandInterpreterService.swift */; };
@@ -122,6 +123,7 @@
 		A20000000000000000000039 /* BackendWarmup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackendWarmup.swift; sourceTree = "<group>"; };
 		A2000000000000000000003A /* BackendFetchRetry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackendFetchRetry.swift; sourceTree = "<group>"; };
 		A2000000000000000000003B /* ShortInputLLMPresentation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortInputLLMPresentation.swift; sourceTree = "<group>"; };
+		A20000000000000000000045 /* VoiceCommandLatencyTrace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceCommandLatencyTrace.swift; sourceTree = "<group>"; };
 		A2000000000000000000003C /* ReviewPromptManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewPromptManager.swift; sourceTree = "<group>"; };
 		A2000000000000000000003D /* TaskTargetResolverService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskTargetResolverService.swift; sourceTree = "<group>"; };
 		A2000000000000000000003E /* CommandInterpreterService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandInterpreterService.swift; sourceTree = "<group>"; };
@@ -235,6 +237,7 @@
 			children = (
 				A20000000000000000000007 /* AppError.swift */,
 				A20000000000000000000036 /* BackendCorrelation.swift */,
+				A20000000000000000000045 /* VoiceCommandLatencyTrace.swift */,
 				A20000000000000000000039 /* BackendWarmup.swift */,
 				A2000000000000000000003A /* BackendFetchRetry.swift */,
 				A2000000000000000000003B /* ShortInputLLMPresentation.swift */,
@@ -350,6 +353,7 @@
 				A10000000000000000000039 /* BackendWarmup.swift in Sources */,
 				A1000000000000000000003A /* BackendFetchRetry.swift in Sources */,
 				A1000000000000000000003B /* ShortInputLLMPresentation.swift in Sources */,
+				A10000000000000000000045 /* VoiceCommandLatencyTrace.swift in Sources */,
 				A10000000000000000000009 /* SpeechRecognizerService.swift in Sources */,
 				A10000000000000000000010 /* ParsedCommand.swift in Sources */,
 				A10000000000000000000011 /* ReminderItem.swift in Sources */,

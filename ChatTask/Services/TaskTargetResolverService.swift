@@ -66,16 +66,20 @@ struct TaskTargetResolverService {
     private static let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "VocaTime", category: "TaskResolver")
 
     func resolve(_ requestBody: TaskTargetResolveRequest) async throws -> TaskTargetResolveResponse {
+        let resolveT0 = CFAbsoluteTimeGetCurrent()
+        await VoiceCommandLatencyTrace.recordResolveBackendCall()
         let requestId = UUID()
+        let commandSessionId = await VoiceCommandLatencyTrace.active?.sessionTag
         var request = URLRequest(url: BackendConfig.resolveTaskTargetURL)
         request.httpMethod = "POST"
-        request.setValue(requestId.uuidString, forHTTPHeaderField: BackendCorrelation.requestIDHeaderField)
+        BackendCorrelation.applyTracingHeaders(to: &request, requestId: requestId, commandSessionId: commandSessionId)
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(requestBody)
         request.timeoutInterval = 60
 
         Self.log.info("[TaskResolver] resolveTaskTargetRequest requestId=\(requestId.uuidString, privacy: .public) candidateCount=\(requestBody.candidates.count, privacy: .public)")
         let (data, response) = try await BackendFetchRetry.data(for: request, isIdempotent: false)
+        let resolveMs = Int((CFAbsoluteTimeGetCurrent() - resolveT0) * 1000)
         let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
         guard (200...299).contains(statusCode) else {
             let body = String(data: data, encoding: .utf8) ?? "<non-utf8>"
@@ -84,7 +88,7 @@ struct TaskTargetResolverService {
         }
 
         let decoded = try JSONDecoder().decode(TaskTargetResolveResponse.self, from: data)
-        Self.log.info("[TaskResolver] resolverDecision=\(decoded.resolution.rawValue, privacy: .public) resolverSelected id=\(decoded.selectedID ?? "nil", privacy: .public) confidence=\(decoded.confidence, privacy: .public) resolverReason=\(decoded.reason ?? "nil", privacy: .public)")
+        Self.log.info("[TaskResolver] resolverDecision=\(decoded.resolution.rawValue, privacy: .public) resolverSelected id=\(decoded.selectedID ?? "nil", privacy: .public) confidence=\(decoded.confidence, privacy: .public) resolverReason=\(decoded.reason ?? "nil", privacy: .public) resolveRequestMs=\(resolveMs, privacy: .public)")
         return decoded
     }
 }

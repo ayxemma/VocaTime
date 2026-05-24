@@ -29,10 +29,13 @@ struct LLMTaskParserService: TaskParsing {
         timeZoneIdentifier: String,
         activeTaskContext: ChatActiveTaskContext?
     ) async throws -> ParsedCommand {
+        let parseT0 = CFAbsoluteTimeGetCurrent()
         BackendWarmup.scheduleSessionWarmup() // same session API as app lifecycle; coalesced
+        await VoiceCommandLatencyTrace.recordParseBackendCall()
         let requestId = UUID()
+        let commandSessionId = await VoiceCommandLatencyTrace.active?.sessionTag
         let endpoint = BackendConfig.parseURL
-        Self.log.info("[Parse] requestId=\(requestId.uuidString, privacy: .public) requestStart backendBaseURL=\(BackendConfig.baseURL.absoluteString, privacy: .public)")
+        Self.log.info("[Parse] requestId=\(requestId.uuidString, privacy: .public) commandSessionId=\(commandSessionId ?? "none", privacy: .public) requestStart backendBaseURL=\(BackendConfig.baseURL.absoluteString, privacy: .public)")
 
         let formatter = ISO8601DateFormatter()
         formatter.timeZone = TimeZone(identifier: timeZoneIdentifier) ?? .current
@@ -46,16 +49,17 @@ struct LLMTaskParserService: TaskParsing {
             "timezone": timeZoneIdentifier,
             "locale": localeIdentifier,
         ]
+        if let commandSessionId {
+            requestBody[BackendCorrelation.commandSessionIDJSONKey] = commandSessionId
+        }
         if let ctx = activeTaskContext {
             requestBody["last_active_task_id"] = ctx.taskID.uuidString
             requestBody["active_task_title"] = ctx.title
+            // Compact hint — canonical rules live in backend PARSE_SYSTEM_PROMPT.
             requestBody["parse_instructions"] = """
-            Conversation context: last_active_task_id is only context. Use it only for clear
-            follow-up edits. If the user asks for a separate new task/reminder, return a create
-            action and ignore the active task context. For active-task edits, return
-            target_reference_type="recent_task" and target_task_id="\(ctx.taskID.uuidString)".
-            For recurrence follow-up edits like "把周四去掉", "改成周一到周三", or
-            "不要周五提醒了", return action_type="updateRecurrence" with recurrence_update.
+            Active task follow-up only: use last_active_task_id for clear edits; ignore for new tasks. \
+            For active-task edits return target_reference_type="recent_task" target_task_id="\(ctx.taskID.uuidString)". \
+            Recurrence follow-ups → action_type="updateRecurrence" with recurrence_update.
             """
             if let sd = ctx.scheduledDate {
                 requestBody["active_task_scheduled_at"] = formatter.string(from: sd)
@@ -69,13 +73,14 @@ struct LLMTaskParserService: TaskParsing {
             }
         }
 
-        Self.log.info("[Parse] requestId=\(requestId.uuidString, privacy: .public) bodyReady text=\(text, privacy: .public) textLength=\(text.count, privacy: .public) timezone=\(timeZoneIdentifier, privacy: .public) activeTaskID=\(activeTaskContext?.taskID.uuidString ?? "nil", privacy: .public)")
+        let encodedBody = try JSONSerialization.data(withJSONObject: requestBody)
+        Self.log.info("[Parse] requestId=\(requestId.uuidString, privacy: .public) bodyReady textLength=\(text.count, privacy: .public) timezone=\(timeZoneIdentifier, privacy: .public) activeTaskID=\(activeTaskContext?.taskID.uuidString ?? "nil", privacy: .public) requestBodyBytes=\(encodedBody.count, privacy: .public)")
 
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
-        request.setValue(requestId.uuidString, forHTTPHeaderField: BackendCorrelation.requestIDHeaderField)
+        BackendCorrelation.applyTracingHeaders(to: &request, requestId: requestId, commandSessionId: commandSessionId)
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
+        request.httpBody = encodedBody
         request.timeoutInterval = 120
 
         let data: Data
@@ -111,7 +116,7 @@ struct LLMTaskParserService: TaskParsing {
             throw LLMError.decodingFailed(requestId: requestId)
         }
 
-        Self.log.info("[Parse] requestId=\(requestId.uuidString, privacy: .public) requestSucceeded")
+        Self.log.info("[Parse] requestId=\(requestId.uuidString, privacy: .public) requestSucceeded parseRequestMs=\(Int((CFAbsoluteTimeGetCurrent() - parseT0) * 1000), privacy: .public)")
         Self.logDecodedResponse(parsed)
 
         let tz = TimeZone(identifier: timeZoneIdentifier) ?? .current

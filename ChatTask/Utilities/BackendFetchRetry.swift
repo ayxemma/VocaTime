@@ -31,17 +31,17 @@ enum BackendFetchRetry {
             let (data, response) = try await URLSession.shared.data(for: request)
             if let http = response as? HTTPURLResponse, retryableHTTPStatuses.contains(http.statusCode) {
                 if canRetryHTTPFailure {
-                    Self.log.info("Retrying once after HTTP \(http.statusCode) (possible cold start)")
+                    Self.log.info("Retrying once after HTTP \(http.statusCode) (possible cold start) requestId=\(request.value(forHTTPHeaderField: BackendCorrelation.requestIDHeaderField) ?? "none", privacy: .public) commandSessionId=\(request.value(forHTTPHeaderField: BackendCorrelation.commandSessionIDHeaderField) ?? "none", privacy: .public)")
                     try await Task.sleep(nanoseconds: Self.retryDelayNs)
                     return try await URLSession.shared.data(for: request)
                 } else {
-                    Self.log.info("Not retrying HTTP \(http.statusCode) — request not treated as idempotent (POST body may have been received)")
+                    Self.log.info("Not retrying HTTP \(http.statusCode) — request not treated as idempotent (POST body may have been received) requestId=\(request.value(forHTTPHeaderField: BackendCorrelation.requestIDHeaderField) ?? "none", privacy: .public)")
                 }
             }
             return (data, response)
         } catch {
             if Self.shouldRetryURLError(error) {
-                Self.log.info("Retrying once after error (likely no complete response): \(String(describing: error), privacy: .public)")
+                Self.log.info("Retrying once after error (likely no complete response): \(String(describing: error), privacy: .public) requestId=\(request.value(forHTTPHeaderField: BackendCorrelation.requestIDHeaderField) ?? "none", privacy: .public) commandSessionId=\(request.value(forHTTPHeaderField: BackendCorrelation.commandSessionIDHeaderField) ?? "none", privacy: .public)")
                 try await Task.sleep(nanoseconds: Self.retryDelayNs)
                 return try await URLSession.shared.data(for: request)
             }
