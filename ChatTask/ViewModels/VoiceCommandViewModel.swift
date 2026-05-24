@@ -1213,12 +1213,14 @@ final class VoiceCommandViewModel {
             return
         }
         Self.log.info("[VoiceChat] multiActionExecutionStarted count=\(actions.count, privacy: .public)")
+        Self.log.info("[VoiceChat] actionsReceived count=\(actions.count, privacy: .public)")
         Self.log.info("[VoiceChat] multiActionSummaryStarted count=\(actions.count, privacy: .public)")
         var failedIndexes: [Int] = []
         var summaries: [String] = []
         var failedDescriptions: [String] = []
         for (index, action) in actions.enumerated() {
             let single = CommandInterpretResponse(action: action, assistantMessage: overallMessage)
+            Self.log.info("[VoiceChat] executingAction index=\(index, privacy: .public) type=\(action.actionType ?? "nil", privacy: .public)")
             if let result = await executeInterpretedCommand(
                 single,
                 selectedTaskOverride: nil,
@@ -1227,13 +1229,16 @@ final class VoiceCommandViewModel {
                 countUsage: false
             ) {
                 summaries.append(result.summary)
+                Self.log.info("[VoiceChat] actionSucceeded index=\(index, privacy: .public)")
                 Self.log.info("[VoiceChat] actionResultSummary index=\(index, privacy: .public) summary=\(result.summary, privacy: .public)")
             } else {
                 failedIndexes.append(index)
                 failedDescriptions.append(failureDescription(for: action))
+                Self.log.info("[VoiceChat] actionFailed index=\(index, privacy: .public)")
                 Self.log.info("[VoiceChat] multiActionPartFailed index=\(index, privacy: .public) action=\(action.actionType ?? "nil", privacy: .public)")
             }
         }
+        Self.log.info("[VoiceChat] executedActionsCount=\(summaries.count, privacy: .public)")
         if failedIndexes.isEmpty {
             let final = combinedMultiActionSummary(summaries)
             emitAssistantResponse(final, nextState: .success, stream: true)
@@ -1302,6 +1307,11 @@ final class VoiceCommandViewModel {
         default:
             return "complete one action"
         }
+    }
+
+    private func interpretedCreateTimeSuffix(for command: ParsedCommand) -> String {
+        guard let date = command.reminderDate ?? command.startDate else { return "" }
+        return " at \(shortTimeFormatter.string(from: date))"
     }
 
     private func runOriginalParsePipeline(transcript: String) async {
@@ -1404,9 +1414,10 @@ final class VoiceCommandViewModel {
                 return nil
             }
             commitCreateWithConflictCheck(command, emitResponse: emitResponse, countUsage: countUsage)
+            let timeSuffix = interpretedCreateTimeSuffix(for: command)
             summary = action == "createEvent"
-                ? "added event '\(command.title)'"
-                : "added reminder '\(command.title)'"
+                ? "added event '\(command.title)'\(timeSuffix)"
+                : "added reminder '\(command.title)'\(timeSuffix)"
         case "rescheduleTask":
             guard let task = selectedTaskOverride ?? taskForInterpretedTarget(result),
                   let raw = result.edit?.newScheduledAt,
