@@ -1184,6 +1184,14 @@ final class VoiceCommandViewModel {
 
     private func handleCommandInterpretation(_ result: CommandInterpretResponse, transcript: String) async {
         Self.log.info("[VoiceChat] commandInterpretResult action=\(result.actionType ?? "nil", privacy: .public) confidence=\(result.confidence, privacy: .public) confirmation=\(result.confirmationKind ?? "nil", privacy: .public) actionsCount=\(result.actions?.count ?? 0, privacy: .public)")
+        let containsClarificationAction = result.actions?.contains {
+            $0.requiresConfirmation && $0.confirmationKind == "clarify"
+        } ?? false
+        if result.requiresConfirmation, result.confirmationKind == "clarify" || containsClarificationAction {
+            emitAssistantResponse(result.assistantMessage ?? unclearCommandMessage(), nextState: .error, stream: false)
+            Self.log.info("[VoiceChat] confirmationShown kind=clarify")
+            return
+        }
         let actions = result.multiActions
         guard !actions.isEmpty else {
             Self.log.info("[VoiceChat] commandInterpretSingleActionFallbackToOriginalParse")
