@@ -135,7 +135,7 @@ struct CommandInterpretResponse: Decodable {
     }
 
     var multiActions: [Action] {
-        guard let actions, actions.count > 1 else { return [] }
+        guard let actions, !actions.isEmpty else { return [] }
         return actions
     }
 }
