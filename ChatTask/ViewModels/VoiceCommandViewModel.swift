@@ -1502,8 +1502,19 @@ final class VoiceCommandViewModel {
                 blockInterpretedExecution(reason: "missingField", emitResponse: emitResponse)
                 return nil
             }
-            applyReschedule(task: task, newDate: newDate, strings: uiLanguage.strings, usageCommand: nil, emitResponse: emitResponse, countUsage: countUsage)
-            let moveSummary = "moved '\(task.title)' to \(shortTimeFormatter.string(from: newDate))"
+            applyReschedule(
+                task: task,
+                newDate: newDate,
+                reminderOffsetMinutes: result.edit?.reminderOffsetMinutes,
+                strings: uiLanguage.strings,
+                usageCommand: nil,
+                emitResponse: emitResponse,
+                countUsage: countUsage
+            )
+            var moveSummary = "moved '\(task.title)' to \(shortTimeFormatter.string(from: newDate))"
+            if let offset = result.edit?.reminderOffsetMinutes, offset > 0 {
+                moveSummary += " (reminder \(offset) min before)"
+            }
             summaries.append(ExecutionResultSummary(effectType: "rescheduleTask", text: moveSummary))
             Self.log.info("[VoiceChat] effectApplied type=rescheduleTask summary=\(moveSummary, privacy: .public)")
             if let appendText = result.edit?.appendText?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -1847,9 +1858,12 @@ final class VoiceCommandViewModel {
     }
 
     @discardableResult
-    private func applyReschedule(task: TaskItem, newDate: Date, strings s: AppStrings, usageCommand: ParsedCommand?, emitResponse: Bool = true, countUsage: Bool = true) -> Bool {
+    private func applyReschedule(task: TaskItem, newDate: Date, reminderOffsetMinutes: Int? = nil, strings s: AppStrings, usageCommand: ParsedCommand?, emitResponse: Bool = true, countUsage: Bool = true) -> Bool {
         Self.log.info("[VoiceChat] finalFrontendAction=rescheduleTask activeContextUsed=true finalTargetTaskID=\(task.id.uuidString, privacy: .public) title=\(task.title, privacy: .public) newDate=\(newDate, privacy: .public)")
         task.scheduledDate = newDate
+        if let reminderOffsetMinutes {
+            task.reminderOffsetMinutes = reminderOffsetMinutes
+        }
         task.updatedAt = Date()
         try? persistenceContext?.save()
         TaskReminderService.shared.schedule(for: task)
