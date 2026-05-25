@@ -63,6 +63,7 @@ struct CommandInterpretResponse: Decodable {
         let recurrenceWeekdays: [Int]?
         let recurrenceEndAt: String?
         let alertStyle: String?
+        let reminderOffsetMinutes: Int?
 
         enum CodingKeys: String, CodingKey {
             case title, notes
@@ -73,6 +74,7 @@ struct CommandInterpretResponse: Decodable {
             case recurrenceWeekdays = "recurrence_weekdays"
             case recurrenceEndAt = "recurrence_end_at"
             case alertStyle = "alert_style"
+            case reminderOffsetMinutes = "reminder_offset_minutes"
         }
     }
 

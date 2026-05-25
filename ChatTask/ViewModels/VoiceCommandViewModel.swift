@@ -2417,7 +2417,8 @@ final class VoiceCommandViewModel {
             parserSource: .llm,
             languageCode: uiLanguage.uiLocaleIdentifier,
             recurrence: recurrence,
-            alertStyle: alertStyle(from: create.alertStyle)
+            alertStyle: alertStyle(from: create.alertStyle),
+            reminderOffsetMinutes: create.reminderOffsetMinutes
         )
     }
 

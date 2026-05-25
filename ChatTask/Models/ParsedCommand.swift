@@ -95,4 +95,6 @@ struct ParsedCommand: Equatable {
     var targetTaskID: UUID? = nil
     /// Recurrence mutation requested by an edit/follow-up command. Applied in Phase 2.
     var recurrenceUpdate: ParsedRecurrenceUpdate? = nil
+    /// Lead-time minutes before scheduled_at for creates (0 = at time).
+    var reminderOffsetMinutes: Int? = nil
 }

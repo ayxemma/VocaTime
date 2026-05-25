@@ -223,7 +223,7 @@ final class TaskItem {
             updatedAt: now,
             source: .voice,
             kind: kind,
-            reminderOffsetMinutes: ReminderOffset.globalDefault.rawValue,
+            reminderOffsetMinutes: command.reminderOffsetMinutes ?? ReminderOffset.globalDefault.rawValue,
             alertStyle: command.alertStyle ?? .normal,
             recurrenceFrequency: command.recurrence?.frequency,
             recurrenceWeekdays: command.recurrence?.weekdays ?? [],
